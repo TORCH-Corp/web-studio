@@ -2,6 +2,7 @@ import { SESSION_COOKIE, SITE_COOKIE, verifySession, verifySiteCookie, type BosS
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/security-headers-server';
+import { isHiddenBuilderRoute, partsRaised } from '@/lib/platform/parts';
 import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
 
 /**
@@ -127,6 +128,11 @@ export async function proxy(request: NextRequest) {
   //   - `/ycode/mcp`: OAuth Bearer-token endpoint (Claude.ai web, ChatGPT)
   if (pathname === '/ycode/mcp' || pathname.startsWith('/ycode/mcp/')) {
     return withPathname(NextResponse.next(), request, pathname);
+  }
+
+  // Screens removed from the builder, and Collections / Forms until WS_PARTS=1 (part 1, session 3).
+  if (isHiddenBuilderRoute(pathname, partsRaised())) {
+    return new NextResponse('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 
   // Debug escape hatch: skip auth on preview routes when explicitly enabled.

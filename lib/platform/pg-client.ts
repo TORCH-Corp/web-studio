@@ -242,7 +242,7 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
   private limitValue: number | null = null;
   private offsetValue: number | null = null;
   private singleMode: 'single' | 'maybe' | null = null;
-  private payload: Record<string, unknown> | Record<string, unknown>[] | null = null;
+  private payload: object | object[] | null = null;
   private conflictColumns: string[] | null = null;
   private returning = false;
 
@@ -268,20 +268,20 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
     return this;
   }
 
-  insert(values: Record<string, unknown> | Record<string, unknown>[]): this {
+  insert(values: object | object[]): this {
     this.mode = 'insert';
     this.payload = values;
     return this;
   }
 
-  upsert(values: Record<string, unknown> | Record<string, unknown>[], options?: { onConflict?: string }): this {
+  upsert(values: object | object[], options?: { onConflict?: string }): this {
     this.mode = 'upsert';
     this.payload = values;
     this.conflictColumns = (options?.onConflict || 'id').split(',').map((c) => c.trim());
     return this;
   }
 
-  update(values: Record<string, unknown>): this {
+  update(values: object): this {
     this.mode = 'update';
     this.payload = values;
     return this;
@@ -333,8 +333,9 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
     return this;
   }
 
-  single(): this { this.singleMode = 'single'; return this; }
-  maybeSingle(): this { this.singleMode = 'maybe'; return this; }
+  /** One row instead of a list: the result type drops the array, as supabase-js did. */
+  single(): QueryBuilder<T extends readonly (infer Row)[] ? Row : T> { this.singleMode = 'single'; return this as never; }
+  maybeSingle(): QueryBuilder<T extends readonly (infer Row)[] ? Row : T> { this.singleMode = 'maybe'; return this as never; }
 
   // ---- execution ---------------------------------------------------------
 

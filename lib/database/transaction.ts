@@ -10,7 +10,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase-server';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@/lib/platform/types';
 
 /**
  * Transaction context for executing operations

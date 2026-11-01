@@ -34,8 +34,8 @@ export const MAP_PROVIDER_OPTIONS: { value: MapProvider; label: string }[] = [
 // Mapbox
 // =============================================================================
 
-const MAPBOX_GL_VERSION = 'v3.20.0';
-const MAPBOX_CDN_BASE = `https://cdn.jsdelivr.net/npm/mapbox-gl@${MAPBOX_GL_VERSION}/dist`;
+// mapbox-gl is served from public/vendor (scripts/vendor-assets.mjs), not a CDN.
+const MAPBOX_VENDOR_BASE = '/vendor';
 
 const MAPBOX_STYLE_URLS: Record<MapStyle, string> = {
   streets: 'mapbox://styles/mapbox/streets-v12',
@@ -188,8 +188,8 @@ function buildMapboxEmbedHtml(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link href="${MAPBOX_CDN_BASE}/mapbox-gl.css" rel="stylesheet">
-<script src="${MAPBOX_CDN_BASE}/mapbox-gl.js"><${'/'}script>
+<link href="${MAPBOX_VENDOR_BASE}/mapbox-gl.css" rel="stylesheet">
+<script src="${MAPBOX_VENDOR_BASE}/mapbox-gl.js"><${'/'}script>
 <style>
   *{margin:0;padding:0}
   html,body,#map{width:100%;height:100%}

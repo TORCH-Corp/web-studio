@@ -7,7 +7,7 @@
  * permission flags in that session (see lib/platform/session.ts).
  */
 
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { SupabaseClient, User } from '@/lib/platform/types';
 import { getSessionFromCookies } from '@/lib/platform/site';
 import { roleFromPermissions, type BosSession } from '@/lib/platform/session';
 import { getSupabaseAdmin } from '@/lib/supabase-server';

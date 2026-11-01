@@ -1,7 +1,7 @@
 # Web Studio port — ycode on the TORCH platform
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (session 1 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 and 5 below).
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -100,11 +100,37 @@ Session 5: `e2e/publish.spec.ts` (default address with no host given, two sites 
 own content, an unpublished edit invisible until publish, `/ar` rtl and 404 where absent, unknown host,
 each site's own 404 page, a second host after the next publish) passes with `pnpm test` (303).
 
+## Session 3: platform assets and trimming
+- **No public host in the builder.** `public/vendor/` holds `@tailwindcss/browser`, GSAP
+  (+ SplitText), Swiper and mapbox-gl, copied from `node_modules` by
+  `scripts/vendor-assets.mjs` (re-run after bumping them; `VERSIONS.json` records the
+  versions). The canvas, the CSS generator, the map embed, the Code element's example and
+  the static export's Swiper script load them from `/vendor/`. Remix icons: `/ycode/api/icons`
+  answers from `lib/platform/data/remix-icons.json` (built by `scripts/build-remix-icons.mjs`
+  from the `remixicon` package, Remix Icon License v1.0, copy beside it). Google Fonts in the
+  builder (font picker, installed-font links, `@import`) go through `/ycode/api/fonts/mirror/`:
+  `lib/platform/font-mirror.ts` fetches a stylesheet or font file from Google on the server
+  the first time and keeps it in `PLATFORM_STORAGE_DIR/_mirror/fonts`. **Published pages keep
+  Google URLs** for the fonts a designer picks (`PageRenderer`, static export, the
+  `Link: preconnect` header in `next.config.ts`). ycode's template service has no default
+  host any more (`TEMPLATE_API_URL` unset: the gallery is empty, apply and export refuse);
+  its hard-coded upload key is gone.
+- **No Supabase package.** `@supabase/supabase-js` and `@supabase/ssr` are out of
+  `package.json`; `lib/platform/types.ts` has the types the code used (User, Session,
+  RealtimeChannel, SupabaseClient). `database/scripts/backfill-content-hashes.ts` (a
+  Supabase-only upstream script) is deleted.
+- **Removed screens** (404 from `proxy.ts`, files deleted): settings/users, profile,
+  accept-invite, welcome (the Supabase setup wizard), with their API stubs and the invite
+  button. A server without `DATABASE_URL` shows a message instead of redirecting to the wizard.
+- **`WS_PARTS=1`** (server env, read by `lib/platform/parts.ts`) shows Collections and Forms.
+  Unset, `/ycode/collections*` and `/ycode/forms*` answer 404, the header has no CMS and
+  Forms buttons, and the element library has no Form element. The `collection` and `filter`
+  elements and the API routes stay (the pages and the builder's stores use them).
+- `e2e/offline.spec.ts` is the done-when check.
+
 ## Not done (c1 and after)
-- The builder still calls jsDelivr/Google Fonts/Remix icons at runtime: mirror them.
-- The `@supabase/supabase-js` package stays as a type dependency; remove in c1.
-- `settings/users` page still renders (its API answers 501): hide it in the Glare shell.
-- Realtime collaboration, the AI agent (BYOK) and the MCP OAuth flow were not exercised.
+- Realtime collaboration and the MCP OAuth flow were not exercised (the AI agent, MCP and
+  integrations screens open: `e2e/offline.spec.ts`).
 - The `bos_session` cookie comes from the shell's access token (session 2); the
   dev-login route stands in for that.
 - `/ycode` with a session but no `ws_site` cookie shows an empty builder: the shell
