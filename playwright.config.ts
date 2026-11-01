@@ -2,6 +2,7 @@ import os from 'os';
 import path from 'path';
 import { defineConfig } from '@playwright/test';
 import { ensureTestKeys } from './e2e/test-keys';
+import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
 
 /**
  * End-to-end suite for the TORCH fork (part 1, session 1).
@@ -68,6 +69,8 @@ export default defineConfig({
         BOS_SESSION_SECRET: 'e2e-session-secret',
         BOS_JWT_PUBLIC_KEY: publicKeyPem,
         BOS_AUTH_URL: `http://127.0.0.1:${AUTH_PORT}`,
+        DOMAIN_SERVICE_URL: `http://127.0.0.1:${AUTH_PORT}`, // the stub answers domain-service's list too
+        DOMAIN_SERVICE_API_KEY: DOMAIN_SERVICE_KEY,
         PAGE_AUTH_SECRET: 'e2e-page-auth-secret',
         ALLOW_DEV_LOGIN: 'true',
         WS_SITES_DOMAIN: 'sites.test',

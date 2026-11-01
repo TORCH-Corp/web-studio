@@ -6,6 +6,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase-server';
 import type { Setting } from '@/types';
+import { mirrorSiteName } from '@/lib/platform/site-update';
 
 // Postgres "undefined_table" — the settings table is briefly absent right after
 // a DB reset and before migrations re-run. Treat it as "no settings" instead of
@@ -138,6 +139,8 @@ export async function setSetting(key: string, value: any): Promise<Setting> {
     throw new Error(`Failed to set setting: ${error.message}`);
   }
 
+  if (key === 'site_name') await mirrorSiteName(value);
+
   return data;
 }
 
@@ -202,6 +205,8 @@ export async function setSettings(settings: Record<string, any>): Promise<number
       throw new Error(`Failed to set settings: ${error.message}`);
     }
   }
+
+  if ('site_name' in settings) await mirrorSiteName(settings.site_name);
 
   return entries.length;
 }

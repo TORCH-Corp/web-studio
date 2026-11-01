@@ -57,6 +57,9 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
     DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
     DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
+    DOMAIN_SERVICE_URL=http://domain-service:6012   # with DOMAIN_SERVICE_API_KEY: the organization's verified domains
+    DOMAIN_SERVICE_API_KEY=<domain-service's SERVICE_API_KEY>   # (session 7); see WS_DOMAIN_CHECK below
+    WS_DOMAIN_CHECK=on   # `off` accepts any host name as a custom host, with no check against verified domains
     ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
@@ -83,7 +86,7 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
   that is not the site's own address is refused (409), so no site can squat another slug's address or
   the platform's. `lib/platform/site-update.ts`:
   `changeSiteSlug` moves the default address with the slug; `setCustomHosts` replaces the custom hosts
-  (the default stays). Session 7's settings API calls both; there is no route for them yet.
+  (the default stays). Session 7's settings API calls both.
 - **Host cache.** The 30 s host and site lookups (`lib/platform/site.ts`) are forgotten when a site is
   created, deleted, renamed or its hosts change, and on every publish. Another process keeps a stale
   entry for at most 30 s.
@@ -95,6 +98,30 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
 - **Unknown host.** The page, `robots.txt` and `sitemap.xml` answer 404; the 404 page is a plain one
   with no site's content. A known host's missing page renders that site's own 404 page (the boundary
   now reads the site from the host; it used to read an AsyncLocalStorage that is empty there).
+
+## Site settings (session 7)
+- **API.** `GET` and `PATCH /ycode/api/platform/sites/{id}/settings` (`manage_sites` r / u), in
+  `app/(builder)/ycode/api/platform/sites/[id]/settings/route.ts`; the logic is `lib/platform/site-settings.ts`,
+  the body is `site-settings-input.ts`. The route's own comment lists the statuses.
+- **Where each setting lives.** Name: `platform_sites.name` and the `site_name` setting, equal (a write to
+  `site_name` from the builder's General settings, the MCP tools or the API reaches `platform_sites.name`
+  through `mirrorSiteName` in `settingsRepository`). Languages: the draft `locales` rows, created and
+  made default as the localization screen does; removing one soft-deletes it and its draft translations
+  after a second call with `confirm: true`, and the next publish takes it off the published site. Domain:
+  `platform_sites.hosts`. SEO defaults: the settings `seo_default_title`, `seo_default_description`,
+  `seo_default_image` (an asset id), read by `generatePageMetadata` where a page has no value of its own
+  (the share image is resolved in `fetchGlobalPageSettings`, outside the metadata cache, like the favicon).
+- **Verified domains.** `lib/platform/domain-check.ts` asks domain-service
+  (`GET /api/org-setup/domains?entityId=…&status=ACTIVE`, `x-service-api-key`). A custom host must be one of
+  the ACTIVE names exactly. A check that cannot run answers 503, never an allow. `WS_DOMAIN_CHECK=off` skips
+  it. In production on 1 Nov 2026 domain-service reads `SERVICE_API_KEY` for this route and has none set
+  (`INTERNAL_SERVICE_TOKEN` is set but this route does not use it), so the production environment of
+  Web Studio runs with `WS_DOMAIN_CHECK=off` until that key is added to domain-service's compose environment.
+- **Not atomic across tables.** The builder's repositories do not share a transaction. `applySiteSettings`
+  refuses everything it can before the first write, then writes the slug and host first (the only ones another
+  site can contest), then name and SEO, then languages.
+- **Test.** `e2e/settings.spec.ts`; the auth stub also stands in for domain-service's list
+  (`e2e/domain-fixtures.ts`).
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
