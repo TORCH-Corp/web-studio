@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { noCache } from '@/lib/api-response';
 import { SITE_COOKIE, signSiteCookie } from '@/lib/platform/session';
 import { getSessionFromCookies, getSiteForOrganization } from '@/lib/platform/site';
+import { mayHoldSiteLock } from '@/lib/platform/permissions';
 import { acquireSiteLock } from '@/lib/platform/site-lock';
 
 /**
@@ -22,11 +23,14 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
   const site = await getSiteForOrganization(id, session.org);
   if (!site) return noCache({ error: 'Site not found' }, 404);
 
-  try {
-    await acquireSiteLock(site.id, { id: session.sub, name: session.name || session.email });
-  } catch (error) {
-    console.error('[GET /ycode/api/platform/sites/{id}/open] editor lock', error);
-    return noCache({ error: 'Failed to take the editor lock' }, 500);
+  // A reader opens the site read-only and takes no lock (open question 18).
+  if (mayHoldSiteLock(session.perms)) {
+    try {
+      await acquireSiteLock(site.id, { id: session.sub, name: session.name || session.email });
+    } catch (error) {
+      console.error('[GET /ycode/api/platform/sites/{id}/open] editor lock', error);
+      return noCache({ error: 'Failed to take the editor lock' }, 500);
+    }
   }
 
   const remainingSeconds = Math.max(1, session.exp - Math.floor(Date.now() / 1000));

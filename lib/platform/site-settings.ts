@@ -182,7 +182,7 @@ async function checkCustomHost(site: Site, host: string): Promise<void> {
     throw error;
   }
   if (!isVerifiedDomain(host, verified)) {
-    throw new SiteSettingsError('domain_not_verified', `${host} is not one of the organization's verified domains`, { field: 'custom_host', verified_domains: verified });
+    throw new SiteSettingsError('domain_not_verified', `${host} is not one of the organization's verified domains or a name under one`, { field: 'custom_host', verified_domains: verified });
   }
 }
 
