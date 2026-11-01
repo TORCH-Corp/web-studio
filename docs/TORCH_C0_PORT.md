@@ -1,7 +1,7 @@
 # Web Studio port — ycode on the TORCH platform
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 6 and 8 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 8 below).
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -38,7 +38,8 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 6 
 - **Templates (session 4).** A template is a live site with `is_template` in the TORCH
   templates organization (`WS_TEMPLATES_ORG`), built in the builder like any site and
   never published on a host (`siteIdForHost` leaves templates out; the sites API refuses
-  hosts on one, and provisioning gives it no default address). Migration
+  hosts on one, provisioning gives it no default address, and the settings API keeps it so: a
+  slug change moves no address and a custom host is refused with 400). Migration
   `20261101000004_torch_template_meta.ts` adds `platform_sites.template`
   (`{name: {ar, en}, description: {ar, en}}`). `GET /ycode/api/platform/templates` lists them
   for any organization (`manage_sites` r, in the proxy's route map). `POST /ycode/api/platform/sites`
@@ -86,6 +87,9 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 6 
     DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
     DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
+    DOMAIN_SERVICE_URL=http://domain-service:6012   # with DOMAIN_SERVICE_API_KEY: the organization's verified domains
+    DOMAIN_SERVICE_API_KEY=<domain-service's SERVICE_API_KEY>   # (session 7); see WS_DOMAIN_CHECK below
+    WS_DOMAIN_CHECK=on   # `off` accepts any host name as a custom host, with no check against verified domains
     ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4)
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
@@ -119,7 +123,7 @@ description changes: `pnpm templates:seed`.
   that is not the site's own address is refused (409), so no site can squat another slug's address or
   the platform's. `lib/platform/site-update.ts`:
   `changeSiteSlug` moves the default address with the slug; `setCustomHosts` replaces the custom hosts
-  (the default stays). Session 7's settings API calls both; there is no route for them yet.
+  (the default stays). Session 7's settings API calls both.
 - **Host cache.** The 30 s host and site lookups (`lib/platform/site.ts`) are forgotten when a site is
   created, deleted, renamed or its hosts change, and on every publish. Another process keeps a stale
   entry for at most 30 s.
@@ -131,6 +135,30 @@ description changes: `pnpm templates:seed`.
 - **Unknown host.** The page, `robots.txt` and `sitemap.xml` answer 404; the 404 page is a plain one
   with no site's content. A known host's missing page renders that site's own 404 page (the boundary
   now reads the site from the host; it used to read an AsyncLocalStorage that is empty there).
+
+## Site settings (session 7)
+- **API.** `GET` and `PATCH /ycode/api/platform/sites/{id}/settings` (`manage_sites` r / u), in
+  `app/(builder)/ycode/api/platform/sites/[id]/settings/route.ts`; the logic is `lib/platform/site-settings.ts`,
+  the body is `site-settings-input.ts`. The route's own comment lists the statuses.
+- **Where each setting lives.** Name: `platform_sites.name` and the `site_name` setting, equal (a write to
+  `site_name` from the builder's General settings, the MCP tools or the API reaches `platform_sites.name`
+  through `mirrorSiteName` in `settingsRepository`). Languages: the draft `locales` rows, created and
+  made default as the localization screen does; removing one soft-deletes it and its draft translations
+  after a second call with `confirm: true`, and the next publish takes it off the published site. Domain:
+  `platform_sites.hosts`. SEO defaults: the settings `seo_default_title`, `seo_default_description`,
+  `seo_default_image` (an asset id), read by `generatePageMetadata` where a page has no value of its own
+  (the share image is resolved in `fetchGlobalPageSettings`, outside the metadata cache, like the favicon).
+- **Verified domains.** `lib/platform/domain-check.ts` asks domain-service
+  (`GET /api/org-setup/domains?entityId=…&status=ACTIVE`, `x-service-api-key`). A custom host must be one of
+  the ACTIVE names exactly. A check that cannot run answers 503, never an allow. `WS_DOMAIN_CHECK=off` skips
+  it. In production on 1 Nov 2026 domain-service reads `SERVICE_API_KEY` for this route and has none set
+  (`INTERNAL_SERVICE_TOKEN` is set but this route does not use it), so the production environment of
+  Web Studio runs with `WS_DOMAIN_CHECK=off` until that key is added to domain-service's compose environment.
+- **Not atomic across tables.** The builder's repositories do not share a transaction. `applySiteSettings`
+  refuses everything it can before the first write, then writes the slug and host first (the only ones another
+  site can contest), then name and SEO, then languages.
+- **Test.** `e2e/settings.spec.ts`; the auth stub also stands in for domain-service's list
+  (`e2e/domain-fixtures.ts`).
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
@@ -153,8 +181,9 @@ content under new ids, the asset's file copied, the draft preview identical to t
 template's up to ids; the template and the copy edited independently; one language copied
 alone; blank by the blank template or with no template; unknown template 404; `is_template`
 refused outside the templates organization and with hosts; a template has no default address
-and its would-be address is 404, the asset copied in Document Center mode) and `pnpm test`
-pass (PNPM_TEST_COUNT); MIGRATIONS_COUNT migrations from empty.
+and its would-be address is 404, also after a rename through the settings API, which refuses a
+custom host on it; the asset copied in Document Center mode) and `pnpm test`
+pass (367); 52 migrations from empty.
 
 Session 5: `e2e/publish.spec.ts` (default address with no host given, two sites publishing with their
 own content, an unpublished edit invisible until publish, `/ar` rtl and 404 where absent, unknown host,

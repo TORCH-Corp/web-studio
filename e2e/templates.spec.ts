@@ -152,6 +152,19 @@ test('the templates organization creates a template; another organization cannot
   const list = await json<TemplateRow[]>(orgA.get('/ycode/api/platform/templates'));
   expect(list.map((t) => t.slug)).toEqual(['company-site', 'landing-page', 'blank', `tpl-${RUN}`]);
   expect(list[3]).toMatchObject({ id: template.id, name: { ar: 'قالب متجر', en: 'Shop template' }, description: { ar: '', en: 'For shops' } });
+
+  // Nor through the settings API (session 7): renaming the template moves no address, and a custom host is refused.
+  const renamed = await templates.patch(`/ycode/api/platform/sites/${template.id}/settings`, { data: { slug: `tpl2-${RUN}` } });
+  expect(renamed.status(), await renamed.text()).toBe(200);
+  expect((await renamed.json()).data.domain.hosts).toEqual([]);
+  const hosted = await templates.patch(`/ycode/api/platform/sites/${template.id}/settings`, { data: { custom_host: `tpl-${RUN}.example.test` } });
+  expect(hosted.status(), await hosted.text()).toBe(400);
+  const renamedAddress = await publishedSite(baseURL, `tpl2-${RUN}.${TEST_SITES_DOMAIN}`);
+  try {
+    expect((await renamedAddress.get('/')).status()).toBe(404);
+  } finally {
+    await renamedAddress.dispose();
+  }
 });
 
 test('the template gets three pages, a component, an asset, a style, a colour and a translation', async () => {
