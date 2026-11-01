@@ -92,7 +92,7 @@ export async function purgeTagsOnVercel(tags: string[]): Promise<void> {
 export async function invalidatePage(routePath: string): Promise<boolean> {
   const tag = `route-/${routePath}`;
   try {
-    // c0 port: caches keyed per organization carry per-organization tags too.
+    // c0 port: caches keyed per site carry per-site tags too.
     const tenantTag = buildRouteTag(await getTenantIdFromHeaders(), routePath);
     if (process.env.VERCEL === '1') {
       await invalidateByTag(tag);

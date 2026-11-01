@@ -1,70 +1,124 @@
 /**
- * Provisioning an organization in Web Studio (c0 port).
+ * Provisioning a site in Web Studio (part 1, session 1).
  *
- * Business OS calls this when Web Studio is enabled for an organization: the
- * organization gets its row, its host names, and the same starting content
- * ycode's migrations used to seed for a single project — a blank homepage,
- * the three error pages, the default settings and the `en` locale. Everything
- * is inserted inside one transaction with the organization as tenant context,
- * so the `fill_tenant_id` trigger stamps every row.
+ * A site is created for an organization with the starting content ycode's
+ * migrations used to seed for a single project: a blank homepage, the three
+ * error pages, the default settings and the chosen locales (ar, en or both,
+ * one of them the default). Everything is inserted inside one transaction
+ * with the new site as tenant context, so the `fill_tenant_id` trigger stamps
+ * every row with the site id.
+ *
+ * Creating from a template (session 4) is the same transaction with another
+ * seeder: `provisionSite(input, copyTemplate)` in place of `seedBlankSite`.
  */
 
+import type { Knex } from 'knex';
 import { getKnexClient } from '@/lib/knex-client';
 import { DEFAULT_ERROR_PAGES } from '@/lib/page-utils';
 import { generatePageLayersHash, generatePageMetadataHash } from '@/lib/hash-utils';
 import { getDefaultSitemapSettings } from '@/lib/sitemap-utils';
+import { getLocaleByCode } from '@/lib/localisation-utils';
+import { forgetSiteLookups, type Site } from '@/lib/platform/site';
+import type { SiteInput } from '@/lib/platform/site-input';
 
-export interface ProvisionInput {
-  id: string;
-  name: string;
-  hosts: string[];
-  siteName?: string;
+export interface ProvisionSiteInput extends SiteInput {
+  organizationId: string;
+  /** The Business OS user creating the site (the session's `sub`). */
+  createdBy: string | null;
+  isTemplate?: boolean;
 }
 
-export async function provisionOrganization(input: ProvisionInput): Promise<{ created: boolean }> {
-  const knex = await getKnexClient();
-  const existing = await knex('platform_organizations').where('id', input.id).first();
-  if (existing) {
-    await knex('platform_organizations').where('id', input.id).update({ name: input.name, hosts: input.hosts });
-    return { created: false };
+/** Fills a freshly inserted site with its starting rows, inside the provisioning transaction. */
+export type SiteSeeder = (trx: Knex.Transaction, site: Site, input: ProvisionSiteInput) => Promise<void>;
+
+/** The slug or a host is already taken by a live site. */
+export class SiteConflictError extends Error {
+  constructor(public readonly field: 'slug' | 'hosts', message: string) {
+    super(message);
+    this.name = 'SiteConflictError';
   }
+}
 
-  await knex.transaction(async (trx) => {
-    await trx('platform_organizations').insert({ id: input.id, name: input.name, hosts: input.hosts });
-    await trx.raw('SELECT set_tenant_context(?::uuid)', [input.id]);
+const UNIQUE_VIOLATION = '23505';
 
-    const homepageLayers = [{ id: 'body', name: 'body', classes: '', children: [] }];
-    const [homepage] = await trx('pages').insert({
-      name: 'Homepage', slug: '', depth: 0, is_index: true, is_published: false,
-      content_hash: generatePageMetadataHash({ name: 'Homepage', slug: '', settings: {}, is_index: true, is_dynamic: false, error_page: null }),
-    }).returning('*');
-    await trx('page_layers').insert({
-      page_id: homepage.id, layers: JSON.stringify(homepageLayers), is_published: false,
-      content_hash: generatePageLayersHash({ layers: homepageLayers, generated_css: null }),
-    });
+export async function provisionSite(input: ProvisionSiteInput, seed: SiteSeeder = seedBlankSite): Promise<Site> {
+  const knex = await getKnexClient();
 
-    for (const errorPage of DEFAULT_ERROR_PAGES) {
-      const pageHash = generatePageMetadataHash({ name: errorPage.name, slug: '', settings: errorPage.settings, is_index: false, is_dynamic: false, error_page: errorPage.code });
-      const base = { name: errorPage.name, error_page: errorPage.code, slug: '', depth: 0, order: 0, settings: JSON.stringify(errorPage.settings), content_hash: pageHash };
-      const [draft] = await trx('pages').insert({ ...base, is_published: false }).returning('id');
-      await trx('pages').insert({ ...base, id: draft.id, is_published: true });
-      const layersHash = generatePageLayersHash({ layers: errorPage.layers, generated_css: null });
-      const [draftLayers] = await trx('page_layers').insert({ page_id: draft.id, layers: errorPage.layers, is_published: false, content_hash: layersHash }).returning('id');
-      await trx('page_layers').insert({ id: draftLayers.id, page_id: draft.id, layers: errorPage.layers, is_published: true, content_hash: layersHash });
+  const site = await knex.transaction(async (trx) => {
+    if (input.hosts.length > 0) {
+      const taken = await trx('platform_sites')
+        .select('id')
+        .whereNull('deleted_at')
+        .whereRaw('hosts && ?::text[]', [input.hosts])
+        .first();
+      if (taken) throw new SiteConflictError('hosts', 'A host is already used by another site');
     }
 
-    const settings: Array<{ key: string; value: unknown }> = [
-      { key: 'site_name', value: input.siteName || input.name },
-      { key: 'site_description', value: '' },
-      { key: 'ycode_version', value: '0.1.0' },
-      { key: 'sitemap', value: getDefaultSitemapSettings() },
-      { key: 'ycode_badge', value: false },
-      { key: 'timezone', value: 'Asia/Baghdad' },
-    ];
-    await trx('settings').insert(settings.map((s) => ({ key: s.key, value: JSON.stringify(s.value) })));
+    let row: Site;
+    try {
+      [row] = (await trx('platform_sites')
+        .insert({
+          organization_id: input.organizationId,
+          name: input.name,
+          slug: input.slug,
+          hosts: input.hosts,
+          default_locale: input.default_language,
+          is_template: input.isTemplate ?? false,
+          created_by: input.createdBy,
+        })
+        .returning('*')) as Site[];
+    } catch (error) {
+      if ((error as { code?: string }).code === UNIQUE_VIOLATION) {
+        throw new SiteConflictError('slug', `The slug "${input.slug}" is already used by another site`);
+      }
+      throw error;
+    }
 
-    await trx('locales').insert({ code: 'en', label: 'English', is_default: true, is_published: false });
+    await trx.raw('SELECT set_tenant_context(?::uuid)', [row.id]);
+    await seed(trx, row, input);
+    return row;
   });
 
-  return { created: true };
+  forgetSiteLookups();
+  return site;
 }
+
+/** ycode's starting content for a blank project: a homepage, the error pages, settings and locales. */
+export const seedBlankSite: SiteSeeder = async (trx, site, input) => {
+  const homepageLayers = [{ id: 'body', name: 'body', classes: '', children: [] }];
+  const [homepage] = await trx('pages').insert({
+    name: 'Homepage', slug: '', depth: 0, is_index: true, is_published: false,
+    content_hash: generatePageMetadataHash({ name: 'Homepage', slug: '', settings: {}, is_index: true, is_dynamic: false, error_page: null }),
+  }).returning('*');
+  await trx('page_layers').insert({
+    page_id: homepage.id, layers: JSON.stringify(homepageLayers), is_published: false,
+    content_hash: generatePageLayersHash({ layers: homepageLayers, generated_css: null }),
+  });
+
+  for (const errorPage of DEFAULT_ERROR_PAGES) {
+    const pageHash = generatePageMetadataHash({ name: errorPage.name, slug: '', settings: errorPage.settings, is_index: false, is_dynamic: false, error_page: errorPage.code });
+    const base = { name: errorPage.name, error_page: errorPage.code, slug: '', depth: 0, order: 0, settings: JSON.stringify(errorPage.settings), content_hash: pageHash };
+    const [draft] = await trx('pages').insert({ ...base, is_published: false }).returning('id');
+    await trx('pages').insert({ ...base, id: draft.id, is_published: true });
+    const layersHash = generatePageLayersHash({ layers: errorPage.layers, generated_css: null });
+    const [draftLayers] = await trx('page_layers').insert({ page_id: draft.id, layers: errorPage.layers, is_published: false, content_hash: layersHash }).returning('id');
+    await trx('page_layers').insert({ id: draftLayers.id, page_id: draft.id, layers: errorPage.layers, is_published: true, content_hash: layersHash });
+  }
+
+  const settings: Array<{ key: string; value: unknown }> = [
+    { key: 'site_name', value: site.name },
+    { key: 'site_description', value: '' },
+    { key: 'ycode_version', value: '0.1.0' },
+    { key: 'sitemap', value: getDefaultSitemapSettings() },
+    { key: 'ycode_badge', value: false },
+    { key: 'timezone', value: 'Asia/Baghdad' },
+  ];
+  await trx('settings').insert(settings.map((s) => ({ key: s.key, value: JSON.stringify(s.value) })));
+
+  await trx('locales').insert(input.languages.map((code) => ({
+    code,
+    label: getLocaleByCode(code)?.label ?? code,
+    is_default: code === input.default_language,
+    is_published: false,
+  })));
+};

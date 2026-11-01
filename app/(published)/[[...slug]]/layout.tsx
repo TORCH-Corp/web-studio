@@ -33,7 +33,7 @@ export default async function PublishedLayout({
   const slugPath = slug?.join('/') ?? '';
   const pathname = slugPath ? `/${slugPath}` : '/';
 
-  // c0 port: the organization comes from the host; the cached lookups are keyed by it.
+  // c0 port: the site comes from the host; the cached lookups are keyed by it.
   const tenantId = (await getTenantIdFromHeaders()) ?? undefined;
   const [lang, globalSettings] = await Promise.all([
     resolveHtmlLang(slugPath, true, tenantId),

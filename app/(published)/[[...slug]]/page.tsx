@@ -161,10 +161,11 @@ export async function generateStaticParams() {
  * Cached per slug and page for revalidation
  */
 /**
- * c0 port: the organization of the request (from its host name) goes into every
- * cache key, and the cached fetch runs with it as tenant context, so two
- * organizations never share a cached page. Tags stay global for now, so a
- * publish by one organization refreshes every organization's cache.
+ * c0 port, part 1 session 1: the site of the request (from its host name) goes
+ * into every cache key, and the cached fetch runs with it as tenant context,
+ * so two sites never share a cached page. The per-site tags are purged by that
+ * site's publish; the global tags stay too, so a publish also refreshes the
+ * other sites' entries (correct, a little wasteful; session 5 narrows it).
  */
 async function scoped<T>(fn: () => Promise<T>): Promise<T> {
   const tenantId = await getTenantIdFromHeaders();
@@ -303,7 +304,7 @@ interface PageProps {
 }
 
 export default async function Page({ params }: PageProps) {
-  // c0 port: a host that belongs to no organization has no site.
+  // c0 port: a host that belongs to no site answers 404 (part 1, session 1).
   if (!(await getTenantIdFromHeaders())) notFound();
   const { slug } = await params;
   const slugPath = slug?.join('/') ?? '';
