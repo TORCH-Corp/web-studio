@@ -72,9 +72,17 @@ test('a failed start-up run is tried again until one succeeds, then stops', asyn
     log: { ...quiet, info: () => done() },
     firstRetryDelayMs: 5,
   });
-  run.start();
-  await finished;
-  await run.stop();
+  // The retry timer is unref'd on purpose (a pending retry must not keep a stopping
+  // server alive), so nothing else holds the event loop open while this test waits:
+  // without a handle of its own the process would drain and the runner would cancel it.
+  const keepAlive = setInterval(() => undefined, 1_000);
+  try {
+    run.start();
+    await finished;
+    await run.stop();
+  } finally {
+    clearInterval(keepAlive);
+  }
   assert.equal(attempts, 3);
   assert.deepEqual(published, [ORG_A]);
 });
