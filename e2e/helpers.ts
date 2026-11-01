@@ -6,6 +6,9 @@
 
 import { expect, request, type APIRequestContext, type APIResponse } from '@playwright/test';
 
+/** The TORCH templates organization of the e2e environment (session 4): WS_TEMPLATES_ORG of the test server. */
+export const TEMPLATES_ORG = '7e7e7e7e-7e7e-4e7e-8e7e-7e7e7e7e7e7e';
+
 export interface TestUser {
   sub: string;
   email: string;
@@ -20,6 +23,8 @@ export interface SiteRecord {
   slug: string;
   hosts: string[];
   default_locale: string;
+  is_template: boolean;
+  template: { name: { ar: string; en: string }; description: { ar: string; en: string } } | null;
   status?: 'draft' | 'published';
   last_published_at?: string | null;
 }
@@ -31,6 +36,8 @@ export interface NewSite {
   default_language: 'ar' | 'en';
   hosts?: string[];
   template_id?: string;
+  is_template?: boolean;
+  template?: { name?: { ar?: string; en?: string }; description?: { ar?: string; en?: string } };
 }
 
 /** A context whose cookie jar holds a Business OS session for `user`. */

@@ -30,8 +30,39 @@ export function objectPath(siteId: string, bucket: string, key: string): string 
   return path.join(STORAGE_DIR, siteId, bucket, safeKey(key));
 }
 
+function sitePath(siteId: string): string {
+  return path.join(STORAGE_DIR, siteId);
+}
+
 function metaPath(file: string): string {
   return file + '.meta.json';
+}
+
+/** The public URL of an object, the one an asset row stores in `public_url`. */
+export function publicUrlFor(siteId: string, bucket: string, key: string): string {
+  return `${PUBLIC_URL}/platform-storage/${siteId}/${bucket}/${safeKey(key)}`;
+}
+
+export async function objectExists(siteId: string, bucket: string, key: string): Promise<boolean> {
+  return fs.stat(objectPath(siteId, bucket, key)).then((stat) => stat.isFile()).catch(() => false);
+}
+
+/**
+ * Copy every file of one site to another (part 1, session 4: a site created
+ * from a template gets the template's files). A template with no files is
+ * nothing to copy. Session 8 (Document Center) replaces this with the
+ * platform object store's copy.
+ */
+export async function copySiteStorage(fromSiteId: string, toSiteId: string): Promise<void> {
+  const source = sitePath(fromSiteId);
+  const exists = await fs.stat(source).then((stat) => stat.isDirectory()).catch(() => false);
+  if (!exists) return;
+  await fs.cp(source, sitePath(toSiteId), { recursive: true, errorOnExist: true, force: false });
+}
+
+/** Remove every file of a site (a site whose creation failed after its files were copied). */
+export async function removeSiteStorage(siteId: string): Promise<void> {
+  await fs.rm(sitePath(siteId), { recursive: true, force: true });
 }
 
 export function signUpload(siteId: string, bucket: string, key: string, expires: number): string {
@@ -117,7 +148,7 @@ export function createStorageClient(siteId: string | null) {
     },
 
     getPublicUrl(key: string) {
-      return { data: { publicUrl: `${PUBLIC_URL}/platform-storage/${site()}/${bucket}/${safeKey(key)}` } };
+      return { data: { publicUrl: publicUrlFor(site(), bucket, key) } };
     },
 
     async createSignedUploadUrl(key: string) {

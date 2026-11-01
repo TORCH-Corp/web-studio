@@ -9,7 +9,10 @@
  * every row with the site id.
  *
  * Creating from a template (session 4) is the same transaction with another
- * seeder: `provisionSite(input, copyTemplate)` in place of `seedBlankSite`.
+ * seeder: `provisionSite(input, copyTemplate(template))` in place of
+ * `seedBlankSite` (lib/platform/template-copy.ts). A seeder that fails rolls
+ * the transaction back, and any file it copied into the new site's storage
+ * is removed.
  */
 
 import type { Knex } from 'knex';
@@ -19,13 +22,19 @@ import { generatePageLayersHash, generatePageMetadataHash } from '@/lib/hash-uti
 import { getDefaultSitemapSettings } from '@/lib/sitemap-utils';
 import { getLocaleByCode } from '@/lib/localisation-utils';
 import { forgetSiteLookups, type Site } from '@/lib/platform/site';
-import type { SiteInput } from '@/lib/platform/site-input';
+import { removeSiteStorage } from '@/lib/platform/storage';
+import type { SiteInput, TemplateMeta } from '@/lib/platform/site-input';
 
 export interface ProvisionSiteInput extends SiteInput {
+  /** A fixed id (the seeded templates); generated when absent. */
+  id?: string;
   organizationId: string;
   /** The Business OS user creating the site (the session's `sub`). */
   createdBy: string | null;
+  /** A TORCH template (session 4): the route allows it to the templates organization only. */
   isTemplate?: boolean;
+  /** The template's name and description in Arabic and English (with `isTemplate`). */
+  templateMeta?: TemplateMeta;
 }
 
 /** Fills a freshly inserted site with its starting rows, inside the provisioning transaction. */
@@ -58,12 +67,14 @@ export async function provisionSite(input: ProvisionSiteInput, seed: SiteSeeder 
     try {
       [row] = (await trx('platform_sites')
         .insert({
+          ...(input.id ? { id: input.id } : {}),
           organization_id: input.organizationId,
           name: input.name,
           slug: input.slug,
           hosts: input.hosts,
           default_locale: input.default_language,
           is_template: input.isTemplate ?? false,
+          template: input.isTemplate && input.templateMeta ? JSON.stringify(input.templateMeta) : null,
           created_by: input.createdBy,
         })
         .returning('*')) as Site[];
@@ -75,7 +86,16 @@ export async function provisionSite(input: ProvisionSiteInput, seed: SiteSeeder 
     }
 
     await trx.raw('SELECT set_tenant_context(?::uuid)', [row.id]);
-    await seed(trx, row, input);
+    try {
+      await seed(trx, row, input);
+    } catch (error) {
+      try {
+        await removeSiteStorage(row.id);
+      } catch (cleanupError) {
+        console.error(`[provisionSite] the files of the failed site ${row.id} could not be removed`, cleanupError);
+      }
+      throw error;
+    }
     return row;
   });
 

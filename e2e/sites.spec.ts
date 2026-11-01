@@ -44,7 +44,7 @@ test.afterAll(async () => {
 test('organization A creates two sites and organization B creates one', async () => {
   siteA1 = await createSite(orgA, { name: 'Al Noor', slug: `a1-${RUN}`, languages: ['ar', 'en'], default_language: 'ar', hosts: [HOST_A1] });
   siteA2 = await createSite(orgA, { name: 'Al Noor Landing', slug: `a2-${RUN}`, languages: ['en'], default_language: 'en', hosts: [HOST_A2] });
-  siteB1 = await createSite(orgB, { name: 'Basra Tools', slug: `b1-${RUN}`, languages: ['en'], default_language: 'en', hosts: [HOST_B1], template_id: '3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b' });
+  siteB1 = await createSite(orgB, { name: 'Basra Tools', slug: `b1-${RUN}`, languages: ['en'], default_language: 'en', hosts: [HOST_B1] });
 
   expect(siteA1.organization_id).toBe(ORG_A);
   expect(siteA1.default_locale).toBe('ar');

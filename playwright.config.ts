@@ -1,6 +1,7 @@
 import os from 'os';
 import path from 'path';
 import { defineConfig } from '@playwright/test';
+import { TEMPLATES_ORG } from './e2e/helpers';
 
 /**
  * End-to-end suite for the TORCH fork (part 1, session 1).
@@ -12,6 +13,7 @@ import { defineConfig } from '@playwright/test';
  *
  * Needs DATABASE_URL_TEST: a PostgreSQL 16 database of its own whose name
  * contains "test"; its public schema is dropped and recreated on every run.
+ * `pnpm templates:seed` then creates TORCH's three templates (session 4).
  */
 const PORT = Number(process.env.E2E_PORT || 3102);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -32,7 +34,7 @@ export default defineConfig({
     baseURL: BASE_URL,
   },
   webServer: {
-    command: `pnpm e2e:db && pnpm exec next build && pnpm exec next start -p ${PORT}`,
+    command: `pnpm e2e:db && pnpm templates:seed && pnpm exec next build && pnpm exec next start -p ${PORT}`,
     url: `${BASE_URL}/ycode/api/setup/status`,
     reuseExistingServer: !process.env.CI,
     timeout: 15 * 60_000,
@@ -46,6 +48,7 @@ export default defineConfig({
       ALLOW_DEV_LOGIN: 'true',
       PLATFORM_PUBLIC_URL: BASE_URL,
       PLATFORM_STORAGE_DIR: path.join(os.tmpdir(), 'web-studio-e2e-storage'),
+      WS_TEMPLATES_ORG: TEMPLATES_ORG,
     },
   },
 });

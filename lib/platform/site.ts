@@ -24,6 +24,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { cookies, headers } from 'next/headers';
 import { getKnexClient } from '@/lib/knex-client';
 import { SESSION_COOKIE, SITE_COOKIE, verifySession, verifySiteCookie, type BosSession, type SiteCookie } from '@/lib/platform/session';
+import type { TemplateMeta } from '@/lib/platform/site-input';
 
 export const siteStore = new AsyncLocalStorage<string>();
 
@@ -39,7 +40,10 @@ export interface Site {
   slug: string;
   hosts: string[];
   default_locale: string;
+  /** A TORCH template (session 4): a site of the templates organization that new sites are copied from. */
   is_template: boolean;
+  /** The template's name and description in Arabic and English; null on an ordinary site. */
+  template: TemplateMeta | null;
   created_by: string | null;
   created_at: string;
   deleted_at: string | null;
@@ -86,6 +90,7 @@ export function normaliseHost(value: string): string {
   return match ? match[1] : '';
 }
 
+/** The live, non-template site a published request's host belongs to. A template never answers on a host (session 4). */
 export async function siteIdForHost(headerValue: string | null): Promise<string | null> {
   if (!headerValue) return null;
   const host = normaliseHost(headerValue);
@@ -96,6 +101,7 @@ export async function siteIdForHost(headerValue: string | null): Promise<string 
   const row = await knex('platform_sites')
     .select('id')
     .whereRaw('hosts @> ARRAY[?]::text[]', [host])
+    .where('is_template', false)
     .whereNull('deleted_at')
     .first() as { id: string } | undefined;
   lookups().hosts.set(host, { id: row?.id ?? null, at: Date.now() });
