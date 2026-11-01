@@ -13,7 +13,8 @@ import type { Knex } from 'knex';
  * - The slug becomes the site's default address in session 5
  *   (`{slug}.sites.torchcorp.com`), so it is unique across all organizations
  *   among live sites; a deleted site frees its slug.
- * - `hosts` is looked up with `host = ANY(hosts)`, which the GIN index serves.
+ * - `hosts` is looked up with `hosts @> ARRAY[host]` (and `&&` for the conflict check),
+ *   the array operators the GIN index serves.
  */
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('platform_organizations');

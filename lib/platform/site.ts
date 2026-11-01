@@ -95,7 +95,7 @@ export async function siteIdForHost(headerValue: string | null): Promise<string 
   const knex = await getKnexClient();
   const row = await knex('platform_sites')
     .select('id')
-    .whereRaw('? = ANY(hosts)', [host])
+    .whereRaw('hosts @> ARRAY[?]::text[]', [host])
     .whereNull('deleted_at')
     .first() as { id: string } | undefined;
   lookups().hosts.set(host, { id: row?.id ?? null, at: Date.now() });
