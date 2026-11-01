@@ -1,7 +1,7 @@
 import { revalidateTag, revalidatePath } from 'next/cache';
 import { invalidateByTag } from '@vercel/functions';
-import { GLOBAL_SETTINGS_TAG } from '@/lib/cache-tags';
-import { getSupabaseAdmin, getSupabaseConfig } from '@/lib/supabase-server';
+import { GLOBAL_SETTINGS_TAG, buildAllPagesTag, buildGlobalSettingsTag, buildRouteTag } from '@/lib/cache-tags';
+import { getSupabaseAdmin, getTenantIdFromHeaders } from '@/lib/supabase-server';
 import { buildSlugPath, normalizeSlugSegment } from '@/lib/page-utils';
 import type { Page, PageFolder } from '@/types';
 import type {
@@ -92,10 +92,14 @@ export async function purgeTagsOnVercel(tags: string[]): Promise<void> {
 export async function invalidatePage(routePath: string): Promise<boolean> {
   const tag = `route-/${routePath}`;
   try {
+    // c0 port: caches keyed per organization carry per-organization tags too.
+    const tenantTag = buildRouteTag(await getTenantIdFromHeaders(), routePath);
     if (process.env.VERCEL === '1') {
       await invalidateByTag(tag);
+      if (tenantTag !== tag) await invalidateByTag(tenantTag);
     } else {
       revalidateTag(tag, { expire: 0 });
+      if (tenantTag !== tag) revalidateTag(tenantTag, { expire: 0 });
     }
     return true;
   } catch (error) {
@@ -582,10 +586,13 @@ export async function selectiveInvalidation(
  */
 export async function invalidateGlobalSettings(): Promise<boolean> {
   try {
+    const tenantTag = buildGlobalSettingsTag(await getTenantIdFromHeaders());
     if (process.env.VERCEL === '1') {
       await invalidateByTag(GLOBAL_SETTINGS_TAG);
+      if (tenantTag !== GLOBAL_SETTINGS_TAG) await invalidateByTag(tenantTag);
     } else {
       revalidateTag(GLOBAL_SETTINGS_TAG, { expire: 0 });
+      if (tenantTag !== GLOBAL_SETTINGS_TAG) revalidateTag(tenantTag, { expire: 0 });
     }
     return true;
   } catch (error) {
@@ -666,8 +673,7 @@ const WARM_SIGNATURE_HEADER = 'x-warm-signature';
 /** The HMAC key for chain auth: the service-role key the app already requires. */
 async function getChainSigningKey(): Promise<string | null> {
   try {
-    const creds = await getSupabaseConfig();
-    return creds?.serviceRoleKey ?? null;
+    return process.env.BOS_SESSION_SECRET ?? null;
   } catch {
     return null;
   }

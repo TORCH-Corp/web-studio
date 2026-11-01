@@ -1,35 +1,42 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { credentials } from './credentials';
-import { parseSupabaseConfig } from './supabase-config-parser';
-import type { SupabaseConfig } from '@/types';
-
 /**
- * Create a Supabase server client for use in Next.js route handlers.
+ * Route-handler auth client (c0 port).
  *
- * Reads stored credentials, parses the config, and wires up cookie
- * get/set/remove so auth sessions work correctly in API routes.
- *
- * Returns null if Supabase is not configured (expected during setup).
+ * The few routes that used a cookie-bound Supabase client to read or end the
+ * session get the same two calls backed by the Business OS session cookie.
  */
+
+import { cookies } from 'next/headers';
+import { SESSION_COOKIE, verifySession } from '@/lib/platform/session';
+import { userFromSession } from '@/lib/supabase-auth';
+
 export async function createRouteClient() {
-  const config = await credentials.get<SupabaseConfig>('supabase_config');
-  if (!config) return null;
-
-  const parsed = parseSupabaseConfig(config);
   const cookieStore = await cookies();
-
-  return createServerClient(parsed.projectUrl, parsed.anonKey, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+  return {
+    auth: {
+      async getSession() {
+        const session = await verifySession(cookieStore.get(SESSION_COOKIE)?.value);
+        if (!session) return { data: { session: null }, error: null };
+        return {
+          data: {
+            session: {
+              user: userFromSession(session),
+              access_token: 'business-os',
+              token_type: 'bearer',
+              expires_at: session.exp,
+              expires_in: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+              refresh_token: '',
+            },
+          },
+          error: null,
+        };
       },
-      set(name: string, value: string, options: CookieOptions) {
-        cookieStore.set({ name, value, ...options });
+      async signOut() {
+        cookieStore.set({ name: SESSION_COOKIE, value: '', path: '/', maxAge: 0 });
+        return { error: null };
       },
-      remove(name: string, options: CookieOptions) {
-        cookieStore.set({ name, value: '', ...options });
+      async exchangeCodeForSession() {
+        return { error: { message: 'Sign-in happens in Business OS, not in Web Studio' } };
       },
     },
-  });
+  };
 }

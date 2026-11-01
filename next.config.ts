@@ -8,22 +8,18 @@ const imageRemotePatterns: NonNullable<NonNullable<NextConfig['images']>['remote
   },
 ];
 
-// Self-hosted Supabase: allow the custom domain for storage image optimization.
-// Supports both "https://supabase.example.com" and bare "supabase.example.com".
-if (process.env.SUPABASE_URL) {
+// TORCH platform storage (c0 port): images are served from this deployment.
+if (process.env.PLATFORM_PUBLIC_URL) {
   try {
-    const parsed = new URL(
-      process.env.SUPABASE_URL.startsWith('http')
-        ? process.env.SUPABASE_URL
-        : `https://${process.env.SUPABASE_URL}`,
-    );
+    const parsed = new URL(process.env.PLATFORM_PUBLIC_URL);
     imageRemotePatterns.push({
-      protocol: (parsed.protocol.replace(':', '') as 'http' | 'https') || 'https',
+      protocol: parsed.protocol.replace(':', '') as 'http' | 'https',
       hostname: parsed.hostname,
-      pathname: '/storage/v1/object/public/**',
+      port: parsed.port || undefined,
+      pathname: '/platform-storage/**',
     });
   } catch {
-    // Invalid SUPABASE_URL — skip adding remote pattern
+    // Invalid PLATFORM_PUBLIC_URL — skip adding remote pattern
   }
 }
 

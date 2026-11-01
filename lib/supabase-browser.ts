@@ -1,96 +1,86 @@
 /**
- * Supabase Browser Client
+ * Browser client (c0 port).
  *
- * Client-side Supabase client for authentication and real-time features.
- * Uses @supabase/ssr for proper Next.js 15 cookie handling.
- *
- * Two exports:
- * - createBrowserClient() — returns null if not configured (safe for setup flow)
- * - createClient() — throws if not configured (for features that require Supabase)
+ * The builder used supabase-js in the browser for three things: reading the
+ * session, realtime collaboration channels, and sign-out. The session now
+ * comes from `/ycode/api/auth/session` (the Business OS cookie); channels are
+ * accepted and do nothing (collaboration is off in c0); sign-out clears the
+ * cookie. No database or storage calls ever happened from the browser.
  */
 
-import { createBrowserClient as createSupabaseBrowserClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { RealtimeChannel, Session, SupabaseClient, User } from '@supabase/supabase-js';
 
-let browserClient: SupabaseClient | null = null;
-let configPromise: Promise<{ url: string; anonKey: string } | null> | null = null;
+type Listener = (event: string, session: Session | null) => void;
 
-/**
- * Reset cached client and config.
- * Call after credentials change (e.g. during setup) so the next
- * createBrowserClient() picks up the new config from the server.
- */
+interface SessionResponse {
+  data?: { session: Session | null; user: User | null };
+}
+
+let cached: Session | null | undefined;
+let inflight: Promise<Session | null> | null = null;
+const listeners = new Set<Listener>();
+
+async function fetchSession(): Promise<Session | null> {
+  if (cached !== undefined) return cached;
+  if (!inflight) {
+    inflight = fetch('/ycode/api/auth/session', { cache: 'no-store' })
+      .then(async (r) => (r.ok ? ((await r.json()) as SessionResponse).data?.session ?? null : null))
+      .catch(() => null)
+      .then((s) => { cached = s; inflight = null; return s; });
+  }
+  return inflight;
+}
+
+function noopChannel(topic: string): RealtimeChannel {
+  const channel = {
+    on: (..._args: unknown[]) => channel,
+    subscribe: (cb?: (status: string) => void) => { cb?.('SUBSCRIBED'); return channel; },
+    send: async (..._args: unknown[]) => 'ok' as const,
+    track: async (..._args: unknown[]) => 'ok' as const,
+    untrack: async (..._args: unknown[]) => 'ok' as const,
+    unsubscribe: async (..._args: unknown[]) => 'ok' as const,
+    presenceState: () => ({}),
+    topic,
+    state: 'joined',
+  };
+  return channel as unknown as RealtimeChannel;
+}
+
+const client = {
+  auth: {
+    async getSession() { return { data: { session: await fetchSession() }, error: null }; },
+    async getUser() { const s = await fetchSession(); return { data: { user: s?.user ?? null }, error: null }; },
+    async refreshSession() { cached = undefined; return { data: { session: await fetchSession() }, error: null }; },
+    async setSession(_session: unknown) { return { data: { session: null, user: null }, error: { message: 'Sign in through Business OS' } }; },
+    async signInWithPassword(_credentials?: unknown) { return { data: { session: null, user: null }, error: { message: 'Sign in through Business OS' } }; },
+    async signUp(_credentials?: unknown) { return { data: { session: null, user: null }, error: { message: 'Users are created in Business OS' } }; },
+    async signOut() {
+      await fetch('/ycode/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+      cached = null;
+      listeners.forEach((l) => l('SIGNED_OUT', null));
+      return { error: null };
+    },
+    async updateUser(_attributes?: unknown) { return { data: { user: null }, error: { message: 'Your profile is managed in Business OS' } }; },
+    onAuthStateChange(cb: Listener) {
+      listeners.add(cb);
+      return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } };
+    },
+  },
+  channel: (topic: string, _opts?: unknown) => noopChannel(topic),
+  removeChannel: async (_channel?: RealtimeChannel) => 'ok' as const,
+  removeAllChannels: async () => [] as 'ok'[],
+  getChannels: () => [] as RealtimeChannel[],
+};
+
 export function resetBrowserClient(): void {
-  browserClient = null;
-  configPromise = null;
+  cached = undefined;
 }
 
-/**
- * Get config from API endpoint.
- * Cached to avoid multiple requests. Returns null if not configured (404).
- */
-async function getSupabaseConfig(): Promise<{ url: string; anonKey: string } | null> {
-  if (!configPromise) {
-    configPromise = fetch('/ycode/api/supabase/config')
-      .then(async (res) => {
-        if (!res.ok) {
-          // Handle 404 (not configured) gracefully - expected during setup
-          if (res.status === 404) {
-            return null;
-          }
-
-          const error = await res.json().catch(() => ({ error: 'Unknown error' }));
-          console.error('Failed to get Supabase config:', res.status, error);
-          return null;
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (!data || !data.data) {
-          return null;
-        }
-        return data.data;
-      })
-      .catch((error) => {
-        console.error('Error getting Supabase config:', error);
-        // Reset promise so it can be retried
-        configPromise = null;
-        return null;
-      });
-  }
-
-  return configPromise;
+/** Typed as SupabaseClient so the hooks compile unchanged; only the members above exist. */
+export async function createBrowserClient(): Promise<SupabaseClient> {
+  return client as unknown as SupabaseClient;
 }
 
-/** Build or return the cached SupabaseClient instance. */
-async function getOrCreateClient(): Promise<SupabaseClient | null> {
-  if (browserClient) return browserClient;
-
-  const config = await getSupabaseConfig();
-  if (!config) return null;
-
-  browserClient = createSupabaseBrowserClient(config.url, config.anonKey);
-  return browserClient;
-}
-
-/**
- * Get browser Supabase client (null-safe).
- * Returns null if Supabase is not configured — use during setup flow.
- */
-export async function createBrowserClient(): Promise<SupabaseClient | null> {
-  return getOrCreateClient();
-}
-
-/**
- * Get browser Supabase client (throws if not configured).
- * Use for features that require a working Supabase connection (realtime, auth, etc).
- */
 export async function createClient(): Promise<SupabaseClient> {
-  const client = await getOrCreateClient();
-
-  if (!client) {
-    throw new Error('Supabase is not configured');
-  }
-
-  return client;
+  return client as unknown as SupabaseClient;
 }

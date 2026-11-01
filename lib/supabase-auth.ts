@@ -1,50 +1,44 @@
 /**
- * Server-side auth utilities for API routes.
- * Creates a Supabase client from cookies and verifies the session.
+ * Server-side auth (c0 port): the current Business OS user.
+ *
+ * ycode's route handlers call `getAuthUser()` and read `user.id`,
+ * `user.email` and `user.app_metadata.role`. The user now comes from the
+ * Business OS session cookie; the role is derived from the Web Studio
+ * permission flags in that session (see lib/platform/session.ts).
  */
 
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { credentials } from '@/lib/credentials';
-import { parseSupabaseConfig } from '@/lib/supabase-config-parser';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import type { SupabaseConfig } from '@/types';
+import { getSessionFromCookies } from '@/lib/platform/organization';
+import { roleFromPermissions, type BosSession } from '@/lib/platform/session';
+import { getSupabaseAdmin } from '@/lib/supabase-server';
 
-interface AuthResult {
+export interface AuthResult {
   user: User;
   client: SupabaseClient;
+  session: BosSession;
 }
 
-/**
- * Get the authenticated user and Supabase client from request cookies.
- * Returns null if not authenticated or Supabase is not configured.
- */
+export function userFromSession(session: BosSession): User {
+  const now = new Date().toISOString();
+  return {
+    id: session.sub,
+    email: session.email,
+    aud: 'business-os',
+    role: 'authenticated',
+    app_metadata: { role: roleFromPermissions(session.perms), organization_id: session.org, permissions: session.perms },
+    user_metadata: { name: session.name, full_name: session.name },
+    created_at: now,
+    updated_at: now,
+    identities: [],
+    factors: [],
+  } as unknown as User;
+}
+
 export async function getAuthUser(): Promise<AuthResult | null> {
-  try {
-    const config = await credentials.get<SupabaseConfig>('supabase_config');
-    if (!config) return null;
-
-    const parsed = parseSupabaseConfig(config);
-    const cookieStore = await cookies();
-
-    const client = createServerClient(parsed.projectUrl, parsed.anonKey, {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set({ name, value, ...options });
-          });
-        },
-      },
-    });
-
-    const { data: { user }, error } = await client.auth.getUser();
-    if (error || !user) return null;
-
-    return { user, client };
-  } catch {
-    return null;
-  }
+  const session = await getSessionFromCookies();
+  if (!session) return null;
+  if (!roleFromPermissions(session.perms)) return null; // no Web Studio permission at all
+  const client = await getSupabaseAdmin(session.org);
+  if (!client) return null;
+  return { user: userFromSession(session), client, session };
 }

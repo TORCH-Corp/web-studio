@@ -203,7 +203,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const { error } = await supabase.auth.signOut();
 
       if (error) {
-        set({ loading: false, error: error.message });
+        set({ loading: false, error: (error as { message?: string }).message ?? 'Sign out failed' });
         return;
       }
 

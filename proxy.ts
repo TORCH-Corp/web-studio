@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr';
+import { SESSION_COOKIE, verifySession } from '@/lib/platform/session';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/security-headers-server';
@@ -9,9 +9,9 @@ import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
  */
 const PUBLIC_API_PREFIXES = [
   '/ycode/api/setup/',    // Setup wizard — needed before any user exists
-  '/ycode/api/supabase/', // Supabase config — needed for browser client init
   '/ycode/api/auth/',     // Auth callbacks and session checks
   '/ycode/api/v1/',       // Public API — has own API key auth
+  '/ycode/api/platform/', // Platform-to-platform API — has its own shared-secret auth
 ];
 
 /**
@@ -26,38 +26,7 @@ const PUBLIC_API_EXACT = [
   '/ycode/api/oauth/token',    // OAuth token exchange — auth is via PKCE/refresh
 ];
 
-/**
- * Derive the Supabase project URL and anon key from environment variables.
- * Returns null if env vars are not set (pre-setup or local dev without .env.local).
- *
- * Uses SUPABASE_URL when set (self-hosted instances), otherwise derives from
- * the project ref in the connection string (hosted Supabase).
- */
-function getSupabaseEnvConfig(): { url: string; anonKey: string } | null {
-  const anonKey = process.env.SUPABASE_PUBLISHABLE_KEY
-    || process.env.SUPABASE_ANON_KEY;
-  const connectionUrl = process.env.SUPABASE_CONNECTION_URL;
-
-  if (!anonKey || !connectionUrl) return null;
-
-  if (process.env.SUPABASE_URL) {
-    return {
-      url: process.env.SUPABASE_URL.replace(/\/+$/, ''),
-      anonKey,
-    };
-  }
-
-  // Hosted Supabase: extract project ID from connection URL
-  const match = connectionUrl.match(/\/\/postgres\.([a-z0-9]+):/);
-  if (!match) return null;
-
-  return {
-    url: `https://${match[1]}.supabase.co`,
-    anonKey,
-  };
-}
-
-/** Attach x-pathname on the request (readable via headers()) and the response. */
+/** Forward the request with its pathname as a header, keeping cookies and headers already set. */
 function withPathname(response: NextResponse, request: NextRequest, pathname: string): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', pathname);
@@ -101,7 +70,7 @@ function isPublicApiRoute(pathname: string, method: string, searchParams: URLSea
 }
 
 /**
- * Verify Supabase session for protected API routes.
+ * Verify the Business OS session for protected API routes.
  * Returns a 401 response if not authenticated, or null to continue.
  */
 async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null> {
@@ -109,46 +78,16 @@ async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null>
     return null;
   }
 
-  const config = getSupabaseEnvConfig();
-
-  // If env vars aren't set (pre-setup or local dev without .env.local), let through
-  if (!config) return null;
-
-  let response = NextResponse.next({ request });
-
-  const supabase = createServerClient(config.url, config.anonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      },
-    },
-  });
-
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
+  // c0 port: the builder's API is open to a Business OS session only.
+  const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
+  if (!session) {
     return NextResponse.json(
       { error: 'Not authenticated' },
       { status: 401 }
     );
   }
 
-  // Authenticated — pass through with any refreshed cookies
-  const authResponse = NextResponse.next({ request });
-  response.cookies.getAll().forEach((cookie) => {
-    authResponse.cookies.set(cookie.name, cookie.value);
-  });
-
-  return authResponse;
+  return NextResponse.next({ request });
 }
 
 export async function proxy(request: NextRequest) {

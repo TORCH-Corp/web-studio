@@ -1,14 +1,9 @@
 import '@/app/globals.css';
-import { Inter } from 'next/font/google';
 import RootLayoutShell, { defaultMetadata } from '@/components/RootLayoutShell';
 
-// Inter powers the builder's UI. It is loaded here (not in the shared shell)
-// so published public pages don't ship the builder's font.
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-});
+// TORCH spike patch: Google Fonts is unreachable from this sandbox, so the
+// builder falls back to the system font stack. Upstream loads Inter here.
+const inter = { variable: 'font-inter-fallback' };
 
 export const metadata = defaultMetadata;
 
