@@ -155,10 +155,14 @@ each site's own 404 page, a second host after the next publish) passes with `pnp
 - **Renewal without a sign-out** (`lib/platform/browser-session.ts`, hooked into
   `lib/supabase-browser.ts`; rule embedded-apps.md). The builder posts
   `{type: 'torch:request-token'}` to `window.parent` and takes
-  `{type: 'torch:set-token', token, expiresAt?, site?}` back, from `window.parent` only
-  (unframed, `window.parent === window`, so a Tauri webview that evaluates
-  `window.postMessage(...)` in the page is heard too); a push without a request is kept
-  for the next renewal. A page that loads without a session waits for the shell under
+  `{type: 'torch:set-token', token, expiresAt?, site?}` back, from `window.parent` only;
+  a push without a request is kept for the next renewal. The initial wait, the renewal
+  and the retry after a 401 run only while the builder is framed (`isEmbedded()`:
+  `window.parent !== window`). Unframed, a token that a Tauri webview evaluates into the
+  page with `window.postMessage(...)` is stored but never exchanged, so a top-level
+  webview's cookie dies with the token after 15 minutes: session 9 either frames the
+  builder or arms the bridge another way (OPEN_QUESTIONS 13). A page that loads without a
+  session waits for the shell under
   ycode's "Checking authentication" screen; the cookie is renewed a minute before it runs
   out; a builder request refused with 401 waits for the renewal under "Reconnecting to
   Business OS…" (`lib/platform/SessionNotice.tsx`, ycode's `BuilderLoading`, mounted in
