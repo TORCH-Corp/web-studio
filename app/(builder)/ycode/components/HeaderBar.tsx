@@ -657,8 +657,6 @@ export default function HeaderBar({
         {/* Active Users */}
         <ActiveUsersInHeader />
 
-        {/* Invite User */}
-
         {/* Save Status Indicator */}
         <div className="flex items-center justify-end w-16 text-xs text-zinc-500 dark:text-white/50">
           {isSaving ? (

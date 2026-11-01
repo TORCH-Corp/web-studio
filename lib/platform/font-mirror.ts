@@ -19,7 +19,8 @@ const UPSTREAM_TIMEOUT_MS = 10_000;
 const MODERN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const QUERY = /^[A-Za-z0-9+:;@,.=&_%-]{1,4000}$/;
-const FILE_PATH = /^s\/[A-Za-z0-9_-]+(\/[A-Za-z0-9_.-]+)+\.(woff2|woff|ttf)$/;
+/** `s/<family>/<version>/<file>.woff2` as fonts.gstatic.com serves it; no segment may start with a dot, so `..` cannot leave the mirror directory. */
+const FILE_PATH = /^s\/[A-Za-z0-9_-]+(\/[A-Za-z0-9_-][A-Za-z0-9_.-]*)+\.(woff2|woff|ttf)$/;
 
 export class MirrorRequestError extends Error {}
 

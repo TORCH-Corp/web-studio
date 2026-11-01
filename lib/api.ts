@@ -389,48 +389,6 @@ export const assetFoldersApi = {
   },
 };
 
-// Setup API
-export const setupApi = {
-  // Get setup status
-  async getStatus(): Promise<ApiResponse<{ isComplete: boolean; currentStep: string }>> {
-    return apiRequest<{ isComplete: boolean; currentStep: string }>('/ycode/api/setup/status');
-  },
-
-  // Connect Supabase
-  async connectSupabase(config: {
-    url: string;
-    anon_key: string;
-    service_role_key: string;
-  }): Promise<ApiResponse<{ success: boolean }>> {
-    return apiRequest<{ success: boolean }>('/ycode/api/setup/connect-supabase', {
-      method: 'POST',
-      body: JSON.stringify(config),
-    });
-  },
-
-  // Update Vercel env vars
-  async updateVercelEnv(vars: Record<string, string>): Promise<ApiResponse<{ success: boolean }>> {
-    return apiRequest<{ success: boolean }>('/ycode/api/setup/update-vercel-env', {
-      method: 'POST',
-      body: JSON.stringify(vars),
-    });
-  },
-
-  // Run migrations
-  async runMigrations(): Promise<ApiResponse<{ success: boolean }>> {
-    return apiRequest<{ success: boolean }>('/ycode/api/setup/run-migrations', {
-      method: 'POST',
-    });
-  },
-
-  // Complete setup
-  async completeSetup(): Promise<ApiResponse<{ success: boolean }>> {
-    return apiRequest<{ success: boolean }>('/ycode/api/setup/complete', {
-      method: 'POST',
-    });
-  },
-};
-
 // Collections API (EAV Architecture)
 export const collectionsApi = {
   // Collections
