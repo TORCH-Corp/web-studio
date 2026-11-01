@@ -5,6 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { getTenantIdFromHeaders } from '@/lib/supabase-server';
 import { headers } from 'next/headers';
 import { getSettingsByKeys } from '@/lib/repositories/settingsRepository';
 import { credentials } from '@/lib/credentials';
@@ -17,6 +18,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    // A host that belongs to no site has no robots.txt or sitemap (part 1, session 5).
+    if (!(await getTenantIdFromHeaders())) return new NextResponse(null, { status: 404 });
+
     await tagResponseForPublish();
 
     const requestOrigin = getRequestOrigin(await headers());

@@ -1,7 +1,7 @@
 # Web Studio port — ycode on the TORCH platform
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 and 3 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 and 5 below).
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -46,6 +46,7 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 and 3
     DATABASE_URL=postgresql://.../webstudio
     BOS_SESSION_SECRET=<shared with auth-service>
     PLATFORM_PUBLIC_URL=https://webstudio.<domain>
+    WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
     PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage
     ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
@@ -63,6 +64,25 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 and 3
 - Package manager: pnpm (`pnpm-lock.yaml`, imported from ycode's npm lock). `.npmrc` hoists
   the `@tiptap/*` and `@radix-ui/*` packages ycode imports without declaring them.
 
+## Publishing per site (session 5)
+- **Default address.** `lib/platform/site-hosts.ts`: `{slug}.{WS_SITES_DOMAIN}` is the first entry of
+  `platform_sites.hosts` from creation. A custom host under the sites domain, or the bare domain itself,
+  that is not the site's own address is refused (409), so no site can squat another slug's address or
+  the platform's. `lib/platform/site-update.ts`:
+  `changeSiteSlug` moves the default address with the slug; `setCustomHosts` replaces the custom hosts
+  (the default stays). Session 7's settings API calls both; there is no route for them yet.
+- **Host cache.** The 30 s host and site lookups (`lib/platform/site.ts`) are forgotten when a site is
+  created, deleted, renamed or its hosts change, and on every publish. Another process keeps a stale
+  entry for at most 30 s.
+- **Cache tags are per site only.** Every cached entry of a published page (page, layers, metadata,
+  redirects, settings, folders, locales, error pages, linked pages) carries the site's `tenant-{id}`,
+  `t-{id}-route-…` or `t-{id}-global-settings` tag (`lib/cache-tags.ts`), and `cacheService` purges
+  those and nothing global when a site is in context, so one site's publish or settings change never
+  touches another's. `revalidatePath('/', 'layout')` runs only with no site in context.
+- **Unknown host.** The page, `robots.txt` and `sitemap.xml` answer 404; the 404 page is a plain one
+  with no site's content. A known host's missing page renders that site's own 404 page (the boundary
+  now reads the site from the host; it used to read an AsyncLocalStorage that is empty there).
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -75,6 +95,10 @@ inbox → signed webhook with Arabic text; Arabic and Kurdish locales render
 Session 1: `e2e/sites.spec.ts` (two organizations, three sites, publish, isolation of
 pages, assets and locales, 404 across organizations, 401 without a session, 404 on an
 unknown host, soft delete) and `pnpm test` pass; 49 migrations from empty.
+
+Session 5: `e2e/publish.spec.ts` (default address with no host given, two sites publishing with their
+own content, an unpublished edit invisible until publish, `/ar` rtl and 404 where absent, unknown host,
+each site's own 404 page, a second host after the next publish) passes with `pnpm test` (303).
 
 ## Session 3: platform assets and trimming
 - **No public host in the builder.** `public/vendor/` holds `@tailwindcss/browser`, GSAP
@@ -107,8 +131,6 @@ unknown host, soft delete) and `pnpm test` pass; 49 migrations from empty.
 ## Not done (c1 and after)
 - Realtime collaboration and the MCP OAuth flow were not exercised (the AI agent, MCP and
   integrations screens open: `e2e/offline.spec.ts`).
-- Cache tags are global + per-site: a publish by one site also drops the global
-  entries of the others (correct, a little wasteful; session 5).
 - The `bos_session` cookie comes from the shell's access token (session 2); the
   dev-login route stands in for that.
 - `/ycode` with a session but no `ws_site` cookie shows an empty builder: the shell
