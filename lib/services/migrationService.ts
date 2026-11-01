@@ -115,8 +115,9 @@ export async function runMigrations(): Promise<MigrationResult> {
       }
     }
 
-    // Close connection
-    await closeKnexClient();
+    // TORCH: the pool is the server's, shared by every request. Every builder load posts to
+    // /setup/migrate, and closing the pool here aborted whatever query was in flight
+    // (another user's save, the editor lock check). Only a failed run closes it.
 
     return {
       success: true,

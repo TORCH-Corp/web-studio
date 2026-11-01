@@ -8,8 +8,9 @@ import { readObject, verifyUpload, writeObject } from '@/lib/platform/storage';
  *   PUT /platform-storage/upload/{site}/{bucket}/{key}?token&expires
  *                                                                  signed upload
  *
- * Objects are files on disk (lib/platform/storage.ts). Swapping in the
- * platform object store changes that module, not this route.
+ * Objects are files on disk or Document Center documents, by PLATFORM_STORAGE
+ * (lib/platform/storage.ts). Document Center has no public URL, so this route
+ * is where its files are served from.
  */
 export const runtime = 'nodejs';
 
@@ -17,7 +18,13 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ pa
   const { path } = await context.params;
   if (path.length < 3) return NextResponse.json({ error: 'not found' }, { status: 404 });
   const [siteId, bucket, ...rest] = path;
-  const obj = await readObject(siteId, bucket, rest.map(decodeURIComponent).join('/'));
+  let obj;
+  try {
+    obj = await readObject(siteId, bucket, rest.map(decodeURIComponent).join('/'));
+  } catch (e) {
+    console.error('Reading a stored file failed:', e);
+    return NextResponse.json({ error: 'storage unavailable' }, { status: 502 });
+  }
   if (!obj) return NextResponse.json({ error: 'not found' }, { status: 404 });
   return new NextResponse(new Uint8Array(obj.data), {
     headers: {

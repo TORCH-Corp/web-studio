@@ -125,18 +125,30 @@ export async function getSiteForOrganization(id: string, organizationId: string)
   return site && site.organization_id === organizationId ? site : null;
 }
 
-/** An organization's live sites, oldest first, with their publish state. */
-export async function listSites(organizationId: string): Promise<SiteSummary[]> {
+/** An organization's live sites (one of them when `siteId` is given), oldest first, with their publish state. */
+async function summaries(organizationId: string, siteId?: string): Promise<SiteSummary[]> {
   const knex = await getKnexClient();
-  const rows = (await knex('platform_sites as s')
+  const query = knex('platform_sites as s')
     .leftJoin('settings as p', function joinPublishedAt() {
       this.on('p.tenant_id', '=', 's.id').andOn('p.key', '=', knex.raw('?', ['published_at']));
     })
     .select('s.*', knex.raw("p.value #>> '{}' as last_published_at"))
     .where('s.organization_id', organizationId)
     .whereNull('s.deleted_at')
-    .orderBy('s.created_at', 'asc')) as Array<Site & { last_published_at: string | null }>;
+    .orderBy('s.created_at', 'asc');
+  if (siteId) query.andWhere('s.id', siteId);
+  const rows = (await query) as Array<Site & { last_published_at: string | null }>;
   return rows.map((row) => ({ ...row, status: row.last_published_at ? 'published' : 'draft' }));
+}
+
+export function listSites(organizationId: string): Promise<SiteSummary[]> {
+  return summaries(organizationId);
+}
+
+/** One live site of the organization with its publish state; null when it is not one (or the id is not a uuid). */
+export async function getSiteSummary(id: string, organizationId: string): Promise<SiteSummary | null> {
+  if (!UUID_PATTERN.test(id)) return null;
+  return (await summaries(organizationId, id))[0] ?? null;
 }
 
 /** Soft-delete a site: it leaves every list and its hosts stop resolving; its rows stay. */

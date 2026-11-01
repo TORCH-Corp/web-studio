@@ -99,6 +99,8 @@ import { Field } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertTitle } from '@/components/ui/alert';
+import SiteLockBanner from '@/lib/platform/SiteLockBanner';
+import { isReadOnly, useSiteLock } from '@/lib/platform/site-lock-client';
 
 interface YCodeBuilderProps {
   children?: React.ReactNode;
@@ -197,6 +199,8 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
   const migrationsComplete = useMigrationStore((state) => state.migrationsComplete);
   const setMigrationsComplete = useMigrationStore((state) => state.setMigrationsComplete);
   const [isSaving, setIsSaving] = useState(false);
+  // Another user holds the site's editor lock: nothing is saved from here (part 1, session 6).
+  const readOnly = isReadOnly(useSiteLock());
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -1231,6 +1235,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
 
   // Immediate save function (bypasses debouncing)
   const saveImmediately = useCallback(async (pageId: string) => {
+    if (readOnly) return;
     // Clear any pending debounced save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -1249,10 +1254,11 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     } finally {
       setIsSaving(false);
     }
-  }, [saveDraft]);
+  }, [saveDraft, readOnly]);
 
   // Debounced autosave function
   const debouncedSave = useCallback((pageId: string) => {
+    if (readOnly) return;
     // Clear existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -1272,7 +1278,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
         setIsSaving(false);
       }
     }, 2000);
-  }, [saveDraft]);
+  }, [saveDraft, readOnly]);
 
   // Save before navigating to a different page
   useEffect(() => {
@@ -1309,7 +1315,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     const lastLayers = lastLayersByPageRef.current.get(currentPageId);
 
     // Only trigger save if the layers array reference actually changed for THIS page
-    if (lastLayers && lastLayers !== currentLayers) {
+    if (lastLayers && lastLayers !== currentLayers && !readOnly) {
       if (consumePageMcpSync(currentPageId)) {
         // MCP already saved to DB — cancel any pending autosave and accept
         if (saveTimeoutRef.current) {
@@ -1324,7 +1330,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     }
 
     lastLayersByPageRef.current.set(currentPageId, currentLayers);
-  }, [currentPageId, currentDraft, debouncedSave]);
+  }, [currentPageId, currentDraft, debouncedSave, readOnly]);
 
   // Cleanup save timeout on unmount only
   useEffect(() => {
@@ -2296,6 +2302,8 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
         }}
         isSettingsRoute={routeType === 'settings' || routeType === 'localization' || routeType === 'profile' || routeType === 'forms' || routeType === 'integrations'}
       />
+
+      <SiteLockBanner />
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">

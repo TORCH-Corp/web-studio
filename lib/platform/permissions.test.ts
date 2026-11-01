@@ -3,7 +3,7 @@ import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { API_ROUTE_ACCESS, accessFor, flagForMethod, matchApiRoute, requirementName } from './permissions';
+import { API_ROUTE_ACCESS, accessFor, flagForMethod, isEditingWrite, matchApiRoute, requirementName } from './permissions';
 
 const API_DIR = path.join(__dirname, '..', '..', 'app', '(builder)', 'ycode', 'api');
 
@@ -103,4 +103,46 @@ test('a path under /ycode/api that no route names is unmapped; the preview and t
 
 test('the requirement is named the way the permission matrix shows it', () => {
   assert.equal(requirementName({ leaf: 'webstudio.manage_sites', flag: 'c' }), 'webstudio.manage_sites.c');
+});
+
+test('session 6: the writes that need the editor lock are the builder\'s non-read content and forms routes', () => {
+  const writes = (method: string, pathname: string, query = '') => {
+    const decision = accessFor(pathname, method, q(query));
+    assert.ok(decision, `${method} ${pathname} is mapped`);
+    return isEditingWrite(decision, method);
+  };
+  // Reads and the reads that use POST.
+  assert.equal(writes('GET', '/ycode/api/pages'), false);
+  assert.equal(writes('GET', '/ycode/api/editor/init'), false);
+  assert.equal(writes('POST', '/ycode/api/platform/site-lock'), false);
+  assert.equal(writes('DELETE', '/ycode/api/platform/site-lock'), false);
+  assert.equal(writes('POST', '/ycode/api/project/export'), false);
+  assert.equal(writes('POST', '/ycode/api/collections/items/batch'), false);
+  // The sites API is not the open site's content.
+  assert.equal(writes('POST', '/ycode/api/platform/sites'), false);
+  assert.equal(writes('DELETE', '/ycode/api/platform/sites/5f1a4b0e-0000-4000-8000-000000000000'), false);
+  // Writes.
+  assert.equal(writes('PUT', '/ycode/api/pages/abc'), true);
+  assert.equal(writes('POST', '/ycode/api/pages'), true);
+  assert.equal(writes('DELETE', '/ycode/api/pages/abc'), true);
+  assert.equal(writes('PUT', '/ycode/api/layers'), true);
+  assert.equal(writes('POST', '/ycode/api/publish'), true);
+  assert.equal(writes('POST', '/ycode/api/revert'), true);
+  assert.equal(writes('POST', '/ycode/api/assets/upload'), true);
+  assert.equal(writes('PUT', '/ycode/api/settings/site_name'), true);
+  assert.equal(writes('POST', '/ycode/api/ai/chat'), true);
+  assert.equal(writes('POST', '/ycode/api/collections'), true);
+  // Anonymous and public routes never reach the lock.
+  assert.equal(writes('POST', '/ycode/api/form-submissions'), false);
+  assert.equal(isEditingWrite({ kind: 'public' }, 'POST'), false);
+  assert.equal(isEditingWrite({ kind: 'session' }, 'POST'), false);
+});
+
+test('session 6: every non-GET route of the content leaf is either a lock-guarded write or named as a read', () => {
+  // A new content POST route defaults to flag c and so to the lock; a read that uses POST must say 'r'.
+  const readsByPost = Object.entries(API_ROUTE_ACCESS)
+    .filter(([, rule]) => rule.kind === 'leaf' && (rule.flags?.POST === 'r' || rule.flags?.DELETE === 'r'))
+    .map(([pattern]) => pattern)
+    .sort();
+  assert.deepEqual(readsByPost, ['collections/items/batch', 'collections/items/slugs', 'platform/site-lock']);
 });

@@ -113,9 +113,12 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
 
   // Sites.
   'platform/sites': sites(), // GET the list (r), POST create (c)
-  'platform/sites/[id]': sites(), // DELETE (d); PUT and PATCH are the site settings and domain (u, session 7)
+  'platform/sites/[id]': sites(), // GET one site with its editor lock (r, session 6); DELETE (d); PUT and PATCH are the site settings and domain (u, session 7)
   'platform/sites/[id]/open': sites(), // GET (r)
   'platform/templates': sites(), // GET (r): TORCH's templates, the same list for every organization (session 4)
+  // The builder keeps the open site's editor lock (session 6): POST takes it or refreshes it, DELETE lets go. A
+  // builder that may only read still holds the lock for the minutes it is open, so these are reads, never writes.
+  'platform/site-lock': content({ POST: 'r', DELETE: 'r' }),
   'devtools/reset-db': sites({ POST: 'd' }),
   'devtools/run-migrations': sites({ POST: 'x' }),
 
@@ -318,6 +321,22 @@ export function accessFor(pathname: string, method: string, searchParams: URLSea
   if (pathname === API_PREFIX || pathname.startsWith(`${API_PREFIX}/`)) return { kind: 'unmapped' };
   const gated = GATED_PREFIXES.find(({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   return gated ? decide(gated.rule, m, searchParams) : null;
+}
+
+const SAFE_METHODS = new Set<string>(['GET', 'HEAD', 'OPTIONS']);
+/** The leaves whose routes change what the builder edits: the sites API (creating and deleting sites) is not one. */
+const EDITING_LEAVES = new Set<WebStudioLeaf>([WEB_STUDIO_LEAF.manageContent, WEB_STUDIO_LEAF.manageForms]);
+
+/**
+ * Does this request change the open site? Then the caller must hold the site's
+ * editor lock (session 6). A write is a non-safe method on a content or forms
+ * route whose flag is not a read: `r` marks the POSTs that only read (the
+ * lock's own heartbeat, batch lookups) and `export` a download of what exists.
+ */
+export function isEditingWrite(decision: AccessDecision, method: string): boolean {
+  if (decision.kind !== 'leaf' || !EDITING_LEAVES.has(decision.leaf)) return false;
+  if (SAFE_METHODS.has(method.toUpperCase())) return false;
+  return decision.flag !== 'r' && decision.flag !== 'export';
 }
 
 /** `webstudio.manage_sites.c`: the box an administrator ticks. */

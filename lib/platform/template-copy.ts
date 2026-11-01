@@ -21,8 +21,9 @@
  *
  * The template's languages that were not asked for stay behind with their
  * translations; a language asked for that the template lacks becomes an
- * empty locale. The template's files are copied in storage; a file that an
- * asset or font row names and that is missing fails the creation.
+ * empty locale. The template's files are copied in storage (disk or Document
+ * Center, lib/platform/storage.ts); a file that an asset or font row names and
+ * that is missing fails the creation.
  */
 
 import { randomUUID } from 'crypto';
@@ -183,8 +184,8 @@ export function copyTemplate(template: Site): SiteSeeder {
       for (const row of rows[table]) map.set((row.id as string).toLowerCase(), randomUUID());
     }
 
-    // The files, before the rows that point at them.
-    await copySiteStorage(template.id, site.id);
+    // The files (on disk or in Document Center, by PLATFORM_STORAGE), before the rows that point at them.
+    await copySiteStorage(template.id, site.id, site.organization_id);
     for (const asset of rows.assets) {
       const storagePath = asset.storage_path as string | null;
       if (storagePath && !(await objectExists(site.id, STORAGE_BUCKET, storagePath))) {

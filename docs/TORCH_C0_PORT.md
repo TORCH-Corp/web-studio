@@ -1,7 +1,7 @@
 # Web Studio port — ycode on the TORCH platform
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 5 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 6 and 8 below).
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -62,8 +62,11 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 5 
   descriptions; their content is built by hand (Task B).
 - **Storage.** `lib/platform/storage.ts` + `/platform-storage/...` route: files on disk per
   site/bucket, public GET, signed PUT uploads. Swap for the platform object store in
-  this one file (session 8: Document Center; `copySiteStorage` and `removeSiteStorage`,
-  which the template copy uses, move with it).
+  this one file (session 8: Document Center, `PLATFORM_STORAGE=document-center`,
+  `lib/platform/storage-document-center.ts`). The template copy's `copySiteStorage`,
+  `objectExists` and `removeSiteStorage` follow the mode: in Document Center the template's
+  files are uploaded again as new documents under the new site's organization
+  (`copySiteFiles`).
 - **Realtime off.** Channels are accepted and do nothing (collaboration is a c1+ item).
 - **Clean Postgres.** Migration `20240101000000_torch_platform_prelude.ts` provides the
   inert `auth.*` / `storage.*` objects the upstream migrations assume.
@@ -78,8 +81,11 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 5 
     APP_MANAGEMENT_URL=http://app-management-service:6000   # with APP_MANAGEMENT_API_KEY: re-register the
     APP_MANAGEMENT_API_KEY=<app-management's SERVICE_API_KEY>  # scope at start for the installed organizations
     PLATFORM_PUBLIC_URL=https://webstudio.<domain>
+    PLATFORM_STORAGE=disk   # or document-center (session 8)
+    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage   # disk mode
+    DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
+    DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
-    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage
     ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4)
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
@@ -147,7 +153,8 @@ content under new ids, the asset's file copied, the draft preview identical to t
 template's up to ids; the template and the copy edited independently; one language copied
 alone; blank by the blank template or with no template; unknown template 404; `is_template`
 refused outside the templates organization and with hosts; a template has no default address
-and its would-be address is 404) and `pnpm test` pass (PNPM_TEST_COUNT); 50 migrations from empty.
+and its would-be address is 404, the asset copied in Document Center mode) and `pnpm test`
+pass (PNPM_TEST_COUNT); MIGRATIONS_COUNT migrations from empty.
 
 Session 5: `e2e/publish.spec.ts` (default address with no host given, two sites publishing with their
 own content, an unpublished edit invisible until publish, `/ar` rtl and 404 where absent, unknown host,
@@ -235,6 +242,33 @@ each site's own 404 page, a second host after the next publish) passes with `pnp
   app, retried with backoff; the way contact-center-service does it. `ioredis` is the one
   new dependency. Without `EVENT_BUS_REDIS_URL` or `WS_APP_ID` it logs why and does nothing.
 - `e2e/session.spec.ts` is the done-when check (`pnpm test`: 341).
+
+## Session 6: editor lock
+- **One editor at a time per site** (PRD V1.0 "Sites"). Migration `20261102000001_torch_site_locks.ts`:
+  `platform_site_locks` (site_id primary key, user_id, user_name, acquired_at, heartbeat_at; not a tenant table).
+  `lib/platform/site-lock.ts` has the one write, `acquireSiteLock`: a single upsert that takes the lock when it is
+  free or the caller's and refreshes the heartbeat, so two users cannot both win. A heartbeat older than 15 minutes
+  is free; every comparison uses the database clock. The lock is the user's, not the tab's.
+- **Taking it.** `GET /sites/{id}/open` takes it (and still opens the site read-only when another user holds it);
+  the builder's first load and its heartbeat call `POST /ycode/api/platform/site-lock` (the site is the `ws_site`
+  cookie's) every minute: `{data: {held, holder: {name, since, ...}}}`. `DELETE` lets go of the caller's own lock
+  only. `POST /auth/logout` releases it too, on the server. The builder releases on `pagehide` (a keepalive DELETE),
+  not `beforeunload`, which also fires when the user cancels leaving a page with unsaved changes.
+- **Read-only on the server** (`proxy.ts`, `isEditingWrite` in `permissions.ts`). A write is a non-GET request on a
+  `manage_content` or `manage_forms` route whose flag is not `r` or `export`; the sites API is not one. It answers
+  423 `{error, holder, since}` when another user holds the lock, after the 401/403 checks. A write with a free or
+  lapsed lock takes it (a write is activity). `permissions.test.ts` pins which routes are writes: a content POST that
+  only reads must say `r` in the map.
+- **Read-only in the builder.** `lib/platform/site-lock-client.ts` (state, heartbeat, release), `SiteLockKeeper`
+  (mounted in the builder layout), `SiteLockBanner` (ycode's `Alert`, warning variant, above the canvas). Publish
+  uses `PublishPopover`'s own `isDisabled`; the header's save label reads "Read-only"; autosave and
+  `saveImmediately` do nothing. The canvas stays browsable, and local edits are not saved. A read-only builder keeps
+  beating; when the editor leaves, its next beat takes the lock and reloads the page once.
+- **`GET /ycode/api/platform/sites/{id}`** returns the site as the list does plus `lock`: null, or
+  `{holder, user_id, since, held_by_you}`. The list does not carry it yet.
+- **`lib/services/migrationService.ts`** no longer closes the knex pool after a successful run. Every builder load
+  posts to `/setup/migrate`, and the close aborted whatever query was in flight (another user's save, now the lock check).
+- `e2e/lock.spec.ts` is the done-when check (`pnpm test`: 348; `pnpm e2e`: 46).
 
 ## Not done (c1 and after)
 - **A published page renders an image layer as ycode's placeholder** (the data-URL SVG of
