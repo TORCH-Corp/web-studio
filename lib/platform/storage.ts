@@ -1,30 +1,27 @@
 /**
  * TORCH platform file storage (c0 port).
  *
- * Replaces Supabase Storage with files on disk under
- * `PLATFORM_STORAGE_DIR/{site}/{bucket}/{path}`, served and uploaded through
- * `/platform-storage/...` (see app/platform-storage). A site's files belong to
- * that site (part 1, session 1). The interface is the subset of
- * `supabase.storage` that ycode calls. Swapping the disk for the platform
- * object store later means changing this file only.
+ * Replaces Supabase Storage. A site's files belong to that site (part 1,
+ * session 1). The interface is the subset of `supabase.storage` that ycode
+ * calls, with two implementations behind PLATFORM_STORAGE (session 8):
+ *
+ * - `disk` (default): files under `PLATFORM_STORAGE_DIR/{site}/{bucket}/{path}`.
+ * - `document-center`: files are Document Center documents under the site's
+ *   organization (lib/platform/storage-document-center.ts).
+ *
+ * Either way files are served and uploaded through `/platform-storage/...`
+ * (see app/platform-storage): Document Center has no public URL.
  */
 
 import fs from 'fs/promises';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import path from 'path';
+import { createDocumentCenterStorageClient, readDocumentCenterObject, writeDocumentCenterObject } from '@/lib/platform/storage-document-center';
+import { safeKey, toBuffer, type FileMeta, type StorageError } from '@/lib/platform/storage-common';
 
 export const STORAGE_DIR = process.env.PLATFORM_STORAGE_DIR || path.join(process.cwd(), 'storage', 'platform');
 const PUBLIC_URL = (process.env.PLATFORM_PUBLIC_URL || 'http://127.0.0.1:3002').replace(/\/+$/, '');
 const SECRET = process.env.BOS_SESSION_SECRET || 'change-me';
-
-interface StorageError { message: string; statusCode?: string; error?: string }
-interface FileMeta { contentType: string; cacheControl: string; size: number; updatedAt: string }
-
-function safeKey(key: string): string {
-  const normalised = path.posix.normalize('/' + key.replace(/\\/g, '/')).slice(1);
-  if (normalised.startsWith('..')) throw new Error('Invalid storage path');
-  return normalised;
-}
 
 export function objectPath(siteId: string, bucket: string, key: string): string {
   return path.join(STORAGE_DIR, siteId, bucket, safeKey(key));
@@ -44,7 +41,7 @@ export function verifyUpload(siteId: string, bucket: string, key: string, expire
   return expected.length === token.length && timingSafeEqual(Buffer.from(expected), Buffer.from(token));
 }
 
-export async function writeObject(siteId: string, bucket: string, key: string, data: Buffer, contentType: string, cacheControl = 'max-age=3600'): Promise<void> {
+async function writeDiskObject(siteId: string, bucket: string, key: string, data: Buffer, contentType: string, cacheControl = 'max-age=3600'): Promise<void> {
   const file = objectPath(siteId, bucket, key);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, data);
@@ -52,7 +49,7 @@ export async function writeObject(siteId: string, bucket: string, key: string, d
   await fs.writeFile(metaPath(file), JSON.stringify(meta));
 }
 
-export async function readObject(siteId: string, bucket: string, key: string): Promise<{ data: Buffer; meta: FileMeta } | null> {
+async function readDiskObject(siteId: string, bucket: string, key: string): Promise<{ data: Buffer; meta: FileMeta } | null> {
   const file = objectPath(siteId, bucket, key);
   try {
     const [data, metaRaw] = await Promise.all([fs.readFile(file), fs.readFile(metaPath(file), 'utf8').catch(() => '')]);
@@ -63,22 +60,7 @@ export async function readObject(siteId: string, bucket: string, key: string): P
   }
 }
 
-async function toBuffer(body: unknown): Promise<Buffer> {
-  if (Buffer.isBuffer(body)) return body;
-  if (body instanceof Uint8Array) return Buffer.from(body);
-  if (body instanceof ArrayBuffer) return Buffer.from(body);
-  if (typeof body === 'string') return Buffer.from(body);
-  if (body && typeof (body as Blob).arrayBuffer === 'function') return Buffer.from(await (body as Blob).arrayBuffer());
-  if (body && typeof (body as ReadableStream).getReader === 'function') {
-    const chunks: Uint8Array[] = [];
-    const reader = (body as ReadableStream<Uint8Array>).getReader();
-    for (;;) { const { done, value } = await reader.read(); if (done) break; if (value) chunks.push(value); }
-    return Buffer.concat(chunks);
-  }
-  throw new Error('Unsupported upload body');
-}
-
-export function createStorageClient(siteId: string | null) {
+function createDiskStorageClient(siteId: string | null) {
   const site = () => {
     if (!siteId) throw new Error('No site in context for storage');
     return siteId;
@@ -92,7 +74,7 @@ export function createStorageClient(siteId: string | null) {
         if (exists && !options?.upsert) {
           return { data: null, error: { message: 'The resource already exists', statusCode: '409', error: 'Duplicate' } as StorageError };
         }
-        await writeObject(site(), bucket, key, await toBuffer(body), options?.contentType || 'application/octet-stream', options?.cacheControl ? `max-age=${options.cacheControl}` : undefined);
+        await writeDiskObject(site(), bucket, key, await toBuffer(body), options?.contentType || 'application/octet-stream', options?.cacheControl ? `max-age=${options.cacheControl}` : undefined);
         return { data: { path: safeKey(key), fullPath: `${bucket}/${safeKey(key)}`, id: randomUUID() }, error: null };
       } catch (e) {
         return { data: null, error: { message: (e as Error).message } as StorageError };
@@ -111,7 +93,7 @@ export function createStorageClient(siteId: string | null) {
     },
 
     async download(key: string) {
-      const obj = await readObject(site(), bucket, key);
+      const obj = await readDiskObject(site(), bucket, key);
       if (!obj) return { data: null, error: { message: 'Object not found', statusCode: '404', error: 'not_found' } as StorageError };
       return { data: new Blob([new Uint8Array(obj.data)], { type: obj.meta.contentType }), error: null };
     },
@@ -187,4 +169,39 @@ export function createStorageClient(siteId: string | null) {
       return { data: { message: 'Successfully deleted' }, error: null };
     },
   };
+}
+
+function storageMode(): 'disk' | 'document-center' {
+  const mode = process.env.PLATFORM_STORAGE || 'disk';
+  if (mode !== 'disk' && mode !== 'document-center') {
+    throw new Error(`PLATFORM_STORAGE must be "disk" or "document-center", got "${mode}"`);
+  }
+  return mode;
+}
+
+export type StorageClient = ReturnType<typeof createDiskStorageClient> | ReturnType<typeof createDocumentCenterStorageClient>;
+
+export function createStorageClient(siteId: string | null): StorageClient {
+  const disk = createDiskStorageClient(siteId);
+  if (storageMode() === 'disk') return disk;
+  // The URL and the signed upload URL point at Web Studio's own route in both modes, so the
+  // Document Center client borrows them from the disk client (neither touches the disk).
+  const documentCenter = createDocumentCenterStorageClient(siteId);
+  return {
+    ...documentCenter,
+    from: (bucket: string) => {
+      const files = disk.from(bucket);
+      return { ...documentCenter.from(bucket), getPublicUrl: files.getPublicUrl, createSignedUploadUrl: files.createSignedUploadUrl };
+    },
+  };
+}
+
+export function writeObject(siteId: string, bucket: string, key: string, data: Buffer, contentType: string, cacheControl?: string): Promise<void> {
+  return storageMode() === 'document-center'
+    ? writeDocumentCenterObject(siteId, bucket, key, data, contentType, cacheControl)
+    : writeDiskObject(siteId, bucket, key, data, contentType, cacheControl);
+}
+
+export function readObject(siteId: string, bucket: string, key: string): Promise<{ data: Buffer; meta: FileMeta } | null> {
+  return storageMode() === 'document-center' ? readDocumentCenterObject(siteId, bucket, key) : readDiskObject(siteId, bucket, key);
 }
