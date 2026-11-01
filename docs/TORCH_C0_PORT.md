@@ -46,7 +46,10 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (session 1 below)
     DATABASE_URL=postgresql://.../webstudio
     BOS_SESSION_SECRET=<shared with auth-service>
     PLATFORM_PUBLIC_URL=https://webstudio.<domain>
-    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage
+    PLATFORM_STORAGE=disk   # or document-center (session 8)
+    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage   # disk mode
+    DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
+    DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 

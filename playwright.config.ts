@@ -15,6 +15,8 @@ import { defineConfig } from '@playwright/test';
  */
 const PORT = Number(process.env.E2E_PORT || 3102);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+const DC_PORT = Number(process.env.E2E_DC_PORT || 3103);
+const DC_KEY = 'e2e-document-center-key';
 const DATABASE_URL_TEST = process.env.DATABASE_URL_TEST;
 
 if (!DATABASE_URL_TEST) {
@@ -31,21 +33,33 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
   },
-  webServer: {
-    command: `pnpm e2e:db && pnpm exec next build && pnpm exec next start -p ${PORT}`,
-    url: `${BASE_URL}/ycode/api/setup/status`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 15 * 60_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: {
-      DATABASE_URL_TEST,
-      DATABASE_URL: DATABASE_URL_TEST,
-      BOS_SESSION_SECRET: 'e2e-session-secret',
-      PAGE_AUTH_SECRET: 'e2e-page-auth-secret',
-      ALLOW_DEV_LOGIN: 'true',
-      PLATFORM_PUBLIC_URL: BASE_URL,
-      PLATFORM_STORAGE_DIR: path.join(os.tmpdir(), 'web-studio-e2e-storage'),
+  webServer: [
+    {
+      // A recorded copy of Document Center's file contract (session 8).
+      command: 'TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json node --require ts-node/register e2e/fake-document-center.ts',
+      url: `http://127.0.0.1:${DC_PORT}/__health`,
+      reuseExistingServer: !process.env.CI,
+      env: { FAKE_DC_PORT: String(DC_PORT), FAKE_DC_KEY: DC_KEY },
     },
-  },
+    {
+      command: `pnpm e2e:db && pnpm exec next build && pnpm exec next start -p ${PORT}`,
+      url: `${BASE_URL}/ycode/api/setup/status`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 15 * 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        DATABASE_URL_TEST,
+        DATABASE_URL: DATABASE_URL_TEST,
+        BOS_SESSION_SECRET: 'e2e-session-secret',
+        PAGE_AUTH_SECRET: 'e2e-page-auth-secret',
+        ALLOW_DEV_LOGIN: 'true',
+        PLATFORM_PUBLIC_URL: BASE_URL,
+        PLATFORM_STORAGE_DIR: path.join(os.tmpdir(), 'web-studio-e2e-storage'),
+        PLATFORM_STORAGE: 'document-center',
+        DOCUMENT_CENTER_URL: `http://127.0.0.1:${DC_PORT}`,
+        DOCUMENT_CENTER_API_KEY: DC_KEY,
+      },
+    },
+  ],
 });
