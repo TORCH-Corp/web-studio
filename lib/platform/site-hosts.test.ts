@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { defaultHostFor, hostsAfterSlugChange, hostsForNewSite, isUnderSitesDomain, sitesDomain } from './site-hosts';
+import { defaultHostFor, hostsAfterSlugChange, hostsForNewSite, isSitesDomainName, sitesDomain } from './site-hosts';
 
 const DOMAIN = 'sites.torchcorp.com';
 
@@ -18,10 +18,11 @@ describe('default address', () => {
   it('is {slug}.{domain}', () => {
     assert.equal(defaultHostFor('al-noor', DOMAIN), 'al-noor.sites.torchcorp.com');
   });
-  it('is recognised as under the sites domain, and the bare domain is not', () => {
-    assert.equal(isUnderSitesDomain('al-noor.sites.torchcorp.com', DOMAIN), true);
-    assert.equal(isUnderSitesDomain('sites.torchcorp.com', DOMAIN), false);
-    assert.equal(isUnderSitesDomain('evilsites.torchcorp.com', DOMAIN), false);
+  it('is a sites-domain name, as is the bare domain, in any case; a look-alike is not', () => {
+    assert.equal(isSitesDomainName('al-noor.sites.torchcorp.com', DOMAIN), true);
+    assert.equal(isSitesDomainName('sites.torchcorp.com', DOMAIN), true);
+    assert.equal(isSitesDomainName('Other.Sites.TorchCorp.com', DOMAIN), true);
+    assert.equal(isSitesDomainName('evilsites.torchcorp.com', DOMAIN), false);
   });
 });
 

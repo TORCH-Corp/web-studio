@@ -72,6 +72,10 @@ test('a new site answers on {slug}.{sites domain} without any host being given',
     data: { name: 'Squat', slug: `squat-${RUN}`, languages: ['en'], default_language: 'en', hosts: [`someone-else-${RUN}.${TEST_SITES_DOMAIN}`] },
   });
   expect(otherAddress.status()).toBe(409);
+  const bareDomain = await api.post('/ycode/api/platform/sites', {
+    data: { name: 'Squat', slug: `squat-${RUN}`, languages: ['en'], default_language: 'en', hosts: [TEST_SITES_DOMAIN] },
+  });
+  expect(bareDomain.status()).toBe(409);
 });
 
 test('two sites of one organization publish and each answers with its own content', async () => {

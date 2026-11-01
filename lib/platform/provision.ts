@@ -19,7 +19,7 @@ import { generatePageLayersHash, generatePageMetadataHash } from '@/lib/hash-uti
 import { getDefaultSitemapSettings } from '@/lib/sitemap-utils';
 import { getLocaleByCode } from '@/lib/localisation-utils';
 import { forgetSiteLookups, type Site } from '@/lib/platform/site';
-import { defaultHostFor, hostsForNewSite, isUnderSitesDomain } from '@/lib/platform/site-hosts';
+import { defaultHostFor, hostsForNewSite, isSitesDomainName } from '@/lib/platform/site-hosts';
 import type { SiteInput } from '@/lib/platform/site-input';
 
 export interface ProvisionSiteInput extends SiteInput {
@@ -46,9 +46,10 @@ export async function provisionSite(input: ProvisionSiteInput, seed: SiteSeeder 
   const knex = await getKnexClient();
 
   // The default address is the site's from the day it exists (session 5). A
-  // custom host under the sites domain would be another slug's address.
+  // custom host under the sites domain would be another slug's address, and
+  // the bare domain is the platform's.
   const ownHost = defaultHostFor(input.slug);
-  const squatted = input.hosts.find((host) => host !== ownHost && isUnderSitesDomain(host));
+  const squatted = input.hosts.find((host) => host !== ownHost && isSitesDomainName(host));
   if (squatted) throw new SiteConflictError('hosts', `${squatted} is under the sites domain; only a site's own slug can use it`);
   const hosts = hostsForNewSite(input.slug, input.hosts);
 

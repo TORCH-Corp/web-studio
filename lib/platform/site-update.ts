@@ -9,7 +9,7 @@
 import type { Knex } from 'knex';
 import { getKnexClient } from '@/lib/knex-client';
 import { forgetSiteLookups, type Site } from '@/lib/platform/site';
-import { defaultHostFor, hostsAfterSlugChange, isUnderSitesDomain } from '@/lib/platform/site-hosts';
+import { defaultHostFor, hostsAfterSlugChange, isSitesDomainName } from '@/lib/platform/site-hosts';
 import { SiteConflictError } from '@/lib/platform/provision';
 
 const UNIQUE_VIOLATION = '23505';
@@ -61,7 +61,7 @@ export async function setCustomHosts(siteId: string, customHosts: string[]): Pro
     if (!site) return null;
 
     const own = defaultHostFor(site.slug);
-    const squatted = customHosts.find((host) => host !== own && isUnderSitesDomain(host));
+    const squatted = customHosts.find((host) => host !== own && isSitesDomainName(host));
     if (squatted) throw new SiteConflictError('hosts', `${squatted} is under the sites domain; only a site's own slug can use it`);
 
     const hosts = Array.from(new Set([own, ...customHosts]));

@@ -18,9 +18,14 @@ export function defaultHostFor(slug: string, domain: string = sitesDomain()): st
   return `${slug}.${domain}`;
 }
 
-/** True for a name under the sites domain: only a site's own default address may use one. */
-export function isUnderSitesDomain(host: string, domain: string = sitesDomain()): boolean {
-  return host.endsWith(`.${domain}`);
+/**
+ * True for a name of the sites domain: the domain itself or anything under it.
+ * Only a site's own default address may use one; nobody may take the bare
+ * domain. Case does not matter, as it does not in DNS.
+ */
+export function isSitesDomainName(host: string, domain: string = sitesDomain()): boolean {
+  const name = host.trim().toLowerCase();
+  return name === domain || name.endsWith(`.${domain}`);
 }
 
 /** Hosts for a new site: its default address first, then the custom hosts, no repeats. */

@@ -66,8 +66,9 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (session 1 below)
 
 ## Publishing per site (session 5)
 - **Default address.** `lib/platform/site-hosts.ts`: `{slug}.{WS_SITES_DOMAIN}` is the first entry of
-  `platform_sites.hosts` from creation. A custom host under the sites domain that is not the site's own
-  address is refused (409), so no site can squat another slug's address. `lib/platform/site-update.ts`:
+  `platform_sites.hosts` from creation. A custom host under the sites domain, or the bare domain itself,
+  that is not the site's own address is refused (409), so no site can squat another slug's address or
+  the platform's. `lib/platform/site-update.ts`:
   `changeSiteSlug` moves the default address with the slug; `setCustomHosts` replaces the custom hosts
   (the default stays). Session 7's settings API calls both; there is no route for them yet.
 - **Host cache.** The 30 s host and site lookups (`lib/platform/site.ts`) are forgotten when a site is
