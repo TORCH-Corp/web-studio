@@ -17,6 +17,7 @@ import { publishFolders } from '@/lib/services/folderService';
 import { publishCSS, savePublishedAt } from '@/lib/services/settingsService';
 import { generateAndSaveDraftCSS } from '@/lib/server/cssGenerator';
 import { clearAllCache } from '@/lib/services/cacheService';
+import { forgetSiteLookups } from '@/lib/platform/site';
 
 /** Count draft locales not yet present in the published set (new languages awaiting publish). */
 async function countUnpublishedLocales(): Promise<number> {
@@ -207,6 +208,9 @@ did not go live.`,
       // builder's HTTP publish endpoint warms after publish — this AI tool
       // path is rare enough that a cold next-visit is acceptable.
       try { await clearAllCache(); } catch { /* non-fatal */ }
+
+      // Part 1 session 5: every publish refreshes the host lookups, this path too.
+      forgetSiteLookups();
 
       const total = Object.values(changes).reduce((sum, n) => sum + n, 0);
 

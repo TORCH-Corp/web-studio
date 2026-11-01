@@ -19,6 +19,7 @@ import { generatePageLayersHash, generatePageMetadataHash } from '@/lib/hash-uti
 import { getDefaultSitemapSettings } from '@/lib/sitemap-utils';
 import { getLocaleByCode } from '@/lib/localisation-utils';
 import { forgetSiteLookups, type Site } from '@/lib/platform/site';
+import { defaultHostFor, hostsForNewSite, isSitesDomainName } from '@/lib/platform/site-hosts';
 import type { SiteInput } from '@/lib/platform/site-input';
 
 export interface ProvisionSiteInput extends SiteInput {
@@ -44,15 +45,25 @@ const UNIQUE_VIOLATION = '23505';
 export async function provisionSite(input: ProvisionSiteInput, seed: SiteSeeder = seedBlankSite): Promise<Site> {
   const knex = await getKnexClient();
 
+  // The default address is the site's from the day it exists (session 5). A
+  // custom host under the sites domain would be another slug's address, and
+  // the bare domain is the platform's.
+  const ownHost = defaultHostFor(input.slug);
+  const squatted = input.hosts.find((host) => host !== ownHost && isSitesDomainName(host));
+  if (squatted) throw new SiteConflictError('hosts', `${squatted} is under the sites domain; only a site's own slug can use it`);
+  const hosts = hostsForNewSite(input.slug, input.hosts);
+
   const site = await knex.transaction(async (trx) => {
-    if (input.hosts.length > 0) {
-      const taken = await trx('platform_sites')
-        .select('id')
-        .whereNull('deleted_at')
-        .whereRaw('hosts && ?::text[]', [input.hosts])
-        .first();
-      if (taken) throw new SiteConflictError('hosts', 'A host is already used by another site');
-    }
+    // The slug first: a slug in use also means the default address is in use, and the slug is the useful name for it.
+    const slugTaken = await trx('platform_sites').select('id').whereNull('deleted_at').where({ slug: input.slug }).first();
+    if (slugTaken) throw new SiteConflictError('slug', `The slug "${input.slug}" is already used by another site`);
+
+    const taken = await trx('platform_sites')
+      .select('id')
+      .whereNull('deleted_at')
+      .whereRaw('hosts && ?::text[]', [hosts])
+      .first();
+    if (taken) throw new SiteConflictError('hosts', 'A host is already used by another site');
 
     let row: Site;
     try {
@@ -61,7 +72,7 @@ export async function provisionSite(input: ProvisionSiteInput, seed: SiteSeeder 
           organization_id: input.organizationId,
           name: input.name,
           slug: input.slug,
-          hosts: input.hosts,
+          hosts,
           default_locale: input.default_language,
           is_template: input.isTemplate ?? false,
           created_by: input.createdBy,
