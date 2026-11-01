@@ -113,8 +113,9 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
 
   // Sites.
   'platform/sites': sites(), // GET the list (r), POST create (c)
-  'platform/sites/[id]': sites(), // DELETE (d); PUT and PATCH are the site settings and domain (u, session 7)
+  'platform/sites/[id]': sites(), // DELETE (d)
   'platform/sites/[id]/open': sites(), // GET (r)
+  'platform/sites/[id]/settings': sites(), // GET (r), PATCH (u): name, languages, domain, SEO defaults, slug (session 7)
   'devtools/reset-db': sites({ POST: 'd' }),
   'devtools/run-migrations': sites({ POST: 'x' }),
 

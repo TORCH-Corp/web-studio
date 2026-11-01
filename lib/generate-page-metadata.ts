@@ -22,6 +22,7 @@ import { generateColorVariablesCss } from '@/lib/repositories/colorVariableRepos
 import { buildPageHreflangAlternates, type HreflangAlternate } from '@/lib/hreflang-utils';
 import { getTranslatableKey, getTranslatedAssetId, getTranslatedText } from '@/lib/locale-runtime';
 import { buildAbsolutePageUrl, getSiteBaseUrl } from '@/lib/url-utils';
+import { SEO_DEFAULT_KEYS, storedText } from '@/lib/platform/site-seo';
 
 /**
  * Global page render settings fetched once per page render
@@ -40,6 +41,11 @@ export interface GlobalPageSettings {
   faviconMimeType?: string | null;
   webClipUrl?: string | null;
   webClipMimeType?: string | null;
+  /** Site-wide SEO defaults (Site settings): used where a page has no value of its own */
+  defaultSeoTitle?: string | null;
+  defaultSeoDescription?: string | null;
+  /** URL of the default share image, resolved with the favicon (page metadata is built outside the request) */
+  defaultSeoImageUrl?: string | null;
 }
 
 /** @deprecated Use GlobalPageSettings instead */
@@ -102,6 +108,9 @@ async function fetchGlobalPageSettingsImpl(isPreview = false): Promise<GlobalPag
     'published_at',
     'favicon_asset_id',
     'web_clip_asset_id',
+    SEO_DEFAULT_KEYS.title,
+    SEO_DEFAULT_KEYS.description,
+    SEO_DEFAULT_KEYS.image,
   ]);
 
   // Fetch favicon and web clip asset URLs if IDs are set
@@ -136,6 +145,19 @@ async function fetchGlobalPageSettingsImpl(isPreview = false): Promise<GlobalPag
     }
   }
 
+  // The default share image (Site settings): resolved here with the icons, as
+  // the page's metadata is built inside a cache with no request to find the site in.
+  let defaultSeoImageUrl: string | null = null;
+  const defaultSeoImage = storedText(settings[SEO_DEFAULT_KEYS.image]);
+  if (defaultSeoImage) {
+    try {
+      const asset = await getAssetById(defaultSeoImage, isAssetPublished);
+      if (asset) defaultSeoImageUrl = getAssetProxyUrl(asset) || asset.public_url || null;
+    } catch {
+      // Ignore errors fetching the share image
+    }
+  }
+
   const colorVariablesCss = await generateColorVariablesCss();
 
   return {
@@ -152,6 +174,9 @@ async function fetchGlobalPageSettingsImpl(isPreview = false): Promise<GlobalPag
     faviconMimeType,
     webClipUrl,
     webClipMimeType,
+    defaultSeoTitle: storedText(settings[SEO_DEFAULT_KEYS.title]),
+    defaultSeoDescription: storedText(settings[SEO_DEFAULT_KEYS.description]),
+    defaultSeoImageUrl,
   };
 }
 
@@ -278,10 +303,17 @@ export async function generatePageMetadata(
   const seo = page.settings?.seo;
   const isErrorPage = page.error_page !== null;
 
+  // Always fetch global settings — preview mode reads draft assets so the
+  // favicon and web clip render before the user publishes.
+  const seoSettings = options.globalSeoSettings || await fetchGlobalPageSettings(isPreview);
+
   // Resolve locale-translated SEO values (falls back to originals when no
-  // completed translation exists for the current locale).
-  const seoTitle = getTranslatedText(seo?.title, 'seo:title', translations, page.id);
-  const seoDescription = getTranslatedText(seo?.description, 'seo:description', translations, page.id);
+  // completed translation exists for the current locale). A page with no value
+  // of its own takes the site's default (Site settings); error pages do not.
+  const seoTitle = getTranslatedText(seo?.title, 'seo:title', translations, page.id)
+    || (isErrorPage ? undefined : seoSettings.defaultSeoTitle || undefined);
+  const seoDescription = getTranslatedText(seo?.description, 'seo:description', translations, page.id)
+    || (isErrorPage ? undefined : seoSettings.defaultSeoDescription || undefined);
 
   // Build title - resolve field variables if collection item is available
   let title = seoTitle || page.name || fallbackTitle || 'Page';
@@ -315,10 +347,6 @@ export async function generatePageMetadata(
   // `metadataBase`. Falls back to the relative path locally (no base
   // configured), which Next.js resolves against `metadataBase` when available.
   let pageUrl: string | undefined;
-
-  // Always fetch global settings — preview mode reads draft assets so the
-  // favicon and web clip render before the user publishes.
-  const seoSettings = options.globalSeoSettings || await fetchGlobalPageSettings(isPreview);
 
   if (!isPreview) {
     siteBaseUrl = getSiteBaseUrl({
@@ -379,7 +407,9 @@ export async function generatePageMetadata(
       : seo?.image;
 
     // Resolve image URL (handles both Asset ID string and FieldVariable)
-    let imageUrl = seoImage ? await resolveImageUrl(seoImage, collectionItem) : null;
+    let imageUrl = seoImage
+      ? await resolveImageUrl(seoImage, collectionItem)
+      : seoSettings.defaultSeoImageUrl || null;
 
     // Make relative URLs absolute — social crawlers require absolute og:image URLs
     if (imageUrl && imageUrl.startsWith('/') && siteBaseUrl) {
