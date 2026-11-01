@@ -14,6 +14,8 @@ export interface TestUser {
   email: string;
   name?: string;
   org: string;
+  /** Permission flags per leaf; the dev login gives every flag when absent. */
+  perms?: Record<string, string[]>;
 }
 
 export interface SiteRecord {

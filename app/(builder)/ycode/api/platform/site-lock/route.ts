@@ -1,6 +1,7 @@
 import { noCache } from '@/lib/api-response';
 import { getSessionFromCookies, getSiteCookie, getSiteForOrganization, type Site } from '@/lib/platform/site';
-import { acquireSiteLock, releaseSiteLock } from '@/lib/platform/site-lock';
+import { mayHoldSiteLock } from '@/lib/platform/permissions';
+import { acquireSiteLock, getSiteLock, releaseSiteLock } from '@/lib/platform/site-lock';
 import type { BosSession } from '@/lib/platform/session';
 
 /**
@@ -30,6 +31,8 @@ export async function POST() {
   if ('error' in open) return open.error;
   try {
     const { session, site } = open;
+    // A reader's heartbeat reports the lock and never takes it (open question 18).
+    if (!mayHoldSiteLock(session.perms)) return noCache({ data: { held: false, holder: await getSiteLock(site.id) } });
     return noCache({ data: await acquireSiteLock(site.id, { id: session.sub, name: session.name || session.email }) });
   } catch (error) {
     console.error('[POST /ycode/api/platform/site-lock]', error);

@@ -176,12 +176,17 @@ test('the default language moves; the default cannot be removed without naming a
   expect((await patch({ languages: ['ar'], default_language: 'en' })).status()).toBe(400);
 });
 
-test('a custom host must be one of the verified domains, and answers after the next publish', async () => {
+test('a custom host must be a verified domain or a name under one, and answers after the next publish', async () => {
   const unverified = await patch({ custom_host: 'www.not-verified.test' });
   expect(unverified.status()).toBe(422);
   expect(await unverified.json()).toMatchObject({ code: 'domain_not_verified', verified_domains: ['verified.test', 'shop.verified.test'] });
+  // A name under a verified domain is accepted (owner decision of 2 Nov 2026, open question 15), then put back for the rest of the test.
   const subdomain = await patch({ custom_host: 'blog.verified.test' });
-  expect(subdomain.status()).toBe(422);
+  expect(subdomain.status(), await subdomain.text()).toBe(200);
+  expect((await subdomain.json()).data.domain).toMatchObject({ custom_host: 'blog.verified.test' });
+  expect((await patch({ custom_host: null })).status()).toBe(200);
+  const lookalike = await patch({ custom_host: 'verified.test.evil.test' });
+  expect(lookalike.status()).toBe(422);
   const underSitesDomain = await patch({ custom_host: `squat-${RUN}.${TEST_SITES_DOMAIN}` });
   expect(underSitesDomain.status()).toBe(400);
   expect((await read()).domain.custom_host).toBeNull();

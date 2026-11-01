@@ -344,3 +344,12 @@ export function isEditingWrite(decision: AccessDecision, method: string): boolea
 export function requirementName(decision: { leaf: WebStudioLeaf; flag: Flag }): string {
   return `${decision.leaf}.${decision.flag}`;
 }
+
+/**
+ * Only a user who may change content holds the editor lock (owner decision of
+ * 2 Nov 2026, open question 18): a reader opening a site, or their heartbeat,
+ * never blocks an editor who comes next.
+ */
+export function mayHoldSiteLock(perms: Partial<Record<WebStudioLeaf, Flag[]>>): boolean {
+  return (perms['webstudio.manage_content'] ?? []).includes('u');
+}

@@ -32,9 +32,12 @@ test('a check that cannot run is an error, never an allow', async () => {
   await assert.rejects(listVerifiedDomains(ORG, ENV, (async () => { throw new Error('connect ECONNREFUSED'); }) as unknown as typeof fetch), /not reachable/);
 });
 
-test('a host must be a verified domain exactly', () => {
+test('a host must be a verified domain or a name under one', () => {
   assert.equal(isVerifiedDomain('example.com', ['example.com']), true);
   assert.equal(isVerifiedDomain('EXAMPLE.com', ['example.com']), true);
-  assert.equal(isVerifiedDomain('www.example.com', ['example.com']), false);
+  assert.equal(isVerifiedDomain('www.example.com', ['example.com']), true);
+  assert.equal(isVerifiedDomain('shop.ar.example.com', ['example.com']), true);
+  assert.equal(isVerifiedDomain('notexample.com', ['example.com']), false);
+  assert.equal(isVerifiedDomain('example.com.evil.net', ['example.com']), false);
   assert.equal(isVerifiedDomain('example.com', []), false);
 });

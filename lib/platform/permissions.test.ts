@@ -3,7 +3,7 @@ import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { API_ROUTE_ACCESS, accessFor, flagForMethod, isEditingWrite, matchApiRoute, requirementName } from './permissions';
+import { API_ROUTE_ACCESS, accessFor, flagForMethod, isEditingWrite, matchApiRoute, requirementName, mayHoldSiteLock } from './permissions';
 
 const API_DIR = path.join(__dirname, '..', '..', 'app', '(builder)', 'ycode', 'api');
 
@@ -145,4 +145,10 @@ test('session 6: every non-GET route of the content leaf is either a lock-guarde
     .map(([pattern]) => pattern)
     .sort();
   assert.deepEqual(readsByPost, ['collections/items/batch', 'collections/items/slugs', 'platform/site-lock']);
+});
+
+test('open question 18: only a user who may change content holds the editor lock', () => {
+  assert.equal(mayHoldSiteLock({ 'webstudio.manage_content': ['c', 'r', 'u'] }), true);
+  assert.equal(mayHoldSiteLock({ 'webstudio.manage_sites': ['r'], 'webstudio.manage_content': ['r'] }), false);
+  assert.equal(mayHoldSiteLock({}), false);
 });

@@ -19,6 +19,7 @@ test.describe.configure({ mode: 'serial' });
 const RUN = Date.now().toString(36);
 const ORG = '0d0d0d0d-0d0d-4d0d-8d0d-0d0d0d0d0d0d';
 const ALI = { sub: '1d1d1d1d-1d1d-4d1d-8d1d-1d1d1d1d1d1d', email: 'ali-lock@example.com', name: 'Ali Editor', org: ORG };
+const READER = { sub: '3d3d3d3d-3d3d-4d3d-8d3d-3d3d3d3d3d3d', email: 'rana-lock@example.com', name: 'Rana Reader', org: ORG, perms: { 'webstudio.manage_sites': ['r'], 'webstudio.manage_content': ['r'] } };
 const BAYAN = { sub: '2d2d2d2d-2d2d-4d2d-8d2d-2d2d2d2d2d2d', email: 'bayan-lock@example.com', name: 'Bayan Editor', org: ORG };
 
 let a: APIRequestContext;
@@ -220,5 +221,23 @@ test('a site of another organization is neither visible nor lockable', async ({ 
     expect((await outsider.post('/ycode/api/platform/site-lock')).status()).toBe(404); // no site open
   } finally {
     await outsider.dispose();
+  }
+});
+
+test('a reader never takes the lock: opening the site and the heartbeat leave it free, and the next editor gets it (open question 18)', async ({ baseURL }) => {
+  await a.delete('/ycode/api/platform/site-lock');
+  await b.delete('/ycode/api/platform/site-lock');
+  const reader = await signIn(baseURL!, READER);
+  try {
+    expect((await openSite(reader, site.id)).status()).toBe(303);
+    expect((await lockRow())?.user_id ?? null).not.toBe(READER.sub);
+    const beat = await reader.post('/ycode/api/platform/site-lock');
+    expect(beat.status(), await beat.text()).toBe(200);
+    expect((await beat.json()).data).toEqual({ held: false, holder: null });
+    expect((await lockRow())?.user_id ?? null).not.toBe(READER.sub);
+    expect((await openSite(b, site.id)).status()).toBe(303);
+    expect((await lockRow()).user_id).toBe(BAYAN.sub);
+  } finally {
+    await reader.dispose();
   }
 });

@@ -65,6 +65,11 @@ export async function listVerifiedDomains(
 }
 
 /** True when `host` is one of the verified domains. */
+/** A host is accepted when it is a verified domain or a name under one, `www.example.com` for `example.com` (owner decision of 2 Nov 2026, open question 15). */
 export function isVerifiedDomain(host: string, verified: readonly string[]): boolean {
-  return verified.includes(host.trim().toLowerCase());
+  const name = host.trim().toLowerCase();
+  return verified.some((domain) => {
+    const d = domain.trim().toLowerCase();
+    return name === d || name.endsWith('.' + d);
+  });
 }
