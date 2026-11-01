@@ -44,6 +44,7 @@ export default defineConfig({
       BOS_SESSION_SECRET: 'e2e-session-secret',
       PAGE_AUTH_SECRET: 'e2e-page-auth-secret',
       ALLOW_DEV_LOGIN: 'true',
+      WS_SITES_DOMAIN: 'sites.test',
       PLATFORM_PUBLIC_URL: BASE_URL,
       PLATFORM_STORAGE_DIR: path.join(os.tmpdir(), 'web-studio-e2e-storage'),
     },

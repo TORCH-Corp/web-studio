@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { fetchCachedErrorPage } from '@/lib/published-page-cache';
 import { fetchGlobalPageSettings } from '@/lib/generate-page-metadata';
 import { getSettingByKey } from '@/lib/repositories/settingsRepository';
-import { tenantStore } from '@/lib/supabase-server';
+import { getTenantIdFromHeaders } from '@/lib/supabase-server';
 import PageRenderer from '@/components/PageRenderer';
 import YcodeBadge from '@/components/YcodeBadge';
 
@@ -12,7 +12,20 @@ import YcodeBadge from '@/components/YcodeBadge';
  * 404 status, which avoids soft-404 SEO penalties from search engines.
  */
 export default async function NotFound() {
-  const tenantId = tenantStore.getStore();
+  // The site comes from the request host (the boundary has no AsyncLocalStorage
+  // of its own). A host no site uses gets the platform's plain 404: no site's
+  // error page, no ycode badge (part 1, session 5).
+  const tenantId = (await getTenantIdFromHeaders()) ?? undefined;
+  if (!tenantId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center max-w-md px-4">
+          <h1 className="text-6xl font-bold text-gray-900 mb-4">404</h1>
+          <h2 className="text-2xl font-semibold text-gray-800">Page Not Found</h2>
+        </div>
+      </div>
+    );
+  }
 
   const errorPageData = await fetchCachedErrorPage(404, tenantId).catch(() => null);
 

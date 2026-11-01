@@ -77,3 +77,52 @@ export async function publishedSite(baseURL: string, host: string) {
     dispose: () => anonymous.dispose(),
   };
 }
+
+/** The domain default addresses live under in the e2e run (WS_SITES_DOMAIN in playwright.config.ts). */
+export const TEST_SITES_DOMAIN = 'sites.test';
+
+interface PageRow {
+  id: string;
+  slug: string;
+  is_index: boolean;
+  error_page: number | null;
+}
+
+/** The draft pages of the open site. */
+export async function draftPages(api: APIRequestContext): Promise<PageRow[]> {
+  const response = await api.get('/ycode/api/pages');
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()).data as PageRow[];
+}
+
+/** Layers for a page: one heading with `text`, which is what a visitor reads. */
+export function headingLayers(text: string) {
+  return [
+    {
+      id: 'body',
+      name: 'body',
+      classes: '',
+      children: [
+        {
+          id: `heading-${text.replace(/\W+/g, '-').toLowerCase()}`,
+          name: 'heading',
+          settings: { tag: 'h1' },
+          classes: '',
+          children: [],
+          variables: {
+            text: {
+              type: 'dynamic_rich_text',
+              data: { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] } },
+            },
+          },
+        },
+      ],
+    },
+  ];
+}
+
+/** Replace a page's draft layers with one heading. */
+export async function setHeading(api: APIRequestContext, pageId: string, text: string): Promise<void> {
+  const response = await api.put(`/ycode/api/layers?page_id=${pageId}`, { data: { layers: headingLayers(text) } });
+  expect(response.status(), await response.text()).toBe(200);
+}
