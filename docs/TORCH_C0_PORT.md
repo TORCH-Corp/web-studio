@@ -196,6 +196,33 @@ each site's own 404 page, a second host after the next publish) passes with `pnp
   new dependency. Without `EVENT_BUS_REDIS_URL` or `WS_APP_ID` it logs why and does nothing.
 - `e2e/session.spec.ts` is the done-when check (`pnpm test`: 341).
 
+## Session 6: editor lock
+- **One editor at a time per site** (PRD V1.0 "Sites"). Migration `20261102000001_torch_site_locks.ts`:
+  `platform_site_locks` (site_id primary key, user_id, user_name, acquired_at, heartbeat_at; not a tenant table).
+  `lib/platform/site-lock.ts` has the one write, `acquireSiteLock`: a single upsert that takes the lock when it is
+  free or the caller's and refreshes the heartbeat, so two users cannot both win. A heartbeat older than 15 minutes
+  is free; every comparison uses the database clock. The lock is the user's, not the tab's.
+- **Taking it.** `GET /sites/{id}/open` takes it (and still opens the site read-only when another user holds it);
+  the builder's first load and its heartbeat call `POST /ycode/api/platform/site-lock` (the site is the `ws_site`
+  cookie's) every minute: `{data: {held, holder: {name, since, ...}}}`. `DELETE` lets go of the caller's own lock
+  only. `POST /auth/logout` releases it too, on the server. The builder releases on `pagehide` (a keepalive DELETE),
+  not `beforeunload`, which also fires when the user cancels leaving a page with unsaved changes.
+- **Read-only on the server** (`proxy.ts`, `isEditingWrite` in `permissions.ts`). A write is a non-GET request on a
+  `manage_content` or `manage_forms` route whose flag is not `r` or `export`; the sites API is not one. It answers
+  423 `{error, holder, since}` when another user holds the lock, after the 401/403 checks. A write with a free or
+  lapsed lock takes it (a write is activity). `permissions.test.ts` pins which routes are writes: a content POST that
+  only reads must say `r` in the map.
+- **Read-only in the builder.** `lib/platform/site-lock-client.ts` (state, heartbeat, release), `SiteLockKeeper`
+  (mounted in the builder layout), `SiteLockBanner` (ycode's `Alert`, warning variant, above the canvas). Publish
+  uses `PublishPopover`'s own `isDisabled`; the header's save label reads "Read-only"; autosave and
+  `saveImmediately` do nothing. The canvas stays browsable, and local edits are not saved. A read-only builder keeps
+  beating; when the editor leaves, its next beat takes the lock and reloads the page once.
+- **`GET /ycode/api/platform/sites/{id}`** returns the site as the list does plus `lock`: null, or
+  `{holder, user_id, since, held_by_you}`. The list does not carry it yet.
+- **`lib/services/migrationService.ts`** no longer closes the knex pool after a successful run. Every builder load
+  posts to `/setup/migrate`, and the close aborted whatever query was in flight (another user's save, now the lock check).
+- `e2e/lock.spec.ts` is the done-when check (`pnpm test`: 348; `pnpm e2e`: 46).
+
 ## Not done (c1 and after)
 - Realtime collaboration and the MCP OAuth flow were not exercised (the AI agent, MCP and
   integrations screens open: `e2e/offline.spec.ts`).

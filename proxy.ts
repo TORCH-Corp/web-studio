@@ -1,9 +1,10 @@
 import { SESSION_COOKIE, SITE_COOKIE, hasFlag, verifySession, verifySiteCookie, type BosSession } from '@/lib/platform/session';
-import { accessFor, requirementName } from '@/lib/platform/permissions';
+import { accessFor, isEditingWrite, requirementName } from '@/lib/platform/permissions';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/security-headers-server';
 import { isHiddenBuilderRoute, partsRaised } from '@/lib/platform/parts';
+import { acquireSiteLock } from '@/lib/platform/site-lock';
 import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
 
 /**
@@ -64,6 +65,10 @@ async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null>
   if (!SITELESS_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     const refused = await refuseForeignSiteCookie(request, session);
     if (refused) return refused;
+    if (isEditingWrite(access, request.method)) {
+      const locked = await refuseWriteWithoutLock(request, session);
+      if (locked) return locked;
+    }
   }
 
   return NextResponse.next({ request });
@@ -84,6 +89,32 @@ async function refuseForeignSiteCookie(request: NextRequest, session: BosSession
   const response = NextResponse.json({ error: 'Site not found' }, { status: 404 });
   response.cookies.set({ name: SITE_COOKIE, value: '', path: '/', maxAge: 0 });
   return response;
+}
+
+/**
+ * Part 1, session 6: one editor at a time. A write to the open site needs the
+ * site's editor lock. A free (or lapsed) lock is taken by the write, which
+ * counts as activity; a lock another user holds answers 423 with that user's
+ * name and nothing is written. Reads never come here. The lock service is the
+ * one statement in lib/platform/site-lock.ts; a failure of it fails the write
+ * (500) rather than letting two editors through.
+ */
+async function refuseWriteWithoutLock(request: NextRequest, session: BosSession): Promise<NextResponse | null> {
+  const raw = request.cookies.get(SITE_COOKIE)?.value;
+  const siteCookie = raw ? await verifySiteCookie(raw) : null;
+  if (!siteCookie) return null; // no site open: nothing to lock, and the route answers as before
+  try {
+    const lock = await acquireSiteLock(siteCookie.site, { id: session.sub, name: session.name || session.email });
+    if (lock.held) return null;
+    const holder = lock.holder?.name ?? 'another editor';
+    return NextResponse.json(
+      { error: `${holder} is editing this site`, holder, since: lock.holder?.since ?? null },
+      { status: 423 },
+    );
+  } catch (error) {
+    console.error('[proxy] editor lock check failed', error);
+    return NextResponse.json({ error: 'Could not check the site\'s editor lock' }, { status: 500 });
+  }
 }
 
 export async function proxy(request: NextRequest) {

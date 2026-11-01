@@ -32,6 +32,7 @@ import type { User } from '@/lib/platform/types';
 import ActiveUsersInHeader from './ActiveUsersInHeader';
 import { LocaleSelector } from './LocaleSelector';
 import PublishPopover from './PublishPopover';
+import { isReadOnly, useSiteLock } from '@/lib/platform/site-lock-client';
 import { Label } from '@/components/ui/label';
 import Icon from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
@@ -85,6 +86,7 @@ export default function HeaderBar({
   const pathname = usePathname();
   const pageDropdownRef = useRef<HTMLDivElement>(null);
   const { isEditor, canManageSettings } = useRole();
+  const lock = useSiteLock();
   const wsParts = useWsParts();
   const editorSidebarTab = useEditorStore((s) => s.activeSidebarTab);
   const currentPageCollectionItemId = useEditorStore((s) => s.currentPageCollectionItemId);
@@ -659,7 +661,11 @@ export default function HeaderBar({
 
         {/* Save Status Indicator */}
         <div className="flex items-center justify-end w-16 text-xs text-zinc-500 dark:text-white/50">
-          {isSaving ? (
+          {isReadOnly(lock) ? (
+            <>
+              <span>Read-only</span>
+            </>
+          ) : isSaving ? (
             <>
               <span>Saving</span>
             </>
@@ -690,6 +696,7 @@ export default function HeaderBar({
         </Button>
 
         <PublishPopover
+          isDisabled={isReadOnly(lock)}
           isPublishing={isPublishing}
           setIsPublishing={setIsPublishing}
           baseUrl={baseUrl}
