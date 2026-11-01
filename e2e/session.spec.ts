@@ -197,6 +197,9 @@ test('a Member edits content but may not create or delete sites', async () => {
     expect((await remove.json()).required).toBe('webstudio.manage_sites.d');
 
     expect((await member.get('/ycode/api/platform/sites')).status()).toBe(200);
+    // The owner has had the site open since the renewal test and so holds its editor lock (session 6): a
+    // Member's write waits until the owner closes the site. lock.spec.ts covers the refusal itself.
+    expect((await owner.delete('/ycode/api/platform/site-lock')).status()).toBe(200);
     const page = await member.post('/ycode/api/pages', { data: { name: 'By a member', slug: `member-${RUN}` } });
     expect(page.status(), await page.text()).toBe(200);
     const exported = await member.post('/ycode/api/project/export', { data: {} });
