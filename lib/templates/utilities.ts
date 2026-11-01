@@ -541,7 +541,7 @@ export const utilityTemplates: Record<string, BlockTemplate> = {
         tag: 'div',
         htmlEmbed: {
           code: `<!-- Example: Tailwind CSS + JavaScript -->
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="/vendor/tailwindcss-browser.js"></script>
 
 <div class="p-6 rounded-xl border border-gray-200 bg-white shadow-sm w-full">
   <h2 class="text-xl font-semibold">Custom Code Embed</h2>

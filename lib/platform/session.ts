@@ -48,14 +48,14 @@ const DEFAULT_TTL_SECONDS = 8 * 3600;
 
 const encoder = new TextEncoder();
 
-function b64url(input: ArrayBuffer | string): string {
+export function b64url(input: ArrayBuffer | string): string {
   const bytes = typeof input === 'string' ? encoder.encode(input) : new Uint8Array(input);
   let s = '';
   for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function fromB64url(s: string): string {
+export function fromB64url(s: string): string {
   const padded = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4);
   return atob(padded);
 }

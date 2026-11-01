@@ -11,8 +11,8 @@ import { provisionSite, SiteConflictError } from '@/lib/platform/provision';
  *   POST /ycode/api/platform/sites   create a blank site (name, slug, languages, default_language,
  *                                    optional hosts; template_id is accepted and ignored until session 4)
  *
- * The organization is the session's. Session 2 adds the permission checks
- * (manage_sites r and c); until then a Business OS session is enough.
+ * The organization is the session's. The permission checks are the proxy's
+ * (lib/platform/permissions.ts): manage_sites r for GET, c for POST.
  */
 export async function GET() {
   const session = await getSessionFromCookies();

@@ -6,4 +6,9 @@ export async function register() {
   const { patchHtmlResponseStamp, startYcodePublishedAtRefresh } = await import('./lib/stamp-html-response');
   patchHtmlResponseStamp();
   await startYcodePublishedAtRefresh();
+
+  // TORCH platform (part 1, session 2): register the webstudio permission scope
+  // with auth-service over the core event bus. Best effort; logs when it cannot.
+  const { startScopeRegistration } = await import('./lib/platform/scope-registration');
+  await startScopeRegistration();
 }

@@ -503,10 +503,10 @@ const Canvas = React.memo(function Canvas({
 
       // Load GSAP for animations in the canvas iframe
       const gsapScript = doc.createElement('script');
-      gsapScript.src = 'https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js';
+      gsapScript.src = '/vendor/gsap.min.js';
       gsapScript.onload = () => {
         const splitTextScript = doc.createElement('script');
-        splitTextScript.src = 'https://cdn.jsdelivr.net/npm/gsap@3/dist/SplitText.min.js';
+        splitTextScript.src = '/vendor/SplitText.min.js';
         splitTextScript.onload = () => {
           const initScript = doc.createElement('script');
           initScript.textContent = `

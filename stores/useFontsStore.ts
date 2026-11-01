@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { toMirrorCssUrl } from '@/lib/platform/font-mirror-url';
 import { buildAllFontsCss, buildGoogleFontUrl, BUILT_IN_FONTS, getFontFamilyValue } from '@/lib/font-utils';
 import type { Font } from '@/types';
 
@@ -382,7 +383,7 @@ function injectGoogleFontLinks(doc: Document, fonts: Font[]) {
     const link = doc.createElement('link');
     link.id = linkId;
     link.rel = 'stylesheet';
-    link.href = buildGoogleFontUrl(font);
+    link.href = toMirrorCssUrl(buildGoogleFontUrl(font));
     doc.head.appendChild(link);
   }
 

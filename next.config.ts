@@ -47,6 +47,8 @@ const nextConfig: NextConfig = {
     'pg-query-stream',
     // Server-side HTML import; its optional `canvas` require must not be bundled
     'linkedom',
+    // TORCH platform: the core event bus client (lib/platform/scope-registration.ts)
+    'ioredis',
   ],
 
   // Turbopack configuration

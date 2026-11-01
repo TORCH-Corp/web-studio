@@ -7,7 +7,7 @@
 
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE, verifySession } from '@/lib/platform/session';
-import { userFromSession } from '@/lib/supabase-auth';
+import { sessionView } from '@/lib/platform/session-view';
 
 export async function createRouteClient() {
   const cookieStore = await cookies();
@@ -16,19 +16,7 @@ export async function createRouteClient() {
       async getSession() {
         const session = await verifySession(cookieStore.get(SESSION_COOKIE)?.value);
         if (!session) return { data: { session: null }, error: null };
-        return {
-          data: {
-            session: {
-              user: userFromSession(session),
-              access_token: 'business-os',
-              token_type: 'bearer',
-              expires_at: session.exp,
-              expires_in: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
-              refresh_token: '',
-            },
-          },
-          error: null,
-        };
+        return { data: { session: sessionView(session, null).session }, error: null };
       },
       async signOut() {
         cookieStore.set({ name: SESSION_COOKIE, value: '', path: '/', maxAge: 0 });
