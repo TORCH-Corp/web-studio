@@ -52,8 +52,11 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
     APP_MANAGEMENT_URL=http://app-management-service:6000   # with APP_MANAGEMENT_API_KEY: re-register the
     APP_MANAGEMENT_API_KEY=<app-management's SERVICE_API_KEY>  # scope at start for the installed organizations
     PLATFORM_PUBLIC_URL=https://webstudio.<domain>
+    PLATFORM_STORAGE=disk   # or document-center (session 8)
+    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage   # disk mode
+    DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
+    DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
-    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage
     ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
