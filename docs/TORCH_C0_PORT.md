@@ -11,7 +11,7 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
   (`bos_session`) carrying user, organization and Web Studio permission flags
   (`webstudio.manage_sites / manage_content / manage_forms / manage_orders`).
   `proxy.ts`, `lib/supabase-auth.ts`, the browser client and the auth store read it.
-  Users, invites, profile and roles routes answer "managed in Business OS".
+  The cookie is minted from the shell's access token (session 2, below).
 - **Per site (session 1; c0 was per organization).** Migration
   `20261101000001_torch_organizations.ts`: `tenant_id` on all 28 tables + index,
   natural-key unique indexes rebuilt per tenant, `set_tenant_context()` + BEFORE INSERT
@@ -44,7 +44,13 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
 
 ## Environment
     DATABASE_URL=postgresql://.../webstudio
-    BOS_SESSION_SECRET=<shared with auth-service>
+    BOS_SESSION_SECRET=<Web Studio's own; signs the bos_session and ws_site cookies>
+    BOS_JWT_PUBLIC_KEY=<auth-service's RS256 public key, PEM; the file at its JWT_PUBLIC_KEY_PATH>
+    BOS_AUTH_URL=http://auth-service:6001   # my-permissions and users/me; default https://auth.torchcorp.com
+    EVENT_BUS_REDIS_URL=redis://redis:6379  # the core event bus: publishes the webstudio permission scope
+    WS_APP_ID=<Web Studio's catalogue app id>   # which app.installed is ours
+    APP_MANAGEMENT_URL=http://app-management-service:6000   # with APP_MANAGEMENT_API_KEY: re-register the
+    APP_MANAGEMENT_API_KEY=<app-management's SERVICE_API_KEY>  # scope at start for the installed organizations
     PLATFORM_PUBLIC_URL=https://webstudio.<domain>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
     PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage
@@ -55,9 +61,13 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
 - `pnpm test`: ycode's unit tests plus the platform's (`lib/platform/*.test.ts`).
 - `pnpm e2e`: Playwright, `e2e/*.spec.ts`. `playwright.config.ts` recreates the database
   at `DATABASE_URL_TEST` (its name must contain "test"), builds, starts the app on port
-  3102 with the dev login on, and runs the specs over HTTP: sessions through
+  3102 (`E2E_PORT`) with the dev login on and a stand-in for auth-service beside it
+  (`e2e/auth-stub.ts`, port `E2E_PORT + 1`, the people of `e2e/auth-fixtures.ts`), and runs
+  the specs over HTTP: sessions through the callback with tokens signed by the test key
+  pair (`e2e/test-keys.ts`, under the temp directory) or through
   `POST /ycode/api/auth/dev-login`, sites through the sites API, published sites by
-  `x-forwarded-host`. `e2e/sites.spec.ts` is session 1's done-when check. A local
+  `x-forwarded-host`. Several worktrees can run it at once with their own `E2E_PORT` and
+  `DATABASE_URL_TEST`. `e2e/sites.spec.ts` is session 1's done-when check. A local
   PostgreSQL 16 for it: `docker run -d --name webstudio-e2e-pg -e POSTGRES_PASSWORD=webstudio
   -e POSTGRES_USER=webstudio -e POSTGRES_DB=webstudio_test -p 127.0.0.1:54329:5432 postgres:16-alpine`
   then `DATABASE_URL_TEST=postgresql://webstudio:webstudio@127.0.0.1:54329/webstudio_test pnpm e2e`.
@@ -128,10 +138,63 @@ each site's own 404 page, a second host after the next publish) passes with `pnp
   elements and the API routes stay (the pages and the builder's stores use them).
 - `e2e/offline.spec.ts` is the done-when check.
 
+## Session 2: session and permissions
+- **Token in, cookie out.** `GET /ycode/api/auth/callback?token=<access token>[&site=<id>]`
+  (`app/(builder)/ycode/api/auth/callback/route.ts`) verifies the RS256 access token with
+  auth-service's public key (`lib/platform/access-token.ts`, `BOS_JWT_PUBLIC_KEY`: the live
+  spec has no key endpoint and `/.well-known/jwks.json` answers 404), reads the user's flags
+  from `GET /authz/my-permissions?namespace=webstudio` and the name from `GET /users/me`
+  (`lib/platform/auth-service.ts`; the token has no name claim) and mints `bos_session` for
+  the token's `sub`, `entityId` (the organization) and the true `webstudio.*` flags, living
+  as long as the token (15 minutes). A user with no Web Studio flag gets 403 and no cookie.
+  With `site`, the organization check and `ws_site`, as `/open` does; without it the site
+  the builder is on is kept. A browser navigation is sent to `/ycode`; a fetch with
+  `Accept: application/json` gets the session view. `GET /ycode/api/auth/session` returns
+  user, organization, site, flags, role and `expiresAt` (`lib/platform/session-view.ts`).
+  The dev login stays, `ALLOW_DEV_LOGIN=true` only.
+- **Renewal without a sign-out** (`lib/platform/browser-session.ts`, hooked into
+  `lib/supabase-browser.ts`; rule embedded-apps.md). The builder posts
+  `{type: 'torch:request-token'}` to `window.parent` and takes
+  `{type: 'torch:set-token', token, expiresAt?, site?}` back, from `window.parent` only
+  (unframed, `window.parent === window`, so a Tauri webview that evaluates
+  `window.postMessage(...)` in the page is heard too); a push without a request is kept
+  for the next renewal. A page that loads without a session waits for the shell under
+  ycode's "Checking authentication" screen; the cookie is renewed a minute before it runs
+  out; a builder request refused with 401 waits for the renewal under "Reconnecting to
+  Business OS…" (`lib/platform/SessionNotice.tsx`, ycode's `BuilderLoading`, mounted in
+  `app/(builder)/layout.tsx`) and is sent again. No deadline, no login page. Same shape as
+  every other child app's `embedded-auth-provider` (the shell pushes a token every minute,
+  the app adopts it, retries once after a 401, shows a reconnecting notice).
+- **Enforced in the proxy.** `lib/platform/permissions.ts` names the leaf and flag of every
+  route under `/ycode/api` (and `/ycode/preview`, `/api/templates`): the flag follows the
+  method (POST c, GET r, PUT/PATCH u, DELETE d) unless the route says otherwise (publish,
+  revert, status u; static and project export `export`; the AI agent and MCP tokens
+  `use_ai`; devtools reset d). manage_sites: the sites API; manage_content: the builder's
+  data; manage_forms: collections, forms, webhooks, API keys, integrations (part 3);
+  manage_orders: no route yet (part 2). Public routes have their own credential; a few are
+  anonymous by design for visitors (a form submission, a published page's filter, the
+  published error page). `proxy.ts` answers 401 with no session, 403 with
+  `{error, required: 'webstudio.manage_sites.c'}` without the flag, and 404 for a path
+  the map does not know; `lib/platform/permissions.test.ts` fails on a route file without
+  a rule or a rule without a file. ycode's `roleFromPermissions` mapping stays for the
+  builder's own gating.
+- **Scope registration** (`lib/platform/permission-scope.json`, `lib/platform/web-studio-scope.ts`,
+  `lib/platform/scope-registration.ts`, started from `instrumentation.ts`; OPEN_QUESTIONS 10).
+  The four leaves in three modules with PRD V1.0's defaults (Manager every flag, Member
+  manage_content c r u and manage_sites r, Viewer r on both, nothing on forms and orders).
+  Published on the core event bus (Redis pub/sub, `core-events:app.permission_scope.registered`,
+  envelope `{event_id, event, payload, timestamp}`) when `app.installed` arrives for
+  `WS_APP_ID`, and again at start for every organization app-management lists as having the
+  app, retried with backoff; the way contact-center-service does it. `ioredis` is the one
+  new dependency. Without `EVENT_BUS_REDIS_URL` or `WS_APP_ID` it logs why and does nothing.
+- `e2e/session.spec.ts` is the done-when check (`pnpm test`: 341).
+
 ## Not done (c1 and after)
 - Realtime collaboration and the MCP OAuth flow were not exercised (the AI agent, MCP and
   integrations screens open: `e2e/offline.spec.ts`).
-- The `bos_session` cookie comes from the shell's access token (session 2); the
-  dev-login route stands in for that.
+- The cookies are `SameSite=Lax` without `Secure`: right for a top-level webview behind
+  nginx's TLS; a builder framed by a page on another site (a Tauri window at
+  `tauri://localhost`) would need `SameSite=None; Secure`, and WKWebView blocks third-party
+  cookies anyway. Session 9 decides how the builder is hosted; session 11 sets the flags.
 - `/ycode` with a session but no `ws_site` cookie shows an empty builder: the shell
   always enters through `GET /ycode/api/platform/sites/{id}/open` (session 9).

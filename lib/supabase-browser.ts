@@ -6,30 +6,60 @@
  * comes from `/ycode/api/auth/session` (the Business OS cookie); channels are
  * accepted and do nothing (collaboration is off in c0); sign-out clears the
  * cookie. No database or storage calls ever happened from the browser.
+ *
+ * Inside the shell (part 1, session 2) the session is kept alive by
+ * lib/platform/browser-session.ts: a page that loads without one waits for the
+ * shell's token instead of showing a login form, the cookie is renewed before
+ * it runs out, and a request refused with 401 is sent again after the renewal.
  */
 
 import type { RealtimeChannel, Session, SupabaseClient, User } from '@/lib/platform/types';
+import { SESSION_ENDPOINT, installSessionGuard, isEmbedded, recoverSession, rememberSession, subscribeSession } from '@/lib/platform/browser-session';
+import type { SessionView } from '@/lib/platform/session-view';
 
 type Listener = (event: string, session: Session | null) => void;
 
 interface SessionResponse {
-  data?: { session: Session | null; user: User | null };
+  data?: Partial<SessionView> & { session: Session | null; user: User | null };
 }
 
 let cached: Session | null | undefined;
 let inflight: Promise<Session | null> | null = null;
 const listeners = new Set<Listener>();
 
+async function loadSession(): Promise<Session | null> {
+  let view: SessionView | null = null;
+  try {
+    const response = await fetch(SESSION_ENDPOINT, { cache: 'no-store' });
+    if (response.ok) {
+      const body = (await response.json()) as SessionResponse;
+      view = body.data?.session && body.data.user ? (body.data as SessionView) : null;
+    }
+  } catch (error) {
+    console.warn('[web-studio session] the session could not be read', error);
+  }
+  // No session and a shell to ask: wait for its token, with no deadline and no login form.
+  if (!view && isEmbedded()) view = await recoverSession('initial');
+  rememberSession(view);
+  return view?.session ?? null;
+}
+
 async function fetchSession(): Promise<Session | null> {
   if (cached !== undefined) return cached;
   if (!inflight) {
-    inflight = fetch('/ycode/api/auth/session', { cache: 'no-store' })
-      .then(async (r) => (r.ok ? ((await r.json()) as SessionResponse).data?.session ?? null : null))
-      .catch(() => null)
-      .then((s) => { cached = s; inflight = null; return s; });
+    inflight = loadSession().then((s) => { cached = s; inflight = null; return s; });
   }
   return inflight;
 }
+
+installSessionGuard();
+
+// A renewed session replaces the cached one and reaches ycode's auth store.
+subscribeSession(({ view }) => {
+  if (!view) return;
+  cached = view.session;
+  listeners.forEach((l) => l('TOKEN_REFRESHED', view.session));
+});
 
 function noopChannel(topic: string): RealtimeChannel {
   const channel = {
