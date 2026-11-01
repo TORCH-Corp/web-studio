@@ -13,7 +13,7 @@
  */
 
 import { expect, request, test, type APIRequestContext } from '@playwright/test';
-import { createSite, listSites, openSite, publish, publishedSite, signIn, TEMPLATES_ORG, type SiteRecord } from './helpers';
+import { createSite, listSites, openSite, publish, publishedSite, signIn, TEMPLATES_ORG, TEST_SITES_DOMAIN, type SiteRecord } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -139,6 +139,15 @@ test('the templates organization creates a template; another organization cannot
   expect(template.organization_id).toBe(TEMPLATES_ORG);
   expect(template.is_template).toBe(true);
   expect(template.template).toEqual({ name: { ar: 'قالب متجر', en: 'Shop template' }, description: { ar: '', en: 'For shops' } });
+
+  // Not even the default address every other site gets on creation (session 5): a template never answers on a host.
+  expect(template.hosts).toEqual([]);
+  const wouldBeAddress = await publishedSite(baseURL, `tpl-${RUN}.${TEST_SITES_DOMAIN}`);
+  try {
+    expect((await wouldBeAddress.get('/')).status()).toBe(404);
+  } finally {
+    await wouldBeAddress.dispose();
+  }
 
   const list = await json<TemplateRow[]>(orgA.get('/ycode/api/platform/templates'));
   expect(list.map((t) => t.slug)).toEqual(['company-site', 'landing-page', 'blank', `tpl-${RUN}`]);

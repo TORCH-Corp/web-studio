@@ -20,7 +20,6 @@
 
 // 1. React/Next.js
 import { useEffect, useState, useMemo, useRef, useCallback, Suspense, lazy } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 // 2. Internal components
 import AiChatPanel from '../components/ai/AiChatPanel';
@@ -506,8 +505,9 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     onNormalPaste: handleNormalPaste,
   });
 
-  // Check if Supabase is configured, redirect to setup if not
+  // Check that the server is configured (DATABASE_URL); there is no setup wizard to send the user to
   const [supabaseConfigured, setSupabaseConfigured] = useState<boolean | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkSupabaseConfig = async () => {
@@ -516,21 +516,19 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
         const data = await response.json();
 
         if (!data.is_configured) {
-          // Redirect to setup wizard
-          router.push('/ycode/welcome');
+          setConfigError('Web Studio is not configured on this server');
           return;
         }
 
         setSupabaseConfigured(true);
       } catch (err) {
-        console.error('Failed to check Supabase config:', err);
-        // On error, redirect to setup to be safe
-        router.push('/ycode/welcome');
+        console.error('Failed to check server config:', err);
+        setConfigError('Web Studio could not reach its server');
       }
     };
 
     checkSupabaseConfig();
-  }, [router]);
+  }, []);
 
   // Sync viewportMode with activeBreakpoint in store
   useEffect(() => {
@@ -2158,7 +2156,11 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     components,
   ]);
 
-  // Show loading screen while checking Supabase config
+  if (configError) {
+    return <BuilderLoading message={configError} />;
+  }
+
+  // Show loading screen while checking server config
   if (supabaseConfigured === null) {
     return <BuilderLoading message="Checking configuration..." />;
   }
@@ -2251,14 +2253,6 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
             </Button>
           </form>
 
-          <div className="mt-4 text-center">
-            <p className="text-xs text-white/50">
-              First time here?{' '}
-              <Link href="/ycode/welcome" className="text-white/80">
-                Complete setup
-              </Link>
-            </p>
-          </div>
         </div>
 
       </div>

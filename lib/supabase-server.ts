@@ -10,7 +10,7 @@
  * an organization has one or more sites, see lib/platform/site.ts).
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@/lib/platform/types';
 import { createPlatformClient } from '@/lib/platform/pg-client';
 import { resolveSiteId, runWithSite, siteStore } from '@/lib/platform/site';
 import { getKnexClient } from '@/lib/knex-client';

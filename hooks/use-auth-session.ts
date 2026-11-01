@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase-browser';
-import type { Session } from '@supabase/supabase-js';
+import type { Session } from '@/lib/platform/types';
 
 interface AuthSessionState {
   session: Session | null;

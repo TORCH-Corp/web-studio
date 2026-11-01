@@ -6,6 +6,7 @@
  */
 
 import type { Font, FontAxis } from '@/types';
+import { toMirrorCssUrl } from '@/lib/platform/font-mirror-url';
 
 /** Built-in system fonts available without loading */
 export const BUILT_IN_FONTS: Font[] = [
@@ -286,7 +287,7 @@ export function buildFontsCss(fonts: Font[]): string {
 
   for (const font of fonts) {
     if (font.type === 'google') {
-      const url = buildGoogleFontUrl(font);
+      const url = toMirrorCssUrl(buildGoogleFontUrl(font));
       css += `@import url('${url}');`;
     }
 

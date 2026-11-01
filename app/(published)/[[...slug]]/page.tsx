@@ -5,7 +5,7 @@ import { addCacheTag } from '@vercel/functions';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getSupabaseAdmin, getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
-import { GLOBAL_SETTINGS_TAG } from '@/lib/cache-tags';
+import { buildAllPagesTag, buildGlobalSettingsTag, buildRouteTag } from '@/lib/cache-tags';
 import { buildSlugPath } from '@/lib/page-utils';
 import { generatePageMetadata, fetchGlobalPageSettings } from '@/lib/generate-page-metadata';
 import { generateCachedErrorPageMetadata } from '@/lib/not-found-metadata';
@@ -163,9 +163,8 @@ export async function generateStaticParams() {
 /**
  * c0 port, part 1 session 1: the site of the request (from its host name) goes
  * into every cache key, and the cached fetch runs with it as tenant context,
- * so two sites never share a cached page. The per-site tags are purged by that
- * site's publish; the global tags stay too, so a publish also refreshes the
- * other sites' entries (correct, a little wasteful; session 5 narrows it).
+ * so two sites never share a cached page. Every entry carries the site's own
+ * tags (lib/cache-tags.ts), which only that site's publish purges (session 5).
  */
 async function scoped<T>(fn: () => Promise<T>): Promise<T> {
   const tenantId = await getTenantIdFromHeaders();
@@ -182,7 +181,7 @@ async function fetchPublishedPageWithLayers(slugPath: string) {
   // doesn't cascade to entries that only share 'all-pages'. (Next.js bug
   // #63509 would apply if we used revalidateTag for selective, but we route
   // exclusively through invalidateByTag on Vercel.)
-  const tags = [`route-/${slugPath}`, 'all-pages'];
+  const tags = [buildRouteTag(tenantId, slugPath), buildAllPagesTag(tenantId)];
   const opts = { tags, revalidate: false as const };
 
   // `basePath` lets paginated collections server-render crawlable links to
@@ -217,7 +216,7 @@ async function fetchPublishedPageWithLayers(slugPath: string) {
 
 async function fetchPublishedHomepage() {
   const tenantId = (await getTenantIdFromHeaders()) ?? '';
-  const tags = ['route-/', 'all-pages'];
+  const tags = [buildRouteTag(tenantId, ''), buildAllPagesTag(tenantId)];
   const opts = { tags, revalidate: false as const };
   const paginationContext: PaginationContext = { basePath: '/' };
 
@@ -252,7 +251,7 @@ async function fetchCachedRedirects(): Promise<RedirectType[] | null> {
     return await unstable_cache(
       async () => scoped(() => getSettingByKey('redirects') as Promise<RedirectType[] | null>),
       ['data-for-redirects', tenantId],
-      { tags: ['all-pages'], revalidate: false }
+      { tags: [buildAllPagesTag(tenantId)], revalidate: false }
     )();
   } catch {
     return null;
@@ -268,7 +267,7 @@ async function fetchCachedGlobalSettings() {
     return await unstable_cache(
       async () => scoped(() => fetchGlobalPageSettings()),
       ['data-for-global-settings', tenantId],
-      { tags: ['all-pages', GLOBAL_SETTINGS_TAG], revalidate: false }
+      { tags: [buildAllPagesTag(tenantId), buildGlobalSettingsTag(tenantId)], revalidate: false }
     )();
   } catch {
     return {
@@ -292,7 +291,7 @@ async function fetchCachedFoldersForAuth() {
     return await unstable_cache(
       async () => scoped(() => fetchFoldersForAuth(true)),
       ['data-for-auth-folders', tenantId],
-      { tags: ['all-pages'], revalidate: false }
+      { tags: [buildAllPagesTag(tenantId)], revalidate: false }
     )();
   } catch {
     return [];
@@ -313,7 +312,8 @@ export default async function Page({ params }: PageProps) {
   // Tag this response for Vercel CDN cache invalidation. The publish endpoint
   // purges this exact tag (route-/<slug>) so only this URL's cache entry is
   // invalidated. No-ops outside Vercel.
-  await addCacheTag([isHomepage ? 'route-/' : `route-/${slugPath}`, 'all-pages']);
+  const siteId = await getTenantIdFromHeaders();
+  await addCacheTag([buildRouteTag(siteId, slugPath), buildAllPagesTag(siteId)]);
 
   const currentPath = isHomepage ? '/' : `/${slugPath}`;
   const redirects = await fetchCachedRedirects();
@@ -505,7 +505,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
     return generateCachedErrorPageMetadata(401, slugPath, { globalSeoSettings: globalSettings });
   }
 
-  const routeTag = isHomepage ? 'route-/' : `route-/${slugPath}`;
+  const metaTenantId = (await getTenantIdFromHeaders()) ?? '';
+  const routeTag = buildRouteTag(metaTenantId, slugPath);
   const { meta, baseUrl } = await unstable_cache(
     async () => ({
       meta: await generatePageMetadata(data.page, {
@@ -519,8 +520,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
       }),
       baseUrl: getSiteBaseUrl({ globalCanonicalUrl: globalSettings.globalCanonicalUrl }),
     }),
-    [isHomepage ? 'data-for-route-/-meta' : `data-for-route-/${slugPath}-meta`, (await getTenantIdFromHeaders()) ?? ''],
-    { tags: [routeTag, 'all-pages'], revalidate: false }
+    [isHomepage ? 'data-for-route-/-meta' : `data-for-route-/${slugPath}-meta`, metaTenantId],
+    { tags: [routeTag, buildAllPagesTag(metaTenantId)], revalidate: false }
   )();
 
   if (baseUrl) {

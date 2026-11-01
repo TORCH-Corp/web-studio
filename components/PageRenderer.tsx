@@ -8,6 +8,8 @@ import PasswordForm from '@/components/PasswordForm';
 import SliderInitializer from '@/components/SliderInitializer';
 import YcodeBadge from '@/components/YcodeBadge';
 import { unstable_cache } from 'next/cache';
+import { buildAllPagesTag } from '@/lib/cache-tags';
+import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
 import { resolveCustomCodePlaceholders } from '@/lib/resolve-cms-variables';
 import { generateInitialAnimationCSS, type HiddenLayerInfo } from '@/lib/animation-utils';
 import { buildCustomFontsCss, buildFontClassesCss, fetchGoogleFontsCss, getCustomFontPreloads, getGoogleFontLinks } from '@/lib/font-utils';
@@ -33,17 +35,27 @@ import type { Layer, BackgroundsDesign, Component, Page, CollectionItemWithValue
 
 interface PageLinkRef { collection_item_id: string; page_id: string }
 
-const getCachedPublishedPages = unstable_cache(
-  async () => getAllPages({ is_published: true }),
-  ['page-renderer-published-pages'],
-  { tags: ['all-pages'], revalidate: false }
-);
+/**
+ * Published pages and folders for resolving links, cached per site (part 1,
+ * session 5): the key and the tags carry the site, and the lookup runs with it
+ * as tenant context, so one site never reads another's pages and a publish
+ * refreshes only its own.
+ */
+async function getCachedPublishedPages(tenantId: string | null): Promise<Page[]> {
+  return unstable_cache(
+    async () => (tenantId ? runWithTenantId(tenantId, () => getAllPages({ is_published: true })) : getAllPages({ is_published: true })),
+    ['page-renderer-published-pages', tenantId ?? ''],
+    { tags: [buildAllPagesTag(tenantId)], revalidate: false }
+  )();
+}
 
-const getCachedPublishedFolders = unstable_cache(
-  async () => getAllPageFolders({ is_published: true }),
-  ['page-renderer-published-folders'],
-  { tags: ['all-pages'], revalidate: false }
-);
+async function getCachedPublishedFolders(tenantId: string | null): Promise<PageFolder[]> {
+  return unstable_cache(
+    async () => (tenantId ? runWithTenantId(tenantId, () => getAllPageFolders({ is_published: true })) : getAllPageFolders({ is_published: true })),
+    ['page-renderer-published-folders', tenantId ?? ''],
+    { tags: [buildAllPagesTag(tenantId)], revalidate: false }
+  )();
+}
 
 /** Recursively collect all page link refs ({collection_item_id, page_id}) from a Tiptap JSON node.
  * Also descends into pre-resolved layers stored on embedded richTextComponent nodes. */
@@ -445,6 +457,7 @@ export default async function PageRenderer({
 
   let pages: Page[] = [];
   let folders: PageFolder[] = [];
+  const siteId = await getTenantIdFromHeaders();
 
   try {
     // Start pages/folders fetch and referenced-item fetch in parallel
@@ -454,7 +467,7 @@ export default async function PageRenderer({
 
     [[pages, folders]] = await Promise.all([
       usePublishedData
-        ? Promise.all([getCachedPublishedPages(), getCachedPublishedFolders()])
+        ? Promise.all([getCachedPublishedPages(siteId), getCachedPublishedFolders(siteId)])
         : Promise.all([
           getAllPages({ is_published: false }),
           getAllPageFolders({ is_published: false }),
@@ -617,7 +630,7 @@ export default async function PageRenderer({
       googleFontsInlinedCss = await unstable_cache(
         async () => fetchGoogleFontsCss(googleFontLinkUrls),
         [`google-fonts-css-${googleFontLinkUrls.join('|')}`],
-        { tags: ['all-pages'], revalidate: false },
+        { tags: [buildAllPagesTag(await getTenantIdFromHeaders())], revalidate: false },
       )();
 
       // Preload the one Google Font file the likely LCP text (first heading)

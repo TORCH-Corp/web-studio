@@ -16,8 +16,8 @@ import { getTemplate, isBlankTemplate, isTemplatesOrganization } from '@/lib/pla
  *                                    may send is_template with the template's Arabic and English name
  *                                    and description (400 from anyone else, or with hosts).
  *
- * The organization is the session's. Session 2 adds the permission checks
- * (manage_sites r and c); until then a Business OS session is enough.
+ * The organization is the session's. The permission checks are the proxy's
+ * (lib/platform/permissions.ts): manage_sites r for GET, c for POST.
  */
 export async function GET() {
   const session = await getSessionFromCookies();

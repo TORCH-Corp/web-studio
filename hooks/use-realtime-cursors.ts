@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase-browser'
-import { RealtimeChannel, REALTIME_SUBSCRIBE_STATES } from '@supabase/supabase-js'
+import { RealtimeChannel, REALTIME_SUBSCRIBE_STATES } from '@/lib/platform/types'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useCollaborationPresenceStore } from '../stores/useCollaborationPresenceStore'
 import { useAuthStore } from '../stores/useAuthStore'

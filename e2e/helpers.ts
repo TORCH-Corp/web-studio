@@ -40,11 +40,26 @@ export interface NewSite {
   template?: { name?: { ar?: string; en?: string }; description?: { ar?: string; en?: string } };
 }
 
-/** A context whose cookie jar holds a Business OS session for `user`. */
+/** A context whose cookie jar holds a Business OS session for `user`, through the dev login. */
 export async function signIn(baseURL: string, user: TestUser): Promise<APIRequestContext> {
   const api = await request.newContext({ baseURL });
   const response = await api.post('/ycode/api/auth/dev-login', { data: user });
   expect(response.status(), await response.text()).toBe(200);
+  return api;
+}
+
+/** The entrance the shell uses: the access token (and optionally the site) through the callback, as a browser navigation. */
+export async function callback(api: APIRequestContext, token: string, site?: string, headers?: Record<string, string>): Promise<APIResponse> {
+  const params = new URLSearchParams({ token });
+  if (site) params.set('site', site);
+  return api.get(`/ycode/api/auth/callback?${params}`, { maxRedirects: 0, headers });
+}
+
+/** A context whose cookie jar holds the session the callback minted for `token`; the callback must have accepted it. */
+export async function signInWithToken(baseURL: string, token: string, site?: string): Promise<APIRequestContext> {
+  const api = await request.newContext({ baseURL });
+  const response = await callback(api, token, site);
+  expect(response.status(), await response.text()).toBe(303);
   return api;
 }
 
@@ -83,4 +98,53 @@ export async function publishedSite(baseURL: string, host: string) {
     get: (path: string) => anonymous.get(path, { maxRedirects: 0 }),
     dispose: () => anonymous.dispose(),
   };
+}
+
+/** The domain default addresses live under in the e2e run (WS_SITES_DOMAIN in playwright.config.ts). */
+export const TEST_SITES_DOMAIN = 'sites.test';
+
+interface PageRow {
+  id: string;
+  slug: string;
+  is_index: boolean;
+  error_page: number | null;
+}
+
+/** The draft pages of the open site. */
+export async function draftPages(api: APIRequestContext): Promise<PageRow[]> {
+  const response = await api.get('/ycode/api/pages');
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()).data as PageRow[];
+}
+
+/** Layers for a page: one heading with `text`, which is what a visitor reads. */
+export function headingLayers(text: string) {
+  return [
+    {
+      id: 'body',
+      name: 'body',
+      classes: '',
+      children: [
+        {
+          id: `heading-${text.replace(/\W+/g, '-').toLowerCase()}`,
+          name: 'heading',
+          settings: { tag: 'h1' },
+          classes: '',
+          children: [],
+          variables: {
+            text: {
+              type: 'dynamic_rich_text',
+              data: { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] } },
+            },
+          },
+        },
+      ],
+    },
+  ];
+}
+
+/** Replace a page's draft layers with one heading. */
+export async function setHeading(api: APIRequestContext, pageId: string, text: string): Promise<void> {
+  const response = await api.put(`/ycode/api/layers?page_id=${pageId}`, { data: { layers: headingLayers(text) } });
+  expect(response.status(), await response.text()).toBe(200);
 }

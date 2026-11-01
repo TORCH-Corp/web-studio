@@ -1,12 +1,10 @@
 /**
  * Remix Icons API Client
  *
- * Fetches icons from the external Remix Icons API.
+ * Fetches icons from the builder's own icon route (the Remix set, served from the repository).
  */
 
-import { YCODE_EXTERNAL_API_URL } from '@/lib/config';
-
-const ICONS_API_URL = `${YCODE_EXTERNAL_API_URL}/api/icons`;
+const ICONS_API_URL = '/ycode/api/icons';
 
 export interface RemixIcon {
   source: string;
@@ -38,7 +36,7 @@ export interface RemixIconsParams {
   offset?: number;
 }
 
-/** Fetch icons from the Remix Icons API */
+/** Fetch icons from the builder's icon route */
 export async function fetchRemixIcons(params: RemixIconsParams = {}): Promise<RemixIconsResponse> {
   const searchParams = new URLSearchParams();
 
