@@ -1,4 +1,5 @@
-import { SESSION_COOKIE, SITE_COOKIE, verifySession, verifySiteCookie, type BosSession } from '@/lib/platform/session';
+import { SESSION_COOKIE, SITE_COOKIE, hasFlag, verifySession, verifySiteCookie, type BosSession } from '@/lib/platform/session';
+import { accessFor, requirementName } from '@/lib/platform/permissions';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/security-headers-server';
@@ -6,32 +7,11 @@ import { isHiddenBuilderRoute, partsRaised } from '@/lib/platform/parts';
 import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
 
 /**
- * Public API routes that skip authentication.
+ * Routes that need a session but no site: the sites API, which lists, creates
+ * and opens sites, and the session routes. A stale `ws_site` cookie must not
+ * lock a user out of them (part 1, session 1).
  */
-const PUBLIC_API_PREFIXES = [
-  '/ycode/api/setup/',    // Setup wizard — needed before any user exists
-  '/ycode/api/auth/',     // Auth callbacks and session checks
-  '/ycode/api/v1/',       // Public API — has own API key auth
-];
-
-/**
- * Routes that need a session but no site: the sites API itself, which lists,
- * creates and opens sites. A stale `ws_site` cookie must not lock a user out
- * of it (part 1, session 1).
- */
-const SITELESS_API_PREFIXES = ['/ycode/api/platform/'];
-
-/**
- * Patterns for collection item endpoints that must be accessible on published pages
- * (load-more pagination, filter). Matched via regex since the collection ID is dynamic.
- */
-const PUBLIC_COLLECTION_ITEM_SUFFIXES = ['/items/filter', '/items/load-more'];
-
-const PUBLIC_API_EXACT = [
-  '/ycode/api/revalidate', // Cache revalidation — has own secret token auth
-  '/ycode/api/oauth/register', // RFC 7591 Dynamic Client Registration — anonymous
-  '/ycode/api/oauth/token',    // OAuth token exchange — auth is via PKCE/refresh
-];
+const SITELESS_API_PREFIXES = ['/ycode/api/platform/', '/ycode/api/auth/'];
 
 /** Forward the request with its pathname as a header, keeping cookies and headers already set. */
 function withPathname(response: NextResponse, request: NextRequest, pathname: string): NextResponse {
@@ -50,51 +30,38 @@ function withPathname(response: NextResponse, request: NextRequest, pathname: st
   return next;
 }
 
-function isPublicApiRoute(pathname: string, method: string, searchParams: URLSearchParams): boolean {
-  // POST to form-submissions is public (website visitors submitting forms)
-  if (pathname === '/ycode/api/form-submissions' && method === 'POST') {
-    return true;
-  }
-
-  // Published error pages are rendered for visitors by the error boundary, so the
-  // published variant must be readable anonymously. Drafts stay behind auth.
-  if (method === 'GET' && pathname === '/ycode/api/error-page'
-      && searchParams.get('published') === 'true') {
-    return true;
-  }
-
-  if (PUBLIC_API_EXACT.includes(pathname)) return true;
-
-  if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
-
-  // Collection item endpoints for published pages (POST only — filter, load-more)
-  if (method === 'POST' && pathname.startsWith('/ycode/api/collections/') &&
-      PUBLIC_COLLECTION_ITEM_SUFFIXES.some(suffix => pathname.endsWith(suffix))) {
-    return true;
-  }
-
-  return false;
-}
-
 /**
- * Verify the Business OS session for protected API routes.
- * Returns a 401 response if not authenticated, or null to continue.
+ * The session and the permission a builder request needs (part 1, session 2).
+ *
+ * lib/platform/permissions.ts names the leaf and flag of every route under
+ * /ycode/api (and of the preview and the templates bridge). A public route
+ * passes; any other needs the Business OS session (401 without one), the flag
+ * the route names (403 without it, naming the `leaf.flag` an administrator
+ * ticks), and, unless it is one of the siteless routes, a `ws_site` cookie of
+ * the session's organization. A path the map does not know is not found.
+ * Returns null to continue.
  */
 async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null> {
-  if (isPublicApiRoute(request.nextUrl.pathname, request.method, request.nextUrl.searchParams)) {
-    return null;
+  const { pathname, searchParams } = request.nextUrl;
+  const access = accessFor(pathname, request.method, searchParams);
+  if (!access || access.kind === 'public') return null;
+
+  // A path under /ycode/api that no route names: not found, whoever asks. A
+  // route file without a rule cannot reach here (permissions.test.ts fails on it).
+  if (access.kind === 'unmapped') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // c0 port: the builder's API is open to a Business OS session only.
   const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
   if (!session) {
-    return NextResponse.json(
-      { error: 'Not authenticated' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  if (!SITELESS_API_PREFIXES.some((prefix) => request.nextUrl.pathname.startsWith(prefix))) {
+  if (access.kind === 'leaf' && !hasFlag(session, access.leaf, access.flag)) {
+    return NextResponse.json({ error: 'Forbidden', required: requirementName(access) }, { status: 403 });
+  }
+
+  if (!SITELESS_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     const refused = await refuseForeignSiteCookie(request, session);
     if (refused) return refused;
   }
@@ -145,16 +112,14 @@ export async function proxy(request: NextRequest) {
   if (!skipPreviewAuth && (pathname.startsWith('/ycode/api') || pathname.startsWith('/ycode/preview') || pathname.startsWith('/api/templates'))) {
     const authResponse = await verifyApiAuth(request);
     if (authResponse) {
-      if (authResponse.status === 401) {
-        if (pathname.startsWith('/ycode/preview')) {
+      if (authResponse.status >= 400) {
+        // A preview with no session goes back to the builder, never to a login page.
+        if (authResponse.status === 401 && pathname.startsWith('/ycode/preview')) {
           return NextResponse.redirect(new URL('/ycode', request.url));
         }
         return authResponse;
       }
-      if (authResponse.status === 404) {
-        return authResponse;
-      }
-      // Authenticated — pass through
+      // Authenticated and permitted — pass through
       return withPathname(authResponse, request, pathname);
     }
   }

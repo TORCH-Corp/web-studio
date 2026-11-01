@@ -7,7 +7,7 @@ import { getSessionFromCookies, getSiteCookie, getSiteForOrganization, softDelet
  * DELETE /ycode/api/platform/sites/{id} (part 1, session 1): soft-delete a site
  * of the session's organization. It leaves All sites and its hosts stop
  * resolving; its rows stay in the database. A site of another organization
- * is not found. Session 2 adds the permission check (manage_sites d).
+ * is not found. The permission check is the proxy's: manage_sites d.
  */
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
