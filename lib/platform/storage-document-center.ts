@@ -79,10 +79,14 @@ async function deleteDocuments(rows: Array<Pick<ObjectRow, 'organization_id' | '
   }
 }
 
-/** Store bytes as a new document and point (site, bucket, key) at it, replacing and deleting the old document. */
-export async function writeDocumentCenterObject(siteId: string, bucket: string, key: string, data: Buffer, contentType: string, cacheControl = DEFAULT_CACHE_CONTROL): Promise<void> {
+/**
+ * Store bytes as a new document and point (site, bucket, key) at it, replacing
+ * and deleting the old document. `knownOrganizationId` is for a site whose row
+ * is not committed yet (a template copy inside the provisioning transaction).
+ */
+export async function writeDocumentCenterObject(siteId: string, bucket: string, key: string, data: Buffer, contentType: string, cacheControl = DEFAULT_CACHE_CONTROL, knownOrganizationId?: string): Promise<void> {
   const normalised = safeKey(key);
-  const organizationId = await organizationOf(siteId);
+  const organizationId = knownOrganizationId ?? (await organizationOf(siteId));
   const documentId = await uploadDocument({
     organizationId,
     siteId,
@@ -121,17 +125,32 @@ export async function readDocumentCenterObject(siteId: string, bucket: string, k
 /**
  * Copy every file of one site into another (template copies, session 4): the
  * bytes are uploaded again as new documents under the destination's
- * organization, because Document Center has no copy route. Returns the number of files.
+ * organization (named by the caller: the new site's row is not committed yet),
+ * because Document Center has no copy route. Returns the number of files.
  */
-export async function copySiteFiles(fromSiteId: string, toSiteId: string): Promise<number> {
+export async function copySiteFiles(fromSiteId: string, toSiteId: string, toOrganizationId: string): Promise<number> {
   const knex = await getKnexClient();
   const rows = await knex<ObjectRow>(TABLE).where({ site_id: fromSiteId }).orderBy('created_at');
   for (const row of rows) {
     const obj = await readDocumentCenterObject(fromSiteId, row.bucket, row.key);
     if (!obj) throw new Error(`Document ${row.document_id} (${row.bucket}/${row.key}) is missing in Document Center`);
-    await writeDocumentCenterObject(toSiteId, row.bucket, row.key, obj.data, row.content_type, row.cache_control);
+    await writeDocumentCenterObject(toSiteId, row.bucket, row.key, obj.data, row.content_type, row.cache_control, toOrganizationId);
   }
   return rows.length;
+}
+
+/** Whether (site, bucket, key) names a document. */
+export async function hasDocumentCenterObject(siteId: string, bucket: string, key: string): Promise<boolean> {
+  return Boolean(await findRow(siteId, bucket, safeKey(key)));
+}
+
+/** Forget every file of a site and delete its documents (a site whose creation failed after its files were copied, session 4). */
+export async function removeSiteFiles(siteId: string): Promise<void> {
+  const knex = await getKnexClient();
+  const rows = await knex<ObjectRow>(TABLE).where({ site_id: siteId });
+  if (rows.length === 0) return;
+  await knex(TABLE).whereIn('id', rows.map((r) => r.id)).delete();
+  await deleteDocuments(rows);
 }
 
 export function createDocumentCenterStorageClient(siteId: string | null) {

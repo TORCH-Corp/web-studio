@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parseSiteInput } from './site-input';
+import { parseSiteInput, templateMetaFor } from './site-input';
 
 const valid = { name: 'Al Noor Trading', slug: 'al-noor', languages: ['ar', 'en'], default_language: 'ar' };
 
@@ -55,4 +55,27 @@ test('a template id is accepted when it is a uuid', () => {
 test('a missing name is refused', () => {
   const { errors } = parseSiteInput({ ...valid, name: '   ' });
   assert.deepEqual(errors, ['name: name is required']);
+});
+
+test('a template has no hosts, and template meta is only for a template (session 4)', () => {
+  const asTemplate = parseSiteInput({ ...valid, is_template: true, hosts: ['tpl.example.com'] });
+  assert.deepEqual(asTemplate.errors, ['hosts: a template has no hosts: it is never published on a host']);
+
+  const metaOnly = parseSiteInput({ ...valid, template: { name: { ar: 'قالب', en: 'Template' } } });
+  assert.deepEqual(metaOnly.errors, ['template: template is only for a template site (is_template)']);
+
+  const { input } = parseSiteInput({ ...valid, is_template: true, template: { name: { ar: 'قالب' }, description: { en: 'For shops' } } });
+  assert.equal(input?.is_template, true);
+  assert.deepEqual(input?.template, { name: { ar: 'قالب' }, description: { en: 'For shops' } });
+});
+
+test('template name and description take their defaults from the site name and nothing', () => {
+  assert.deepEqual(templateMetaFor({ name: 'Shop', template: undefined }), {
+    name: { ar: 'Shop', en: 'Shop' },
+    description: { ar: '', en: '' },
+  });
+  assert.deepEqual(templateMetaFor({ name: 'Shop', template: { name: { ar: 'متجر' }, description: { en: 'For shops' } } }), {
+    name: { ar: 'متجر', en: 'Shop' },
+    description: { ar: '', en: 'For shops' },
+  });
 });

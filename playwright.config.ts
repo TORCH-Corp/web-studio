@@ -1,6 +1,7 @@
 import os from 'os';
 import path from 'path';
 import { defineConfig } from '@playwright/test';
+import { TEMPLATES_ORG } from './e2e/helpers';
 import { ensureTestKeys } from './e2e/test-keys';
 import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
 
@@ -14,6 +15,7 @@ import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
  *
  * Needs DATABASE_URL_TEST: a PostgreSQL 16 database of its own whose name
  * contains "test"; its public schema is dropped and recreated on every run.
+ * `pnpm templates:seed` then creates TORCH's three templates (session 4).
  *
  * Session 2: a stand-in for auth-service (e2e/auth-stub.ts) runs beside the
  * app, and the app verifies access tokens with a test key pair
@@ -57,7 +59,7 @@ export default defineConfig({
       env: { E2E_AUTH_PORT: String(AUTH_PORT) },
     },
     {
-      command: `pnpm e2e:db && pnpm exec next build && pnpm exec next start -p ${PORT}`,
+      command: `pnpm e2e:db && pnpm templates:seed && pnpm exec next build && pnpm exec next start -p ${PORT}`,
       url: `${BASE_URL}/ycode/api/setup/status`,
       reuseExistingServer: !process.env.CI,
       timeout: 15 * 60_000,
@@ -74,6 +76,7 @@ export default defineConfig({
         PAGE_AUTH_SECRET: 'e2e-page-auth-secret',
         ALLOW_DEV_LOGIN: 'true',
         WS_SITES_DOMAIN: 'sites.test',
+        WS_TEMPLATES_ORG: TEMPLATES_ORG,
         PLATFORM_PUBLIC_URL: BASE_URL,
         PLATFORM_STORAGE_DIR: path.join(os.tmpdir(), `web-studio-e2e-storage-${PORT}`),
         PLATFORM_STORAGE: 'document-center',

@@ -32,7 +32,8 @@ export async function changeSiteSlug(siteId: string, newSlug: string): Promise<S
     if (!site) return null;
     if (site.slug === newSlug) return site;
 
-    const hosts = hostsAfterSlugChange(site.hosts, site.slug, newSlug);
+    // A template has no address (session 4): renaming it moves nothing.
+    const hosts = site.is_template ? site.hosts : hostsAfterSlugChange(site.hosts, site.slug, newSlug);
     if (await hostTakenByAnother(trx, siteId, hosts)) {
       throw new SiteConflictError('hosts', `${defaultHostFor(newSlug)} is already used by another site`);
     }
@@ -52,13 +53,16 @@ export async function changeSiteSlug(siteId: string, newSlug: string): Promise<S
 
 /**
  * Replace the custom hosts. The default address always stays, and a name under
- * the sites domain other than the site's own is refused.
+ * the sites domain other than the site's own is refused. A template keeps no
+ * hosts at all (session 4): the settings API refuses a custom host on one
+ * before it gets here.
  */
 export async function setCustomHosts(siteId: string, customHosts: string[]): Promise<Site | null> {
   const knex = await getKnexClient();
   const updated = await knex.transaction(async (trx) => {
     const site = (await trx('platform_sites').where({ id: siteId }).whereNull('deleted_at').forUpdate().first()) as Site | undefined;
     if (!site) return null;
+    if (site.is_template) return site;
 
     const own = defaultHostFor(site.slug);
     const squatted = customHosts.find((host) => host !== own && isSitesDomainName(host));

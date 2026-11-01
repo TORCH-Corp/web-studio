@@ -1,7 +1,7 @@
 # Web Studio port — ycode on the TORCH platform
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 and 5 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 8 below).
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -35,9 +35,39 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
   session 2. The proxy answers 404 to any builder request whose `ws_site` cookie is
   not for the session's organization, without a database lookup (the cookie is signed
   and carries the organization), and drops the cookie.
+- **Templates (session 4).** A template is a live site with `is_template` in the TORCH
+  templates organization (`WS_TEMPLATES_ORG`), built in the builder like any site and
+  never published on a host (`siteIdForHost` leaves templates out; the sites API refuses
+  hosts on one, provisioning gives it no default address, and the settings API keeps it so: a
+  slug change moves no address and a custom host is refused with 400). Migration
+  `20261101000004_torch_template_meta.ts` adds `platform_sites.template`
+  (`{name: {ar, en}, description: {ar, en}}`). `GET /ycode/api/platform/templates` lists them
+  for any organization (`manage_sites` r, in the proxy's route map). `POST /ycode/api/platform/sites`
+  with `template_id` copies the template's draft rows into the new site inside the
+  provisioning transaction (`lib/platform/template-copy.ts`: pages, page folders, page
+  layers, components, layer styles, colour variables, global variables, fonts, assets and
+  asset folders with their files, settings, locales and translations); every row gets a new
+  id and every reference inside the copied rows follows the map, by replacing each known id
+  wherever it appears in the row's text (the way ycode's own template export does). Only the
+  languages asked for are copied; a language the template lacks becomes an empty locale. Not
+  copied: published rows (the copy is a draft; the error pages get a published twin as blank
+  provisioning gives them), versions, collections, forms, API keys, webhooks, integrations, AI
+  chats, and the settings `published_at`, `published_css`, `site_name`, `global_canonical_url`,
+  `google_site_verification`, `ga_measurement_id` and the AI provider keys. A file an asset or
+  font row names that is missing fails the creation (rollback, the new site's files removed).
+  The blank template is provisioning, not a copy; an unknown `template_id` is 404. The
+  templates organization may send `is_template: true` with the template's `template` meta
+  (defaults: the site name, no description); anyone else gets 400. `pnpm templates:seed`
+  (`scripts/seed-templates.ts`) creates the three templates of part 1 with fixed ids
+  (`lib/platform/templates.ts`, `PART_1_TEMPLATES`) or refreshes their names and
+  descriptions; their content is built by hand (Task B).
 - **Storage.** `lib/platform/storage.ts` + `/platform-storage/...` route: files on disk per
   site/bucket, public GET, signed PUT uploads. Swap for the platform object store in
-  this one file (session 8: Document Center).
+  this one file (session 8: Document Center, `PLATFORM_STORAGE=document-center`,
+  `lib/platform/storage-document-center.ts`). The template copy's `copySiteStorage`,
+  `objectExists` and `removeSiteStorage` follow the mode: in Document Center the template's
+  files are uploaded again as new documents under the new site's organization
+  (`copySiteFiles`).
 - **Realtime off.** Channels are accepted and do nothing (collaboration is a c1+ item).
 - **Clean Postgres.** Migration `20240101000000_torch_platform_prelude.ts` provides the
   inert `auth.*` / `storage.*` objects the upstream migrations assume.
@@ -61,22 +91,29 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1, 3 an
     DOMAIN_SERVICE_API_KEY=<domain-service's SERVICE_API_KEY>   # (session 7); see WS_DOMAIN_CHECK below
     WS_DOMAIN_CHECK=on   # `off` accepts any host name as a custom host, with no check against verified domains
     ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
+    WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4)
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
+
+After the migrations, once per environment and again when a template's name or
+description changes: `pnpm templates:seed`.
 
 ## Tests
 - `pnpm test`: ycode's unit tests plus the platform's (`lib/platform/*.test.ts`).
 - `pnpm e2e`: Playwright, `e2e/*.spec.ts`. `playwright.config.ts` recreates the database
-  at `DATABASE_URL_TEST` (its name must contain "test"), builds, starts the app on port
-  3102 (`E2E_PORT`) with the dev login on and a stand-in for auth-service beside it
-  (`e2e/auth-stub.ts`, port `E2E_PORT + 1`, the people of `e2e/auth-fixtures.ts`), and runs
-  the specs over HTTP: sessions through the callback with tokens signed by the test key
-  pair (`e2e/test-keys.ts`, under the temp directory) or through
-  `POST /ycode/api/auth/dev-login`, sites through the sites API, published sites by
-  `x-forwarded-host`. Several worktrees can run it at once with their own `E2E_PORT` and
-  `DATABASE_URL_TEST`. `e2e/sites.spec.ts` is session 1's done-when check. A local
-  PostgreSQL 16 for it: `docker run -d --name webstudio-e2e-pg -e POSTGRES_PASSWORD=webstudio
-  -e POSTGRES_USER=webstudio -e POSTGRES_DB=webstudio_test -p 127.0.0.1:54329:5432 postgres:16-alpine`
+  at `DATABASE_URL_TEST` (its name must contain "test"), seeds TORCH's templates
+  (`pnpm templates:seed`), builds, starts the app on port 3102 (`E2E_PORT`) with the dev login
+  on and a stand-in for auth-service beside it (`e2e/auth-stub.ts`, port `E2E_PORT + 1`, the
+  people of `e2e/auth-fixtures.ts`), and runs the specs over HTTP: sessions through the
+  callback with tokens signed by the test key pair (`e2e/test-keys.ts`, under the temp
+  directory) or through `POST /ycode/api/auth/dev-login`, sites through the sites API,
+  published sites by `x-forwarded-host`. Several worktrees can run it at once with their own
+  `E2E_PORT` and `DATABASE_URL_TEST`. `e2e/sites.spec.ts` is session 1's done-when check,
+  `e2e/templates.spec.ts` session 4's. A local PostgreSQL 16 for it: `docker run -d --name
+  webstudio-e2e-pg -e POSTGRES_PASSWORD=webstudio -e POSTGRES_USER=webstudio
+  -e POSTGRES_DB=webstudio_test -p 127.0.0.1:54329:5432 postgres:16-alpine`
   then `DATABASE_URL_TEST=postgresql://webstudio:webstudio@127.0.0.1:54329/webstudio_test pnpm e2e`.
+  Sessions running side by side each use their own database in that container and their
+  own `E2E_PORT`.
 - Package manager: pnpm (`pnpm-lock.yaml`, imported from ycode's npm lock). `.npmrc` hoists
   the `@tiptap/*` and `@radix-ui/*` packages ycode imports without declaring them.
 
@@ -135,6 +172,18 @@ inbox → signed webhook with Arabic text; Arabic and Kurdish locales render
 Session 1: `e2e/sites.spec.ts` (two organizations, three sites, publish, isolation of
 pages, assets and locales, 404 across organizations, 401 without a session, 404 on an
 unknown host, soft delete) and `pnpm test` pass; 49 migrations from empty.
+
+Session 4: `e2e/templates.spec.ts` (the three seeded templates listed for any
+organization, 403 without `manage_sites` r; a template with three pages, a component, a
+style, a colour, an uploaded asset and a translation created through the API in the
+templates organization; a site copied from it in another organization with the same
+content under new ids, the asset's file copied, the draft preview identical to the
+template's up to ids; the template and the copy edited independently; one language copied
+alone; blank by the blank template or with no template; unknown template 404; `is_template`
+refused outside the templates organization and with hosts; a template has no default address
+and its would-be address is 404, also after a rename through the settings API, which refuses a
+custom host on it; the asset copied in Document Center mode) and `pnpm test`
+pass (367); 52 migrations from empty.
 
 Session 5: `e2e/publish.spec.ts` (default address with no host given, two sites publishing with their
 own content, an unpublished edit invisible until publish, `/ar` rtl and 404 where absent, unknown host,
@@ -251,6 +300,12 @@ each site's own 404 page, a second host after the next publish) passes with `pnp
 - `e2e/lock.spec.ts` is the done-when check (`pnpm test`: 348; `pnpm e2e`: 46).
 
 ## Not done (c1 and after)
+- **A published page renders an image layer as ycode's placeholder** (the data-URL SVG of
+  `ASSET_PLACEHOLDERS`) while the preview renders the asset (`/a/<token>/file`). Seen in
+  session 4 on a site copied from a template and reproduced on a plain site (upload a PNG,
+  put it on the homepage, publish, fetch by host); the published asset row exists and the
+  layers name it. The cause is in the published render path, before `PageRenderer`'s asset
+  lookup. Session 5 (publishing) or 3 (platform assets) owns it.
 - Realtime collaboration and the MCP OAuth flow were not exercised (the AI agent, MCP and
   integrations screens open: `e2e/offline.spec.ts`).
 - The cookies are `SameSite=Lax` without `Secure`: right for a top-level webview behind

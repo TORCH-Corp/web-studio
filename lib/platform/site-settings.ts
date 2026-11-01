@@ -165,6 +165,9 @@ async function removeTranslations(localeId: string): Promise<void> {
 }
 
 async function checkCustomHost(site: Site, host: string): Promise<void> {
+  if (site.is_template) {
+    throw new SiteSettingsError('invalid', 'a template has no hosts: it is never published on a host', { field: 'custom_host' });
+  }
   if (isSitesDomainName(host) && host !== defaultHostFor(site.slug)) {
     throw new SiteSettingsError('invalid', `${host} is under the sites domain; only a site's own slug can use it`, { field: 'custom_host' });
   }

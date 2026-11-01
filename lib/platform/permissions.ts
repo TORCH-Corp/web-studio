@@ -116,6 +116,7 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/sites/[id]': sites(), // GET one site with its editor lock (r, session 6); DELETE (d)
   'platform/sites/[id]/open': sites(), // GET (r)
   'platform/sites/[id]/settings': sites(), // GET (r), PATCH (u): name, languages, domain, SEO defaults, slug (session 7)
+  'platform/templates': sites(), // GET (r): TORCH's templates, the same list for every organization (session 4)
   // The builder keeps the open site's editor lock (session 6): POST takes it or refreshes it, DELETE lets go. A
   // builder that may only read still holds the lock for the minutes it is open, so these are reads, never writes.
   'platform/site-lock': content({ POST: 'r', DELETE: 'r' }),

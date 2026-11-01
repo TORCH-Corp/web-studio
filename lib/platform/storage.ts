@@ -16,7 +16,14 @@
 import fs from 'fs/promises';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import path from 'path';
-import { createDocumentCenterStorageClient, readDocumentCenterObject, writeDocumentCenterObject } from '@/lib/platform/storage-document-center';
+import {
+  copySiteFiles,
+  createDocumentCenterStorageClient,
+  hasDocumentCenterObject,
+  readDocumentCenterObject,
+  removeSiteFiles,
+  writeDocumentCenterObject,
+} from '@/lib/platform/storage-document-center';
 import { safeKey, toBuffer, type FileMeta, type StorageError } from '@/lib/platform/storage-common';
 
 export const STORAGE_DIR = process.env.PLATFORM_STORAGE_DIR || path.join(process.cwd(), 'storage', 'platform');
@@ -27,8 +34,50 @@ export function objectPath(siteId: string, bucket: string, key: string): string 
   return path.join(STORAGE_DIR, siteId, bucket, safeKey(key));
 }
 
+function sitePath(siteId: string): string {
+  return path.join(STORAGE_DIR, siteId);
+}
+
 function metaPath(file: string): string {
   return file + '.meta.json';
+}
+
+/** The public URL of an object, the one an asset row stores in `public_url`: Web Studio's own route, in both modes. */
+export function publicUrlFor(siteId: string, bucket: string, key: string): string {
+  return `${PUBLIC_URL}/platform-storage/${siteId}/${bucket}/${safeKey(key)}`;
+}
+
+export function objectExists(siteId: string, bucket: string, key: string): Promise<boolean> {
+  if (storageMode() === 'document-center') return hasDocumentCenterObject(siteId, bucket, key);
+  return fs.stat(objectPath(siteId, bucket, key)).then((stat) => stat.isFile()).catch(() => false);
+}
+
+/**
+ * Copy every file of one site to another (part 1, session 4: a site created
+ * from a template gets the template's files). On disk the site's directory is
+ * copied; in Document Center the bytes are uploaded again as new documents
+ * under the new site's organization, which the caller names because the new
+ * site's row is not committed yet while the template copy runs. A template
+ * with no files is nothing to copy.
+ */
+export async function copySiteStorage(fromSiteId: string, toSiteId: string, toOrganizationId: string): Promise<void> {
+  if (storageMode() === 'document-center') {
+    await copySiteFiles(fromSiteId, toSiteId, toOrganizationId);
+    return;
+  }
+  const source = sitePath(fromSiteId);
+  const exists = await fs.stat(source).then((stat) => stat.isDirectory()).catch(() => false);
+  if (!exists) return;
+  await fs.cp(source, sitePath(toSiteId), { recursive: true, errorOnExist: true, force: false });
+}
+
+/** Remove every file of a site (a site whose creation failed after its files were copied). */
+export async function removeSiteStorage(siteId: string): Promise<void> {
+  if (storageMode() === 'document-center') {
+    await removeSiteFiles(siteId);
+    return;
+  }
+  await fs.rm(sitePath(siteId), { recursive: true, force: true });
 }
 
 export function signUpload(siteId: string, bucket: string, key: string, expires: number): string {
@@ -99,7 +148,7 @@ function createDiskStorageClient(siteId: string | null) {
     },
 
     getPublicUrl(key: string) {
-      return { data: { publicUrl: `${PUBLIC_URL}/platform-storage/${site()}/${bucket}/${safeKey(key)}` } };
+      return { data: { publicUrl: publicUrlFor(site(), bucket, key) } };
     },
 
     async createSignedUploadUrl(key: string) {

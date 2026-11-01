@@ -22,6 +22,24 @@ function unique<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }
 
+/** A text in both of part 1's languages. */
+const localisedText = (max: number) =>
+  z.object({ ar: z.string().trim().max(max), en: z.string().trim().max(max) });
+
+/** What the Templates list shows for a template: its name and description in Arabic and English. */
+export const templateMetaSchema = z.object({
+  name: localisedText(255),
+  description: localisedText(2000),
+});
+
+export type TemplateMeta = z.infer<typeof templateMetaSchema>;
+
+/** The same, as a creator may send it: any part can be left out and takes its default (session 4). */
+const templateMetaInputSchema = z.object({
+  name: localisedText(255).partial().optional(),
+  description: localisedText(2000).partial().optional(),
+});
+
 export const siteInputSchema = z
   .object({
     name: z.string().trim().min(1, 'name is required').max(255),
@@ -37,15 +55,35 @@ export const siteInputSchema = z
       .array(z.string().trim().toLowerCase().regex(HOST_PATTERN, 'hosts must be host names such as example.com'))
       .default([])
       .transform(unique),
-    /** Accepted now so the shell can send it; creating from a template is session 4. */
+    /** The template to copy (session 4). Absent: a blank site. */
     template_id: z.uuid().optional(),
+    /** Only the TORCH templates organization creates templates (session 4); the route checks that. */
+    is_template: z.boolean().optional(),
+    /** The template's name and description in Arabic and English; only with `is_template`. */
+    template: templateMetaInputSchema.optional(),
   })
   .refine((value) => value.languages.includes(value.default_language), {
     message: 'default_language must be one of languages',
     path: ['default_language'],
+  })
+  .refine((value) => !value.is_template || value.hosts.length === 0, {
+    message: 'a template has no hosts: it is never published on a host',
+    path: ['hosts'],
+  })
+  .refine((value) => value.is_template || value.template === undefined, {
+    message: 'template is only for a template site (is_template)',
+    path: ['template'],
   });
 
 export type SiteInput = z.infer<typeof siteInputSchema>;
+
+/** The template's name and description with the defaults filled: the site's name, and no description. */
+export function templateMetaFor(input: Pick<SiteInput, 'name' | 'template'>): TemplateMeta {
+  return {
+    name: { ar: input.template?.name?.ar || input.name, en: input.template?.name?.en || input.name },
+    description: { ar: input.template?.description?.ar ?? '', en: input.template?.description?.en ?? '' },
+  };
+}
 
 /** Parse a request body; the messages are ready to return in a 400. */
 export function parseSiteInput(body: unknown): { input: SiteInput; errors: null } | { input: null; errors: string[] } {
