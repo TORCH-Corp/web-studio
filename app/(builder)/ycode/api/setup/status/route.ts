@@ -18,7 +18,7 @@ export async function GET() {
   let migrated = false;
   try {
     const knex = await getKnexClient();
-    migrated = await knex.schema.hasTable('platform_organizations');
+    migrated = await knex.schema.hasTable('platform_sites');
   } catch (error) {
     return noCache({ is_configured: true, is_setup_complete: false, is_vercel: false, error: error instanceof Error ? error.message : 'Database unreachable' });
   }

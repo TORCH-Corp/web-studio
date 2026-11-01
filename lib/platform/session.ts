@@ -7,11 +7,18 @@
  * users; the only issuer in this prototype is the dev login route, which
  * stands in for `auth-service`.
  *
+ * The site the builder is working on travels in a second signed cookie,
+ * `ws_site`, minted by `GET /ycode/api/platform/sites/{id}/open` once the
+ * site is known to belong to the session's organization. It carries the
+ * organization too, so the proxy can refuse a cookie from another
+ * organization without a database lookup.
+ *
  * Web Crypto is used so the same code runs in the Next proxy and in route
  * handlers.
  */
 
 export const SESSION_COOKIE = 'bos_session';
+export const SITE_COOKIE = 'ws_site';
 
 /** Web Studio permission leaves, one per area of the app, with the standard flags. */
 export type WebStudioLeaf = 'webstudio.manage_sites' | 'webstudio.manage_content' | 'webstudio.manage_forms' | 'webstudio.manage_orders';
@@ -26,6 +33,18 @@ export interface BosSession {
   iat: number;
   exp: number;
 }
+
+/** The site a builder session works on, and the organization it was checked against. */
+export interface SiteCookie {
+  site: string;
+  org: string;
+  iat: number;
+  exp: number;
+}
+
+const SESSION_TYP = 'JWT';
+const SITE_TYP = 'ws_site';
+const DEFAULT_TTL_SECONDS = 8 * 3600;
 
 const encoder = new TextEncoder();
 
@@ -51,31 +70,55 @@ function secret(): string {
   return s;
 }
 
-export async function signSession(payload: Omit<BosSession, 'iat' | 'exp'>, ttlSeconds = 8 * 3600): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const body: BosSession = { ...payload, iat: now, exp: now + ttlSeconds };
-  const head = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+async function sign<T extends object>(typ: string, body: T): Promise<string> {
+  const head = b64url(JSON.stringify({ alg: 'HS256', typ }));
   const data = `${head}.${b64url(JSON.stringify(body))}`;
   const sig = await crypto.subtle.sign('HMAC', await key(secret()), encoder.encode(data));
   return `${data}.${b64url(sig)}`;
 }
 
-export async function verifySession(token: string | undefined | null): Promise<BosSession | null> {
+/** The body of a token whose signature, type and expiry check out; null otherwise. */
+async function verify<T extends { exp?: number }>(typ: string, token: string | undefined | null): Promise<T | null> {
   if (!token) return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   try {
+    const head = JSON.parse(fromB64url(parts[0])) as { typ?: string };
+    if (head.typ !== typ) return null;
     const data = `${parts[0]}.${parts[1]}`;
     const sigBytes = Uint8Array.from(fromB64url(parts[2]), (c) => c.charCodeAt(0));
     const ok = await crypto.subtle.verify('HMAC', await key(secret()), sigBytes, encoder.encode(data));
     if (!ok) return null;
-    const body = JSON.parse(fromB64url(parts[1])) as BosSession;
+    const body = JSON.parse(fromB64url(parts[1])) as T;
     if (!body.exp || body.exp < Math.floor(Date.now() / 1000)) return null;
-    if (!body.sub || !body.org) return null;
     return body;
   } catch {
     return null;
   }
+}
+
+export async function signSession(payload: Omit<BosSession, 'iat' | 'exp'>, ttlSeconds = DEFAULT_TTL_SECONDS): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const body: BosSession = { ...payload, iat: now, exp: now + ttlSeconds };
+  return sign(SESSION_TYP, body);
+}
+
+export async function verifySession(token: string | undefined | null): Promise<BosSession | null> {
+  const body = await verify<BosSession>(SESSION_TYP, token);
+  if (!body || !body.sub || !body.org) return null;
+  return body;
+}
+
+export async function signSiteCookie(payload: Pick<SiteCookie, 'site' | 'org'>, ttlSeconds = DEFAULT_TTL_SECONDS): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const body: SiteCookie = { site: payload.site, org: payload.org, iat: now, exp: now + ttlSeconds };
+  return sign(SITE_TYP, body);
+}
+
+export async function verifySiteCookie(token: string | undefined | null): Promise<SiteCookie | null> {
+  const body = await verify<SiteCookie>(SITE_TYP, token);
+  if (!body || !body.site || !body.org) return null;
+  return body;
 }
 
 /**

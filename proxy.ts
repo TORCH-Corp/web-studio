@@ -1,4 +1,4 @@
-import { SESSION_COOKIE, verifySession } from '@/lib/platform/session';
+import { SESSION_COOKIE, SITE_COOKIE, verifySession, verifySiteCookie, type BosSession } from '@/lib/platform/session';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/security-headers-server';
@@ -11,8 +11,14 @@ const PUBLIC_API_PREFIXES = [
   '/ycode/api/setup/',    // Setup wizard — needed before any user exists
   '/ycode/api/auth/',     // Auth callbacks and session checks
   '/ycode/api/v1/',       // Public API — has own API key auth
-  '/ycode/api/platform/', // Platform-to-platform API — has its own shared-secret auth
 ];
+
+/**
+ * Routes that need a session but no site: the sites API itself, which lists,
+ * creates and opens sites. A stale `ws_site` cookie must not lock a user out
+ * of it (part 1, session 1).
+ */
+const SITELESS_API_PREFIXES = ['/ycode/api/platform/'];
 
 /**
  * Patterns for collection item endpoints that must be accessible on published pages
@@ -87,7 +93,29 @@ async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null>
     );
   }
 
+  if (!SITELESS_API_PREFIXES.some((prefix) => request.nextUrl.pathname.startsWith(prefix))) {
+    const refused = await refuseForeignSiteCookie(request, session);
+    if (refused) return refused;
+  }
+
   return NextResponse.next({ request });
+}
+
+/**
+ * Part 1, session 1: the builder works on the site named by the signed
+ * `ws_site` cookie. The cookie carries the organization it was checked
+ * against, so a cookie that is not valid or belongs to another organization
+ * is refused here, with no database lookup, and dropped from the browser.
+ * lib/platform/site.ts then checks the site itself against the database.
+ */
+async function refuseForeignSiteCookie(request: NextRequest, session: BosSession): Promise<NextResponse | null> {
+  const raw = request.cookies.get(SITE_COOKIE)?.value;
+  if (!raw) return null;
+  const siteCookie = await verifySiteCookie(raw);
+  if (siteCookie && siteCookie.org === session.org) return null;
+  const response = NextResponse.json({ error: 'Site not found' }, { status: 404 });
+  response.cookies.set({ name: SITE_COOKIE, value: '', path: '/', maxAge: 0 });
+  return response;
 }
 
 export async function proxy(request: NextRequest) {
@@ -115,6 +143,9 @@ export async function proxy(request: NextRequest) {
         if (pathname.startsWith('/ycode/preview')) {
           return NextResponse.redirect(new URL('/ycode', request.url));
         }
+        return authResponse;
+      }
+      if (authResponse.status === 404) {
         return authResponse;
       }
       // Authenticated — pass through

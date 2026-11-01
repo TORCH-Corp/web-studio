@@ -9,10 +9,10 @@
  * of knex and plain PostgreSQL, plus `.rpc()`, `.storage` and a no-op
  * `.channel()`.
  *
- * Every query is scoped to one organization: `tenant_id` (the Business OS
- * organization id; ycode's own column name, kept so its direct knex paths
- * scope the same way) is added to every WHERE and to every INSERT. The client never sees another
- * organization's rows.
+ * Every query is scoped to one site: `tenant_id` (the site id; ycode's own
+ * column name, kept so its direct knex paths scope the same way) is added to
+ * every WHERE and to every INSERT. The client never sees another site's rows
+ * (part 1, session 1: the tenant is the site, under its organization).
  */
 
 import type { Knex } from 'knex';
@@ -70,7 +70,7 @@ const RELATIONS: Record<string, Record<string, [string, string]>> = {
   webhook_deliveries: { webhooks: ['webhook_id', 'id'] },
 };
 
-/** Tables that are shared by the whole deployment rather than owned by one organization. */
+/** Tables that are shared by the whole deployment rather than owned by one site. */
 const GLOBAL_TABLES = new Set(['migrations']);
 
 const NO_ROWS: PgError = {
@@ -248,7 +248,7 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
 
   constructor(
     private readonly table: string,
-    private readonly organizationId: string | null,
+    private readonly siteId: string | null,
   ) {}
 
   // ---- verbs -------------------------------------------------------------
@@ -350,7 +350,7 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
   }
 
   private applyScope(qb: Knex.QueryBuilder): void {
-    if (this.scoped) qb.where(`${this.table}.tenant_id`, this.organizationId);
+    if (this.scoped) qb.where(`${this.table}.tenant_id`, this.siteId);
     for (const f of this.filters) applyFilter(qb, f);
   }
 
@@ -368,16 +368,16 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
         out[key] = value;
       }
     }
-    if (this.scoped && this.mode !== 'update') out.tenant_id = this.organizationId;
+    if (this.scoped && this.mode !== 'update') out.tenant_id = this.siteId;
     return out;
   }
 
   private async execute(): Promise<PgResult<T>> {
     try {
       const knex = await getKnexClient();
-      if (this.scoped && !this.organizationId) {
+      if (this.scoped && !this.siteId) {
         if (this.mode === 'select') return { data: (this.singleMode ? null : []) as T, error: this.singleMode === 'single' ? NO_ROWS : null, count: this.countMode ? 0 : null, status: 200, statusText: 'OK' };
-        return { data: null, error: { message: `No organization in context for ${this.mode} on ${this.table}`, code: 'TORCH_NO_ORG', details: null, hint: null }, count: null, status: 400, statusText: 'Bad Request' };
+        return { data: null, error: { message: `No site in context for ${this.mode} on ${this.table}`, code: 'TORCH_NO_SITE', details: null, hint: null }, count: null, status: 400, statusText: 'Bad Request' };
       }
       switch (this.mode) {
         case 'select': return await this.runSelect(knex);
@@ -400,7 +400,7 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
       if (!rel) throw new Error(`Unknown relation ${this.table} -> ${embed.table}`);
       base.whereExists((sub) => {
         sub.select(knex.raw('1')).from(embed.table).whereRaw('?? = ??', [`${embed.table}.${rel[1]}`, `${this.table}.${rel[0]}`]);
-        if (!GLOBAL_TABLES.has(embed.table)) sub.where(`${embed.table}.tenant_id`, this.organizationId);
+        if (!GLOBAL_TABLES.has(embed.table)) sub.where(`${embed.table}.tenant_id`, this.siteId);
         for (const f of embed.filters) applyFilter(sub, f);
       });
     }
@@ -432,7 +432,7 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
       let related: Record<string, unknown>[] = [];
       if (keys.length) {
         const q = knex(embed.table).select(cols).whereIn(embedCol, keys as string[]);
-        if (!GLOBAL_TABLES.has(embed.table)) q.where('tenant_id', this.organizationId);
+        if (!GLOBAL_TABLES.has(embed.table)) q.where('tenant_id', this.siteId);
         for (const f of embed.filters) applyFilter(q, f);
         related = (await q) as Record<string, unknown>[];
       }
@@ -474,7 +474,7 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
     const q: Knex.QueryBuilder = knex(this.table).insert(rows);
     if (this.mode === 'upsert') {
       // PostgREST merges every column of the payload on conflict. Natural keys
-      // (settings.key, locales.code, …) are unique per organization now, so the
+      // (settings.key, locales.code, …) are unique per site now, so the
       // conflict target gains tenant_id; ids are UUIDs and stay as they are.
       const conflict = this.conflictColumns!;
       const target = this.scoped && !conflict.includes('id') && !conflict.includes('tenant_id') ? ['tenant_id', ...conflict] : conflict;
@@ -507,12 +507,12 @@ export class QueryBuilder<T = unknown> implements PromiseLike<PgResult<T>> {
 }
 
 /** The handful of RPCs ycode calls, implemented in SQL here instead of as database functions. */
-async function rpc(organizationId: string | null, name: string, args: Record<string, unknown> = {}): Promise<PgResult<unknown>> {
+async function rpc(siteId: string | null, name: string, args: Record<string, unknown> = {}): Promise<PgResult<unknown>> {
   try {
     const knex = await getKnexClient();
     switch (name) {
       case 'increment_webhook_failure_count': {
-        await knex('webhooks').where({ id: args.webhook_id as string, tenant_id: organizationId })
+        await knex('webhooks').where({ id: args.webhook_id as string, tenant_id: siteId })
           .update({ failure_count: knex.raw('COALESCE(failure_count, 0) + 1'), updated_at: new Date().toISOString() });
         return { data: null, error: null, count: null, status: 204, statusText: 'No Content' };
       }
@@ -530,7 +530,7 @@ async function rpc(organizationId: string | null, name: string, args: Record<str
               .whereIn('collection_id', ids)
               .where('is_published', args.p_is_published as boolean)
               .whereNull('deleted_at')
-              .where('tenant_id', organizationId)
+              .where('tenant_id', siteId)
               .as('ranked'),
           )
           .where('rn', '<=', limit);
@@ -571,15 +571,15 @@ export interface PlatformClient {
   removeChannel(): Promise<'ok'>;
   removeAllChannels(): Promise<'ok'[]>;
   auth: { admin: { listUsers: () => Promise<{ data: { users: unknown[] }; error: null }> } };
-  organizationId: string | null;
+  siteId: string | null;
 }
 
-export function createPlatformClient(organizationId: string | null): PlatformClient {
+export function createPlatformClient(siteId: string | null): PlatformClient {
   return {
-    organizationId,
-    from: <T = unknown>(table: string) => new QueryBuilder<T>(table, organizationId),
-    rpc: (name, args) => rpc(organizationId, name, args),
-    storage: createStorageClient(organizationId),
+    siteId,
+    from: <T = unknown>(table: string) => new QueryBuilder<T>(table, siteId),
+    rpc: (name, args) => rpc(siteId, name, args),
+    storage: createStorageClient(siteId),
     channel: () => noopChannel(),
     removeChannel: async () => 'ok' as const,
     removeAllChannels: async () => [],

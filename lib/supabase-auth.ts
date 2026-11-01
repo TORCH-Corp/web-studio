@@ -8,7 +8,7 @@
  */
 
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import { getSessionFromCookies } from '@/lib/platform/organization';
+import { getSessionFromCookies } from '@/lib/platform/site';
 import { roleFromPermissions, type BosSession } from '@/lib/platform/session';
 import { getSupabaseAdmin } from '@/lib/supabase-server';
 
@@ -38,7 +38,8 @@ export async function getAuthUser(): Promise<AuthResult | null> {
   const session = await getSessionFromCookies();
   if (!session) return null;
   if (!roleFromPermissions(session.perms)) return null; // no Web Studio permission at all
-  const client = await getSupabaseAdmin(session.org);
+  // Scoped to the site the builder is working on (the ws_site cookie), not to the organization.
+  const client = await getSupabaseAdmin();
   if (!client) return null;
   return { user: userFromSession(session), client, session };
 }

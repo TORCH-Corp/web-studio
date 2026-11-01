@@ -7,7 +7,9 @@ import { noCache } from '@/lib/api-response';
  *
  * Stands in for Business OS `auth-service`: issues a Web Studio session for a
  * user of one organization with the given permission flags. Enabled only when
- * ALLOW_DEV_LOGIN=true; production receives the session from Business OS.
+ * ALLOW_DEV_LOGIN=true (a developer's machine, the e2e suite); production
+ * receives the session from Business OS. The site is chosen afterwards with
+ * GET /ycode/api/platform/sites/{id}/open.
  */
 export async function POST(request: NextRequest) {
   if (process.env.ALLOW_DEV_LOGIN !== 'true') {
