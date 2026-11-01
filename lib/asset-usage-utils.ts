@@ -5,7 +5,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase-server';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@/lib/platform/types';
 import type { Layer } from '@/types';
 import { ASSET_FIELD_TYPES, findDisplayField } from './collection-field-utils';
 

@@ -1,0 +1,6 @@
+{
+  "@tailwindcss/browser": "4.3.3",
+  "gsap": "3.14.2",
+  "swiper": "12.1.2",
+  "mapbox-gl": "3.20.0"
+}

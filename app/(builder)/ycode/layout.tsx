@@ -1,5 +1,7 @@
 import { headers } from 'next/headers';
 import { PrimaryDomainProvider } from '@/hooks/use-primary-domain';
+import { WsPartsProvider } from '@/hooks/use-ws-parts';
+import { partsRaised } from '@/lib/platform/parts';
 import { getRequestOrigin } from '@/lib/url-utils';
 import YCodeLayoutClient from './YCodeLayoutClient';
 
@@ -25,7 +27,9 @@ export default async function YCodeLayout({ children }: { children: React.ReactN
 
   return (
     <PrimaryDomainProvider value={primaryDomain}>
-      <YCodeLayoutClient>{children}</YCodeLayoutClient>
+      <WsPartsProvider value={partsRaised()}>
+        <YCodeLayoutClient>{children}</YCodeLayoutClient>
+      </WsPartsProvider>
     </PrimaryDomainProvider>
   );
 }

@@ -8,7 +8,7 @@
  * cookie. No database or storage calls ever happened from the browser.
  */
 
-import type { RealtimeChannel, Session, SupabaseClient, User } from '@supabase/supabase-js';
+import type { RealtimeChannel, Session, SupabaseClient, User } from '@/lib/platform/types';
 
 type Listener = (event: string, session: Session | null) => void;
 

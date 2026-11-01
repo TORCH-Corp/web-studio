@@ -27,7 +27,6 @@ import {
  * - /ycode/components/[id] - Component editing
  * - /ycode/settings - Settings pages
  * - /ycode/localization - Localization pages
- * - /ycode/profile - Profile pages
  *
  * Excluded routes:
  * - /ycode/preview - Preview routes are excluded and render independently
@@ -62,12 +61,7 @@ function YCodeLayoutInner({ children }: { children: React.ReactNode }) {
   // Exclude standalone routes from YCodeBuilder
   // These routes should render independently without the editor UI
   const prefixRoutes = ['/ycode/preview', '/ycode/devtools/', '/ycode/oauth/'];
-  const exactRoutes = ['/ycode/welcome', '/ycode/accept-invite'];
-
-  if (
-    prefixRoutes.some(route => pathname?.startsWith(route))
-    || exactRoutes.includes(pathname || '')
-  ) {
+  if (prefixRoutes.some(route => pathname?.startsWith(route))) {
     return <>{children}</>;
   }
 

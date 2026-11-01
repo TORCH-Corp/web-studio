@@ -3,9 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabase-server';
 import { STORAGE_BUCKET } from '@/lib/asset-constants';
 import { YCODE_EXTERNAL_API_URL } from '@/lib/config';
 
-// API key for uploading templates to the shared template service
-const TEMPLATE_UPLOAD_API_KEY =
-  process.env.TEMPLATE_UPLOAD_API_KEY || 'f0c716a7-c78e-467d-81c2-cbe774659e60';
+// API key for uploading templates to the template service
+const TEMPLATE_UPLOAD_API_KEY = process.env.TEMPLATE_UPLOAD_API_KEY || '';
 
 /**
  * Tables to export (order matters for foreign key constraints).
@@ -546,6 +545,10 @@ export async function exportAndUploadTemplate(
   description = '',
   submitterEmail = ''
 ): Promise<{ success: boolean; error?: string }> {
+  if (!YCODE_EXTERNAL_API_URL || !TEMPLATE_UPLOAD_API_KEY) {
+    return { success: false, error: 'No template service is configured.' };
+  }
+
   try {
     // 1. Generate export
     const exportResult = await exportTemplateSQL(

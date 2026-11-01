@@ -140,7 +140,7 @@ export async function generateCSS(layers: Layer[]): Promise<string> {
 <html>
 <head>
   <meta charset="UTF-8">
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="/vendor/tailwindcss-browser.js"></script>
   <style type="text/tailwindcss">
     ${TAILWIND_CUSTOM_VARIANTS}
   </style>

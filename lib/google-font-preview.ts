@@ -7,8 +7,10 @@
  * Uses document.fonts.load() to force-download font files before rendering.
  */
 
+import { FONT_MIRROR_BASE } from '@/lib/platform/font-mirror-url';
+
 const STYLE_PREFIX = 'gfp-batch-';
-const FONTS_CSS_BASE = 'https://fonts.googleapis.com/css2';
+const FONTS_CSS_BASE = `${FONT_MIRROR_BASE}/css2`;
 const BATCH_SIZE = 50;
 
 /** Families already queued for loading */

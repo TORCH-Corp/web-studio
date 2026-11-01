@@ -57,5 +57,5 @@ const MEDIA_MIME_TYPES: Record<string, string> = {
 
 export function mediaContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase()
-  return MEDIA_MIME_TYPES[ext] ?? 'application/octet-stream'
+  return MEDIA_MIME_TYPES[ext] ?? MIME_TYPES[ext] ?? 'application/octet-stream'
 }
