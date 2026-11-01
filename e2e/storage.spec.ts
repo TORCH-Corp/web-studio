@@ -16,7 +16,8 @@ import { createSite, openSite, signIn } from './helpers';
 test.describe.configure({ mode: 'serial' });
 
 const RUN = Date.now().toString(36);
-const DC = `http://127.0.0.1:${Number(process.env.E2E_DC_PORT || 3103)}`;
+// The same default as playwright.config.ts: the app's port + 2 (the auth stub holds + 1).
+const DC = `http://127.0.0.1:${Number(process.env.E2E_DC_PORT || Number(process.env.E2E_PORT || 3102) + 2)}`;
 const ORG_A = '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a';
 const ORG_B = '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b';
 const USER_A = { sub: '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a', email: 'owner-a@example.com', name: 'Owner A', org: ORG_A };

@@ -16,7 +16,7 @@ import http from 'http';
 import { randomUUID } from 'crypto';
 
 const KEY = process.env.FAKE_DC_KEY || 'e2e-document-center-key';
-const PORT = Number(process.env.FAKE_DC_PORT || 3103);
+const PORT = Number(process.env.FAKE_DC_PORT || 3104); // playwright.config.ts passes the app's port + 2
 
 interface Folder { id: string; name: string; isSystem: boolean }
 interface Doc { id: string; name: string; filename: string; mimeType: string; folderId: string | null; data: Buffer; linkedEntityId?: string; deleted: boolean }
