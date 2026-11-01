@@ -129,11 +129,21 @@ test('removing a language asks first, then removes it with its translations; add
   expect(await asked.json()).toMatchObject({ error: 'confirmation_required', remove: [{ code: 'en', translations: 1 }] });
   expect((await locales()).map((l) => l.code).sort()).toEqual(['ar', 'en']);
 
+  // Published with both languages first, so the 404 below is the removal's doing.
+  await publish(api);
+  expect((await visit(HOST, '/en')).status).toBe(200);
+
   const done = await patch({ languages: ['ar'], confirm: true });
   expect(done.status(), await done.text()).toBe(200);
   expect((await done.json()).data.languages.map((l: { code: string }) => l.code)).toEqual(['ar']);
   expect((await locales()).map((l) => l.code)).toEqual(['ar']);
   expect(((await (await api.get(`/ycode/api/translations?locale_id=${en.id}`)).json()).data as unknown[])).toEqual([]);
+
+  // The published site keeps the language until the next publish takes it off.
+  expect((await visit(HOST, '/en')).status).toBe(200);
+  await publish(api);
+  expect((await visit(HOST, '/en')).status).toBe(404);
+  expect((await visit(HOST, '/')).status).toBe(200);
 
   const added = await patch({ languages: ['ar', 'en'] });
   expect(added.status(), await added.text()).toBe(200);
@@ -142,6 +152,13 @@ test('removing a language asks first, then removes it with its translations; add
   expect(after.find((l) => l.code === 'ar')!.is_default).toBe(true);
   const reAdded = after.find((l) => l.code === 'en')!;
   expect((await (await api.get(`/ycode/api/translations?locale_id=${reAdded.id}`)).json()).data).toEqual([]);
+
+  // Added through PATCH, the language answers at its path after the next publish.
+  expect((await visit(HOST, '/en')).status).toBe(404);
+  await publish(api);
+  const english = await visit(HOST, '/en');
+  expect(english.status).toBe(200);
+  expect(english.html).toMatch(/<html[^>]*\blang="en"/);
 });
 
 test('the default language moves; the default cannot be removed without naming another', async () => {
