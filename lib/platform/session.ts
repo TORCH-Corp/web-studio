@@ -20,6 +20,29 @@
 export const SESSION_COOKIE = 'bos_session';
 export const SITE_COOKIE = 'ws_site';
 
+/** The attributes every Web Studio cookie carries. */
+export interface CookieAttributes {
+  path: '/';
+  httpOnly: true;
+  sameSite: 'lax';
+  secure: boolean;
+}
+
+/**
+ * Attributes for the session and site cookies. `Secure` follows the request's scheme:
+ * nginx terminates TLS in front of the service and says so in X-Forwarded-Proto, so a
+ * cookie minted on production is only ever sent back over HTTPS. A plain-HTTP request
+ * (the local e2e run, a developer's machine) gets no Secure flag, which a browser would
+ * otherwise refuse to store. auth-service and ycode's page-auth cookie decide by
+ * NODE_ENV instead; here the local e2e suite runs the production build over HTTP, so
+ * the request is the better witness.
+ */
+export function cookieAttributes(headers: Headers, url: { protocol: string }): CookieAttributes {
+  const forwarded = headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  const secure = forwarded ? forwarded === 'https' : url.protocol === 'https:';
+  return { path: '/', httpOnly: true, sameSite: 'lax', secure };
+}
+
 /** Web Studio permission leaves, one per area of the app, with the standard flags. */
 export type WebStudioLeaf = 'webstudio.manage_sites' | 'webstudio.manage_content' | 'webstudio.manage_forms' | 'webstudio.manage_orders';
 export type Flag = 'c' | 'r' | 'u' | 'd' | 'x' | 'export' | 'use_ai';

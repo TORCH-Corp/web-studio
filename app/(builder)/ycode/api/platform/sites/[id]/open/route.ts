@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { noCache } from '@/lib/api-response';
-import { SITE_COOKIE, signSiteCookie } from '@/lib/platform/session';
+import { SITE_COOKIE, cookieAttributes, signSiteCookie } from '@/lib/platform/session';
 import { getSessionFromCookies, getSiteForOrganization } from '@/lib/platform/site';
 import { mayHoldSiteLock } from '@/lib/platform/permissions';
 import { acquireSiteLock } from '@/lib/platform/site-lock';
@@ -15,7 +15,7 @@ import { acquireSiteLock } from '@/lib/platform/site-lock';
  * caller's. When another user holds it the site still opens, read-only: the
  * builder shows the editor's name and the proxy refuses its writes (423).
  */
-export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
   if (!session) return noCache({ error: 'Not authenticated' }, 401);
 
@@ -38,6 +38,6 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
 
   // A relative Location keeps the redirect on whatever origin served the request (nginx in front).
   const response = new NextResponse(null, { status: 303, headers: { Location: '/ycode' } });
-  response.cookies.set({ name: SITE_COOKIE, value, path: '/', httpOnly: true, sameSite: 'lax', maxAge: remainingSeconds });
+  response.cookies.set({ name: SITE_COOKIE, value, ...cookieAttributes(request.headers, request.nextUrl), maxAge: remainingSeconds });
   return response;
 }

@@ -84,6 +84,8 @@ test('a renewal asks for JSON and gets the session back, keeping the site the bu
   expect(view.user.email).toBe(PEOPLE.owner.email);
   expect(view.site.id).toBe(site.id);
   expect(setCookies(renewed).some((c) => c.startsWith('bos_session=') && /HttpOnly/i.test(c))).toBe(true);
+  // This suite reaches the server over plain HTTP: a Secure cookie would never come back.
+  expect(setCookies(renewed).some((c) => /;\s*Secure/i.test(c))).toBe(false);
   expect(setCookies(renewed).some((c) => c.startsWith('ws_site='))).toBe(true);
 });
 
