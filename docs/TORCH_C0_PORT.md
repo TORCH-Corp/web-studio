@@ -159,6 +159,14 @@ description changes: `pnpm templates:seed`.
   site can contest), then name and SEO, then languages.
 - **Test.** `e2e/settings.spec.ts`; the auth stub also stands in for domain-service's list
   (`e2e/domain-fixtures.ts`).
+- **The share image's picker (session 10).** The Tauri app picks the share image from the site's images.
+  `GET /ycode/api/platform/sites/{id}/assets` (`manage_sites` r; `lib/platform/site-assets.ts`, the query in
+  `site-assets-input.ts`) lists the site's draft JPEG, PNG, GIF and WebP images, newest first, with `search`,
+  `page` and `limit` (at most 100). `GET /ycode/api/platform/sites/{id}/assets/{assetId}` serves one of them:
+  `/a/{hash}/{name}` finds an asset only for the site the request resolves to (the `ws_site` cookie, or the
+  host of a published page), and the app has neither, so this route checks the image is the site's and calls
+  ycode's `/a/` handler inside `runWithSite`, with `width`, `height` and `quality` passed on. Uploads are
+  stored as WebP (`lib/file-upload.ts`), named without their extension. Test: `e2e/site-assets.spec.ts`.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
