@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { signSession, signSiteCookie, verifySession, verifySiteCookie } from './session';
+import { cookieAttributes, signSession, signSiteCookie, verifySession, verifySiteCookie } from './session';
 
 process.env.BOS_SESSION_SECRET = 'unit-test-secret';
 
@@ -38,4 +38,18 @@ test('a session token is not a site cookie, and a site cookie is not a session',
   assert.equal(await verifySiteCookie(session), null);
   assert.equal(await verifySession(siteCookie), null);
   assert.equal((await verifySession(session))?.org, ORG_A);
+});
+
+test('cookie attributes: Secure follows the scheme nginx reports, else the request URL', () => {
+  const nginx = new Headers({ 'x-forwarded-proto': 'https' });
+  const plainProxy = new Headers({ 'x-forwarded-proto': 'http' });
+  const direct = new Headers();
+  assert.equal(cookieAttributes(nginx, new URL('http://127.0.0.1:6030/ycode/api/auth/callback')).secure, true);
+  assert.equal(cookieAttributes(plainProxy, new URL('https://web-studio.torchcorp.com/ycode')).secure, false);
+  assert.equal(cookieAttributes(direct, new URL('https://web-studio.torchcorp.com/ycode')).secure, true);
+  assert.deepEqual(cookieAttributes(direct, new URL('http://127.0.0.1:3102/ycode')), { path: '/', httpOnly: true, sameSite: 'lax', secure: false });
+});
+
+test('cookie attributes: a chain of proxies is judged by the first scheme', () => {
+  assert.equal(cookieAttributes(new Headers({ 'x-forwarded-proto': 'https, http' }), new URL('http://127.0.0.1:6030/')).secure, true);
 });

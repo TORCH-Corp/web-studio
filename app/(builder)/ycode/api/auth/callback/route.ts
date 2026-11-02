@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { noCache } from '@/lib/api-response';
 import { PublicKeyNotConfiguredError, verifyAccessToken } from '@/lib/platform/access-token';
 import { AuthServiceError, displayName, fetchCurrentUser, fetchWebStudioPermissions, hasAnyPermission } from '@/lib/platform/auth-service';
-import { SESSION_COOKIE, SITE_COOKIE, signSession, signSiteCookie, verifySession, verifySiteCookie } from '@/lib/platform/session';
+import { SESSION_COOKIE, SITE_COOKIE, cookieAttributes, signSession, signSiteCookie, verifySession, verifySiteCookie } from '@/lib/platform/session';
 import { sessionView } from '@/lib/platform/session-view';
 import { getSiteForOrganization, type Site } from '@/lib/platform/site';
 
@@ -79,10 +79,11 @@ export async function GET(request: NextRequest) {
   const response = wantsJson
     ? noCache({ data: sessionView(session, site) })
     : new NextResponse(null, { status: 303, headers: { Location: '/ycode' } });
-  response.cookies.set({ name: SESSION_COOKIE, value: sessionToken, path: '/', httpOnly: true, sameSite: 'lax', maxAge: ttl });
+  const attributes = cookieAttributes(request.headers, request.nextUrl);
+  response.cookies.set({ name: SESSION_COOKIE, value: sessionToken, ...attributes, maxAge: ttl });
   if (site) {
     const value = await signSiteCookie({ site: site.id, org: organization }, ttl);
-    response.cookies.set({ name: SITE_COOKIE, value, path: '/', httpOnly: true, sameSite: 'lax', maxAge: ttl });
+    response.cookies.set({ name: SITE_COOKIE, value, ...attributes, maxAge: ttl });
   }
   return response;
 }

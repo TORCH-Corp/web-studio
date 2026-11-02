@@ -8,7 +8,7 @@
  */
 
 import { expect, request, test, type APIRequestContext } from '@playwright/test';
-import { createSite, draftPages, openSite, publish, setHeading, signInWithToken, type SiteRecord } from '../helpers';
+import { callback, createSite, draftPages, openSite, publish, setHeading, signInWithToken, type SiteRecord } from '../helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -76,7 +76,19 @@ test('the sites domain answers: an unused address is 404 with no site in it', as
 });
 
 test('an access token from auth-service signs in, and TORCH\'s three templates are listed', async () => {
-  api = await signInWithToken(baseURL, await accessToken());
+  const token = await accessToken();
+  api = await signInWithToken(baseURL, token);
+
+  // Minted behind nginx's TLS, the session cookie is HttpOnly and Secure.
+  const probe = await request.newContext({ baseURL });
+  try {
+    const minted = await callback(probe, token);
+    expect(minted.status(), await minted.text()).toBe(303);
+    const cookies = minted.headersArray().filter((h) => h.name.toLowerCase() === 'set-cookie').map((h) => h.value);
+    expect(cookies.some((c) => c.startsWith('bos_session=') && /HttpOnly/i.test(c) && /;\s*Secure/i.test(c))).toBe(true);
+  } finally {
+    await probe.dispose();
+  }
   const session = await api.get('/ycode/api/auth/session', { headers: { accept: 'application/json' } });
   expect(session.status()).toBe(200);
 

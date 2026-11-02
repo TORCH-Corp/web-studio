@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SESSION_COOKIE, signSession, type BosSession, type Flag } from '@/lib/platform/session';
+import { SESSION_COOKIE, cookieAttributes, signSession, type BosSession, type Flag } from '@/lib/platform/session';
 import { FLAGS, WEB_STUDIO_LEAVES } from '@/lib/platform/web-studio-scope';
 import { noCache } from '@/lib/api-response';
 
@@ -32,6 +32,6 @@ export async function POST(request: NextRequest) {
     perms: body.perms ?? EVERY_FLAG,
   });
   const response = NextResponse.json({ ok: true, organization: body.org });
-  response.cookies.set({ name: SESSION_COOKIE, value: token, path: '/', httpOnly: true, sameSite: 'lax', maxAge: 8 * 3600 });
+  response.cookies.set({ name: SESSION_COOKIE, value: token, ...cookieAttributes(request.headers, request.nextUrl), maxAge: 8 * 3600 });
   return response;
 }
