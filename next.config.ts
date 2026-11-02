@@ -24,6 +24,8 @@ if (process.env.PLATFORM_PUBLIC_URL) {
 }
 
 const nextConfig: NextConfig = {
+  // The production image (Dockerfile) builds with NEXT_OUTPUT=standalone; every other build is unchanged.
+  ...(process.env.NEXT_OUTPUT === 'standalone' ? { output: 'standalone' as const } : {}),
   trailingSlash: false,
   staticPageGenerationTimeout: 120,
   experimental: {
