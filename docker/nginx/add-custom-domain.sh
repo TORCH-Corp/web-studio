@@ -8,6 +8,7 @@
 # sites.torchcorp.com, or an A record to this server's address.
 #
 # What it does, in order, and stops at the first failure:
+# Needs WS_CERTBOT_EMAIL in the environment (the address Let's Encrypt may write to).
 #   1. checks the name and that DNS reaches this server;
 #   2. writes the port-80 block (Let's Encrypt HTTP-01 challenge, then the redirect);
 #   3. issues the certificate with certbot (webroot), renewed by certbot's timer, whose
@@ -52,7 +53,7 @@ HTTP
   nginx -t
   systemctl reload nginx
   certbot certonly --webroot -w "$webroot" -d "$domain" --non-interactive --agree-tos \
-    -m "${WS_CERTBOT_EMAIL:-accounts@torchcorp.com}" --deploy-hook 'systemctl reload nginx'
+    -m "${WS_CERTBOT_EMAIL:?set WS_CERTBOT_EMAIL to the address Let's Encrypt may write to}" --deploy-hook 'systemctl reload nginx'
 fi
 
 cat > "$conf" <<HTTPS
