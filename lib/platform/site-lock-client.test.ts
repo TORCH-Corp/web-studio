@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { isReadOnly, viewFromAnswer, type SiteLockView } from './site-lock-client';
+import { isReadOnly, shouldReleaseOnClose, viewFromAnswer, type SiteLockView } from './site-lock-client';
 
 const unknown: SiteLockView = { held: null, editor: null };
 const holder = { name: 'Ali Editor', since: '2026-11-02T08:00:00.000Z' };
@@ -39,4 +39,10 @@ test('a lock that vanished between the refusal and the read leaves a read-only b
   const { next } = viewFromAnswer(unknown, { held: false, holder: null });
   assert.equal(isReadOnly(next), true);
   assert.equal(next.editor, null);
+});
+
+test('closing the page releases while holding the lock and before the first answer, never a lock known to be another\'s (open question 19)', () => {
+  assert.equal(shouldReleaseOnClose(unknown), true);
+  assert.equal(shouldReleaseOnClose(viewFromAnswer(unknown, { held: true, holder }).next), true);
+  assert.equal(shouldReleaseOnClose(viewFromAnswer(unknown, { held: false, holder }).next), false);
 });

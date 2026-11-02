@@ -134,9 +134,9 @@ export async function downloadDocument(organizationId: string, documentId: strin
 
 /**
  * DELETE /documents/{id}: a soft delete into the organization's trash. A 404
- * counts as deleted. The route is JWT-only today (`authenticate`, not
- * `authenticateServiceOrUser`), so a service-key call answers 401 until
- * Document Center admits the service key there (OPEN_QUESTIONS item 12).
+ * counts as deleted. Document Center admits the service key here since its
+ * light-path fix of 2 Nov 2026 (OPEN_QUESTIONS item 12); on a service that
+ * does not carry it yet the call answers 401, which the caller logs.
  */
 export async function deleteDocument(organizationId: string, documentId: string): Promise<void> {
   try {

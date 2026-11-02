@@ -73,9 +73,19 @@ async function beat(): Promise<void> {
   set(next);
 }
 
+/**
+ * Whether closing the page should send the release. Only a lock known to be
+ * another user's is left alone. Before the first heartbeat answers, `held` is
+ * still null while the lock may already be ours (the open route took it), so a
+ * page closed within that first moment must release too, or the lock stays for
+ * the whole lapse (open question 19). The server releases only the caller's own
+ * lock, so a release that was never ours does nothing.
+ */
+export const shouldReleaseOnClose = (current: SiteLockView): boolean => current.held !== false;
+
 /** Let go of the lock; `keepalive` lets the request outlive the page that sent it. */
 export function releaseLock(): void {
-  if (view.held !== true) return;
+  if (!shouldReleaseOnClose(view)) return;
   fetch(SITE_LOCK_ENDPOINT, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => {});
 }
 
