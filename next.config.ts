@@ -26,6 +26,10 @@ if (process.env.PLATFORM_PUBLIC_URL) {
 const nextConfig: NextConfig = {
   // The production image (Dockerfile) builds with NEXT_OUTPUT=standalone; every other build is unchanged.
   ...(process.env.NEXT_OUTPUT === 'standalone' ? { output: 'standalone' as const } : {}),
+  // lib/server/tailwind-compiler.ts reads Tailwind's stylesheet from node_modules at run time (the
+  // per-page CSS compiled at publish). The trace copies the file under .pnpm but not the package
+  // path the compiler opens, so the standalone server could not compile CSS; this names the file.
+  outputFileTracingIncludes: { '/*': ['./node_modules/tailwindcss/index.css'] },
   trailingSlash: false,
   staticPageGenerationTimeout: 120,
   experimental: {

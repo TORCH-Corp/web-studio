@@ -14,7 +14,10 @@ server from this repository's `Dockerfile` and is not pulled from a registry:
 - **Image.** `Dockerfile`: Node 24, pnpm 9.12.2 (the lockfile's), `NEXT_OUTPUT=standalone` (read by
   `next.config.ts`; no other build changes). `/app` is the standalone server (`node server.js`, port 6030, user
   `node`); `/tooling` is the repository with its full `node_modules`, where the migrations and the template seed
-  run, because the standalone trace has neither ts-node nor tsconfig-paths.
+  run, because the standalone trace has neither ts-node nor tsconfig-paths. `outputFileTracingIncludes` in
+  `next.config.ts` adds Tailwind's `index.css` to the trace: the publish-time CSS compiler
+  (`lib/server/tailwind-compiler.ts`) opens it from `node_modules` at run time, and without it every publish logged
+  `ENOENT` and left the page's CSS as it was.
 - **Start.** `docker/entrypoint.sh` reads auth-service's public key from `BOS_JWT_PUBLIC_KEY_FILE` into
   `BOS_JWT_PUBLIC_KEY`, runs `knex migrate:latest` (with the ts-node and tsconfig-paths requires, from `/tooling`), then
   starts the server. A failed migration stops the container (compose restarts it; the log says why). `WS_SKIP_MIGRATE=1`
@@ -68,8 +71,8 @@ an unused host is 404. Details of each step are in the sections below.
 HTTPS: health, the dev login refused (404), 401 without a session, an unused address 404, a real access token from
 auth-service through the callback, the three templates, a site created, published and served on
 `https://{slug}.sites.torchcorp.com` in both languages, then deleted. It needs `E2E_BOS_EMAIL` and `E2E_BOS_PASSWORD` (a test
-account; its organization is the test organization) and starts nothing. The local `pnpm e2e` is unchanged and must never be
-given the production `DATABASE_URL_TEST`: it drops the schema.
+account; its organization is the test organization) and starts nothing. The local `pnpm e2e` leaves `e2e/server` out
+(`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it drops the schema.
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase

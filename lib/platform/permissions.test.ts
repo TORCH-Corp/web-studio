@@ -77,6 +77,7 @@ test('public and session-only routes, and the anonymous exceptions for visitors'
   assert.deepEqual(accessFor('/ycode/api/auth/callback', 'GET', q('token=x')), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/auth/session', 'GET', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/setup/status', 'GET', q()), { kind: 'public' });
+  assert.deepEqual(accessFor('/ycode/api/health', 'GET', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/v1/forms/f1/submissions', 'POST', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/oauth/authorize', 'POST', q()), { kind: 'session' });
   assert.deepEqual(accessFor('/ycode/api/icons', 'GET', q('search=home')), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'r' });
