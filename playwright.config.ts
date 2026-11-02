@@ -35,6 +35,8 @@ if (!DATABASE_URL_TEST) {
 
 export default defineConfig({
   testDir: './e2e',
+  // e2e/server runs against a deployed server (`pnpm e2e:server`, playwright.server.config.ts), never here.
+  testIgnore: ['**/server/**'],
   workers: 1,
   retries: 0,
   timeout: 90_000,

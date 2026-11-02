@@ -96,6 +96,7 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'auth/logout': isPublic('ends whatever session there is'),
 
   // Operations with their own credential.
+  'health': isPublic('deployment health: the database answers and the migrations have run'),
   'setup/status': isPublic('health check: is the database reachable'),
   'setup/migrate': isPublic('runs the migrations when the database is behind; nothing a user owns'),
   'revalidate': isPublic('own secret token'),

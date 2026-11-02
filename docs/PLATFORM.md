@@ -1,7 +1,78 @@
-# Web Studio port — ycode on the TORCH platform
+# Web Studio on the TORCH platform (ycode fork)
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 8 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below).
+
+## How the service runs (session 11)
+One container, `web-studio`, in the platform's compose project on the production server
+(`/root/core-backend/docker-compose.yml`; there is no staging, one server). It is built on the
+server from this repository's `Dockerfile` and is not pulled from a registry:
+
+    rsync -az --delete --exclude node_modules --exclude .git --exclude .next ./ root@<server>:/root/web-studio/
+    ssh root@<server> 'cd /root/core-backend && docker compose build web-studio && docker compose up -d --no-deps web-studio'
+
+- **Image.** `Dockerfile`: Node 24, pnpm 9.12.2 (the lockfile's), `NEXT_OUTPUT=standalone` (read by
+  `next.config.ts`; no other build changes). `/app` is the standalone server (`node server.js`, port 6030, user
+  `node`); `/tooling` is the repository with its full `node_modules`, where the migrations and the template seed
+  run, because the standalone trace has neither ts-node nor tsconfig-paths. `outputFileTracingIncludes` in
+  `next.config.ts` adds Tailwind's `index.css` to the trace: the publish-time CSS compiler
+  (`lib/server/tailwind-compiler.ts`) opens it from `node_modules` at run time, and without it every publish logged
+  `ENOENT` and left the page's CSS as it was.
+- **Start.** `docker/entrypoint.sh` reads auth-service's public key from `BOS_JWT_PUBLIC_KEY_FILE` into
+  `BOS_JWT_PUBLIC_KEY`, runs `knex migrate:latest` (with the ts-node and tsconfig-paths requires, from `/tooling`), then
+  starts the server. A failed migration stops the container (compose restarts it; the log says why). `WS_SKIP_MIGRATE=1`
+  skips the migration step.
+- **Health.** `GET /ycode/api/health`: 200 `{status:'ok'}` when the database answers and the migrations have run, 503
+  otherwise. The compose healthcheck reads it.
+- **Compose pieces.** Service `web-studio` publishing `127.0.0.1:6030`; `web-studio-db` (postgres:16, database
+  `webstudio`, its own volume `web_studio_postgres_data`, no published port, like a service's own database); volume
+  `web_studio_storage` at `/var/lib/webstudio/storage`. In `PLATFORM_STORAGE=document-center` mode that volume holds only
+  the font mirror (`_mirror/fonts`); in `disk` mode it holds every site's files. Secrets in the root `.env`:
+  `WEBSTUDIO_DB_PASSWORD`, `WEBSTUDIO_SESSION_SECRET`, `WEBSTUDIO_PAGE_AUTH_SECRET`, plus `WEBSTUDIO_APP_ID` (the
+  catalogue id of Web Studio) and `WEBSTUDIO_TEMPLATES_ORG`. The service reuses `AUTH_SERVICE_API_KEY`,
+  `DOCUMENT_CENTER_API_KEY` and `DOMAIN_SERVICE_API_KEY` from the same `.env`.
+- **nginx.** `docker/nginx/` holds what is installed on the server: `web-studio.torchcorp.com` (Cloudflare-proxied,
+  origin certificate), `sites.torchcorp.com` (`server_name sites.torchcorp.com *.sites.torchcorp.com`, DNS only, the
+  Let's Encrypt wildcard certificate at `/etc/letsencrypt/live/sites.torchcorp.com/`, renewed by certbot's timer, whose
+  hook reloads nginx), and `web-studio-proxy.conf` in `/etc/nginx/snippets/`. Both proxy to `127.0.0.1:6030` with `Host`
+  and `X-Forwarded-Host` set to the requested name (the app finds a published site by `x-forwarded-host`, then `host`),
+  `X-Forwarded-Proto https`, `client_max_body_size 60m`, and for `/ycode/api/ai/chat` and `/ycode/mcp` no buffering and
+  a one-hour timeout. `/ycode/api/auth/callback` has its access log off: the access token is in its query string.
+- **Custom domains.** The app already routes any host a site lists in `platform_sites.hosts`; what a mapped domain needs
+  is a name nginx accepts and a certificate. `docker/nginx/add-custom-domain.sh <domain>` (run as root on the server,
+  after the host is set on the site and verified in Organization Setup, and the domain's DNS reaches the server) writes
+  the port-80 block, gets a Let's Encrypt certificate by HTTP-01 (webroot) with certbot, writes the port-443 block with
+  the same locations, and reloads nginx. Renewal is certbot's timer. It is run by hand today: the container cannot reach
+  the host's nginx and certbot, so Web Studio does not trigger it (OPEN_QUESTIONS 4 offered a Caddy front with on-demand
+  TLS as the alternative; it would replace nginx on 443 for these hosts and was not taken).
+- **The Tauri app.** It reads `WS_URL` (run time, else build time, else the default `https://web-studio.torchcorp.com`)
+  in `src-tauri/src/embedded/ws_gateway.rs` of `code/web-studio-app`. The server does not read `WS_URL`.
+
+## Seeding the templates
+Once per environment, after the first start, and again when a template's name or description changes (the content of
+each is built by hand in the builder, in the `WS_TEMPLATES_ORG` organization):
+
+    docker exec web-studio sh -c 'cd /tooling && TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json \
+      node -r ts-node/register -r tsconfig-paths/register scripts/seed-templates.ts'
+
+It creates `company-site`, `landing-page` and `blank` with their fixed ids if absent and refreshes names and descriptions
+if present; it never touches a template's content.
+
+## How a site is created and published
+The Tauri app (or any caller with `webstudio.manage_sites`) `POST`s `/ycode/api/platform/sites` with a name, a slug,
+the languages and an optional `template_id`; provisioning (or the template copy) runs in one transaction and the site's
+default address `{slug}.sites.torchcorp.com` is its first host. `GET /ycode/api/platform/sites/{id}/open` (or the
+callback with `&site=`) opens it in the builder; edits are draft until `POST /ycode/api/publish`, after which the
+site answers on its hosts (the default language at `/`, the others at `/{locale}`). nginx forwards the visitor's host;
+an unused host is 404. Details of each step are in the sections below.
+
+## Server e2e
+`pnpm e2e:server` (`playwright.server.config.ts`, `e2e/server/deployment.spec.ts`) runs against the deployed service over
+HTTPS: health, the dev login refused (404), 401 without a session, an unused address 404, a real access token from
+auth-service through the callback, the three templates, a site created, published and served on
+`https://{slug}.sites.torchcorp.com` in both languages, then deleted. It needs `E2E_BOS_EMAIL` and `E2E_BOS_PASSWORD` (a test
+account; its organization is the test organization) and starts nothing. The local `pnpm e2e` leaves `e2e/server` out
+(`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it drops the schema.
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -73,25 +144,29 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 8 
   inert `auth.*` / `storage.*` objects the upstream migrations assume.
 
 ## Environment
+The production values are in the compose service `web-studio` (secrets from the root `.env`).
+
     DATABASE_URL=postgresql://.../webstudio
     BOS_SESSION_SECRET=<Web Studio's own; signs the bos_session and ws_site cookies>
-    BOS_JWT_PUBLIC_KEY=<auth-service's RS256 public key, PEM; the file at its JWT_PUBLIC_KEY_PATH>
+    BOS_JWT_PUBLIC_KEY=<auth-service's RS256 public key, PEM>   # or BOS_JWT_PUBLIC_KEY_FILE=<path of the PEM>: the container's entrypoint reads it
     BOS_AUTH_URL=http://auth-service:6001   # my-permissions and users/me; default https://auth.torchcorp.com
     EVENT_BUS_REDIS_URL=redis://redis:6379  # the core event bus: publishes the webstudio permission scope
     WS_APP_ID=<Web Studio's catalogue app id>   # which app.installed is ours
-    APP_MANAGEMENT_URL=http://app-management-service:6000   # with APP_MANAGEMENT_API_KEY: re-register the
+    APP_MANAGEMENT_URL=http://app-management-service:6011   # with APP_MANAGEMENT_API_KEY: re-register the
     APP_MANAGEMENT_API_KEY=<app-management's SERVICE_API_KEY>  # scope at start for the installed organizations
-    PLATFORM_PUBLIC_URL=https://webstudio.<domain>
-    PLATFORM_STORAGE=disk   # or document-center (session 8)
-    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage   # disk mode
+    PLATFORM_PUBLIC_URL=https://web-studio.torchcorp.com
+    PLATFORM_STORAGE=disk   # or document-center (session 8; production)
+    PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage   # disk mode; the font mirror in either mode
     DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
     DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
     DOMAIN_SERVICE_URL=http://domain-service:6012   # with DOMAIN_SERVICE_API_KEY: the organization's verified domains
     DOMAIN_SERVICE_API_KEY=<domain-service's SERVICE_API_KEY>   # (session 7); see WS_DOMAIN_CHECK below
     WS_DOMAIN_CHECK=on   # `off` accepts any host name as a custom host, with no check against verified domains
-    ALLOW_DEV_LOGIN=false   # true only on a dev box: POST /ycode/api/auth/dev-login
-    WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4)
+    PAGE_AUTH_SECRET=<signs the password-protected page cookies; Web Studio's own>
+    ALLOW_DEV_LOGIN=false   # absent in production; true only on a dev box: POST /ycode/api/auth/dev-login
+    WS_PARTS=1   # absent in production: shows Collections and Forms (parts 2 and 3)
+    WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4); on the server "TORCH corp"
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -151,9 +226,8 @@ description changes: `pnpm templates:seed`.
 - **Verified domains.** `lib/platform/domain-check.ts` asks domain-service
   (`GET /api/org-setup/domains?entityId=…&status=ACTIVE`, `x-service-api-key`). A custom host must be one of
   the ACTIVE names exactly. A check that cannot run answers 503, never an allow. `WS_DOMAIN_CHECK=off` skips
-  it. In production on 1 Nov 2026 domain-service reads `SERVICE_API_KEY` for this route and has none set
-  (`INTERNAL_SERVICE_TOKEN` is set but this route does not use it), so the production environment of
-  Web Studio runs with `WS_DOMAIN_CHECK=off` until that key is added to domain-service's compose environment.
+  it. Since 2 Nov 2026 domain-service reads `SERVICE_API_KEY` (`${DOMAIN_SERVICE_API_KEY}` in the root `.env`)
+  and production runs with `WS_DOMAIN_CHECK=on` and the same key as `DOMAIN_SERVICE_API_KEY`.
 - **Not atomic across tables.** The builder's repositories do not share a transaction. `applySiteSettings`
   refuses everything it can before the first write, then writes the slug and host first (the only ones another
   site can contest), then name and SEO, then languages.
@@ -319,6 +393,7 @@ each site's own 404 page, a second host after the next publish) passes with `pnp
 - The cookies are `SameSite=Lax` without `Secure`: right for a top-level webview behind
   nginx's TLS; a builder framed by a page on another site (a Tauri window at
   `tauri://localhost`) would need `SameSite=None; Secure`, and WKWebView blocks third-party
-  cookies anyway. Session 9 decides how the builder is hosted; session 11 sets the flags.
+  cookies anyway. Session 9 settled that the builder is never framed (OPEN_QUESTIONS 13), so the flags stay;
+  `Secure` is not set in production either (the cookies are minted behind nginx's TLS, where the app sees http).
 - `/ycode` with a session but no `ws_site` cookie shows an empty builder: the shell
   always enters through `GET /ycode/api/platform/sites/{id}/open` (session 9).

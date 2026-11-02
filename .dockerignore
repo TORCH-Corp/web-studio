@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.husky
+storage
+test-results
+playwright-report
+docs
+*.pem
+.env*
+!.env.example
