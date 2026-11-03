@@ -4,10 +4,16 @@ import { unstable_cache } from 'next/cache';
 import { buildAllPagesTag, buildRouteTag } from '@/lib/cache-tags';
 import { getDocumentSlugPath } from '@/lib/document-path';
 import { fetchErrorPage, fetchPageByPathForMetadata, slimPageData } from '@/lib/page-fetcher';
+import { runWithTenantId } from '@/lib/supabase-server';
 import { resolvePathLocaleCode } from '@/lib/resolve-html-lang';
 import type { PageData } from '@/lib/page-fetcher';
 
 export type ErrorPageCode = 401 | 404;
+
+/** Runs `fn` with `tenantId` as the site of every lookup inside it, when there is one. */
+function inSite<T>(tenantId: string | undefined, fn: () => Promise<T>): Promise<T> {
+  return tenantId ? runWithTenantId(tenantId, fn) : fn();
+}
 
 /**
  * Cached lookup of the user's custom error page, invalidated on publish.
@@ -29,10 +35,11 @@ export async function fetchCachedErrorPage(
     const localeCode = localePath ? await resolvePathLocaleCode(localePath, true, tenantId) : null;
 
     return await unstable_cache(
-      async () => {
+      // Inside the data cache the request is out of reach: the site goes in explicitly (OPEN_QUESTIONS 27).
+      async () => inSite(tenantId, async () => {
         const data = await fetchErrorPage(errorCode, true, tenantId, localeCode ?? undefined, { throwOnError: true });
         return data ? slimPageData(data) : null;
-      },
+      }),
       [`error-${errorCode}`, tenantId ?? '', localeCode ?? ''],
       { tags: [buildAllPagesTag(tenantId)], revalidate: false }
     )();
@@ -51,7 +58,7 @@ export function fetchCachedPageForMetadata(
   tenantId?: string
 ): Promise<PageData | null> {
   return unstable_cache(
-    async () => fetchPageByPathForMetadata(slugPath, true, undefined, tenantId),
+    async () => inSite(tenantId, () => fetchPageByPathForMetadata(slugPath, true, undefined, tenantId)),
     [`metadata-/${slugPath}`, tenantId ?? ''],
     { tags: [buildRouteTag(tenantId, slugPath), buildAllPagesTag(tenantId)], revalidate: false }
   )();

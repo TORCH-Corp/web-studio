@@ -1034,6 +1034,9 @@ export async function fetchErrorPage(
       locale,
       availableLocales: availableLocales as Locale[] || [],
       translations,
+      // The error page's own CSS, as the page fetchers return it: slimPageData keeps only the
+      // layers of `pageLayers`, so without this the 404 boundary rendered unstyled (OPEN_QUESTIONS 26).
+      generatedCss: pageLayers?.generated_css || null,
     });
   } catch (error) {
     if (options.throwOnError) throw error;

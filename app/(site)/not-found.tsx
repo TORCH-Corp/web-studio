@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { fetchCachedErrorPage } from '@/lib/published-page-cache';
 import { fetchGlobalPageSettings } from '@/lib/generate-page-metadata';
 import { getSettingByKey } from '@/lib/repositories/settingsRepository';
-import { getTenantIdFromHeaders } from '@/lib/supabase-server';
+import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
 import PageRenderer from '@/components/PageRenderer';
 import YcodeBadge from '@/components/YcodeBadge';
 
@@ -30,15 +30,17 @@ export default async function NotFound() {
   const errorPageData = await fetchCachedErrorPage(404, tenantId).catch(() => null);
 
   if (errorPageData) {
-    const globalSettings = await fetchGlobalPageSettings().catch(() => null);
-    const { page, pageLayers, components, locale, availableLocales, translations } = errorPageData;
+    // The site's global settings (colour variables, custom code), read for this site like a published
+    // page reads them; the 404 page's own CSS first, as a published page uses its own (OPEN_QUESTIONS 26).
+    const globalSettings = await runWithTenantId(tenantId, () => fetchGlobalPageSettings()).catch(() => null);
+    const { page, pageLayers, components, locale, availableLocales, translations, generatedCss } = errorPageData;
 
     return (
       <PageRenderer
         page={page}
         layers={pageLayers.layers || []}
         components={components}
-        generatedCss={globalSettings?.publishedCss || undefined}
+        generatedCss={generatedCss || globalSettings?.publishedCss || undefined}
         colorVariablesCss={globalSettings?.colorVariablesCss || undefined}
         locale={locale}
         availableLocales={availableLocales}
