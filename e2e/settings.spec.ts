@@ -271,3 +271,38 @@ test('the slug can change before the first publish and after it; the default add
   expect((await visit(`${newSlug}.${TEST_SITES_DOMAIN}`)).status).toBe(200);
   expect((await listSites(api)).find((s) => s.id === site.id)?.hosts).toEqual([`${newSlug}.${TEST_SITES_DOMAIN}`]);
 });
+
+test('changing the default language moves the text with it: each address reads its own language (OPEN_QUESTIONS 24)', async () => {
+  const slug = `swap-${RUN}`;
+  const host = `${slug}.${TEST_SITES_DOMAIN}`;
+  const english = `Hello ${RUN}`;
+  const arabic = `مرحبا ${RUN}`;
+  const swap = await createSite(api, { name: 'Swap', slug, languages: ['en', 'ar'], default_language: 'en' });
+  expect((await openSite(api, swap.id)).status()).toBe(303);
+  const home = (await draftPages(api)).find((page) => page.is_index)!;
+  await setHeading(api, home.id, english);
+  const headingKey = `layer:heading-${english.replace(/\W+/g, '-').toLowerCase()}:text`;
+  const locales = (await (await api.get('/ycode/api/locales')).json()).data as Array<{ id: string; code: string }>;
+  const localeId = (code: string) => locales.find((l) => l.code === code)!.id;
+  const saved = await api.post('/ycode/api/translations', {
+    data: { locale_id: localeId('ar'), source_type: 'page', source_id: home.id, content_key: headingKey, content_type: 'text', content_value: arabic, is_completed: true },
+  });
+  expect(saved.ok(), await saved.text()).toBe(true);
+  const rowsOf = async (code: string) => ((await (await api.get(`/ycode/api/translations?locale_id=${localeId(code)}`)).json()).data as Array<{ content_key: string; content_value: string; deleted_at: string | null }>)
+    .filter((row) => !row.deleted_at && row.content_key === headingKey).map((row) => row.content_value);
+
+  for (const [defaultLanguage, root, other, otherPath] of [['ar', arabic, english, '/en'], ['en', english, arabic, '/ar']] as const) {
+    const moved = await patch({ languages: ['ar', 'en'], default_language: defaultLanguage }, swap.id);
+    expect(moved.status(), await moved.text()).toBe(200);
+    // The other language holds its text as a translation; the default's text is the source.
+    expect(await rowsOf(defaultLanguage === 'ar' ? 'en' : 'ar')).toEqual([other]);
+    expect(await rowsOf(defaultLanguage)).toEqual([]);
+    await publish(api);
+    const home = await visit(host);
+    expect(home.html).toContain(`dir="${defaultLanguage === 'ar' ? 'rtl' : 'ltr'}"`);
+    expect(home.html).toContain(root);
+    expect(home.html).not.toContain(other);
+    const second = await visit(host, otherPath);
+    expect(second.html).toContain(other);
+  }
+});

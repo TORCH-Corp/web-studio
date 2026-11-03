@@ -392,3 +392,54 @@ test('an unknown template, or a site that is not a template, is refused', async 
   expect(ordinarySite.status()).toBe(404);
   expect((await listSites(orgA)).map((s) => s.slug)).not.toContain(`x1-${RUN}`);
 });
+
+test('a site whose default language is not the template\'s reads each language from its own text (OPEN_QUESTIONS 24)', async () => {
+  // The template's default is English with an Arabic welcome; this copy's default is Arabic. An earlier
+  // test edited the template's welcome, which left its Arabic translation incomplete: complete it again.
+  const englishNow = 'Changed in the template';
+  expect((await openSite(templates, template.id)).status()).toBe(303);
+  const templateArabic = (await localesOf(templates)).find((l) => l.code === 'ar')!;
+  const refreshed = await templates.post('/ycode/api/translations/bulk', {
+    data: { translations: [{ locale_id: templateArabic.id, source_type: 'page', source_id: templateHomepage.id, content_key: 'layer:welcome:text', content_type: 'text', content_value: WELCOME_AR, is_completed: true }] },
+  });
+  expect(refreshed.status(), await refreshed.text()).toBe(201);
+
+  const slug = `c4-${RUN}`;
+  const arabicFirst = await createSite(orgA, { name: 'Copy Arabic', slug, languages: ['ar', 'en'], default_language: 'ar', template_id: template.id });
+  expect((await openSite(orgA, arabicFirst.id)).status()).toBe(303);
+  const locales = await localesOf(orgA);
+  expect(locales.find((l) => l.is_default)?.code).toBe('ar');
+  const english = locales.find((l) => l.code === 'en')!;
+  const englishRows = await json<Array<{ source_type: string; content_key: string; content_value: string }>>(orgA.get(`/ycode/api/translations?locale_id=${english.id}`));
+  expect(englishRows).toEqual([expect.objectContaining({ source_type: 'page', content_key: 'layer:welcome:text', content_value: englishNow })]);
+
+  await publish(orgA);
+  const site = await publishedSite(baseURL, `${slug}.${TEST_SITES_DOMAIN}`);
+  try {
+    const root = await (await site.get('/')).text();
+    expect(root).toContain('dir="rtl"');
+    expect(root).toContain(WELCOME_AR);
+    expect(root).not.toContain(englishNow);
+    const en = await (await site.get('/en')).text();
+    expect(en).toContain('dir="ltr"');
+    expect(en).toContain(englishNow);
+    expect(en).not.toContain(WELCOME_AR);
+  } finally {
+    await site.dispose();
+  }
+
+  // Arabic only: the template's English stays behind, the Arabic welcome is the text.
+  const arabicOnlySlug = `c5-${RUN}`;
+  const arabicOnly = await createSite(orgA, { name: 'Copy Arabic only', slug: arabicOnlySlug, languages: ['ar'], default_language: 'ar', template_id: template.id });
+  expect((await openSite(orgA, arabicOnly.id)).status()).toBe(303);
+  expect((await localesOf(orgA)).map((l) => l.code)).toEqual(['ar']);
+  await publish(orgA);
+  const only = await publishedSite(baseURL, `${arabicOnlySlug}.${TEST_SITES_DOMAIN}`);
+  try {
+    const root = await (await only.get('/')).text();
+    expect(root).toContain(WELCOME_AR);
+    expect(root).not.toContain(englishNow);
+  } finally {
+    await only.dispose();
+  }
+});

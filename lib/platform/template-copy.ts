@@ -39,6 +39,7 @@ import {
   generatePageMetadataHash,
 } from '@/lib/hash-utils';
 import { getLocaleByCode } from '@/lib/localisation-utils';
+import { applySourceSwap, planSourceSwap } from '@/lib/platform/default-language';
 import type { SiteSeeder } from '@/lib/platform/provision';
 import type { Site } from '@/lib/platform/site';
 import { copySiteStorage, createStorageClient, objectExists, publicUrlFor } from '@/lib/platform/storage';
@@ -171,8 +172,20 @@ export function copyTemplate(template: Site): SiteSeeder {
     const columns = await describeTables(trx);
     const rows = await readDraftRows(trx, template.id, columns);
 
-    // The languages asked for; a template language not asked for stays behind with its translations.
     const languages = input.languages as string[];
+
+    // A default language other than the template's: the source follows it, and the template's
+    // default becomes a translation (OPEN_QUESTIONS 24). Before the filter below, which drops the
+    // template's default with its rows when it was not asked for.
+    const templateDefault = rows.locales.find((locale) => locale.is_default);
+    const newDefault = rows.locales.find((locale) => locale.code === input.default_language);
+    if (templateDefault && newDefault && templateDefault.id !== newDefault.id) {
+      const source = { pages: rows.pages, pageLayers: rows.page_layers, components: rows.components, folders: rows.page_folders, translations: rows.translations };
+      const plan = planSourceSwap(source, newDefault.id as string, languages.includes(templateDefault.code as string));
+      applySourceSwap(source, plan, templateDefault.id as string);
+    }
+
+    // The languages asked for; a template language not asked for stays behind with its translations.
     rows.locales = rows.locales.filter((locale) => languages.includes(locale.code as string));
     const keptLocaleIds = new Set(rows.locales.map((locale) => locale.id));
     rows.translations = rows.translations.filter((translation) => keptLocaleIds.has(translation.locale_id));
