@@ -33,6 +33,7 @@ import { defaultHostFor, isSitesDomainName } from '@/lib/platform/site-hosts';
 import { planLanguages, type SiteSettingsPatch } from '@/lib/platform/site-settings-input';
 import { SEO_DEFAULT_KEYS, storedText } from '@/lib/platform/site-seo';
 import { changeSiteSlug, setCustomHosts, setSiteDefaultLocale } from '@/lib/platform/site-update';
+import { swapSiteSourceLanguage } from '@/lib/platform/default-language';
 
 export interface SiteSettings {
   id: string;
@@ -238,7 +239,14 @@ export async function applySiteSettings(site: Site, patch: SiteSettingsPatch): P
       }
       const afterAdd = await getAllLocales(false);
       const wanted = afterAdd.find((locale) => locale.code === plan.defaultCode);
-      if (wanted && !wanted.is_default) await setDefaultLocale(wanted.id);
+      if (wanted && !wanted.is_default) {
+        // The source text follows the default language (OPEN_QUESTIONS 24): the new default's
+        // translations go into the pages, and the old default's text becomes its translations
+        // unless it is being removed. The flag moves in the same transaction.
+        const current = afterAdd.find((locale) => locale.is_default);
+        if (current) await swapSiteSourceLanguage(site.id, current, wanted, !plan.remove.includes(current.code));
+        else await setDefaultLocale(wanted.id);
+      }
       for (const code of plan.remove) {
         const locale = afterAdd.find((candidate) => candidate.code === code);
         if (!locale) continue;
