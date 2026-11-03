@@ -48,6 +48,7 @@ export default async function PublishedLayout({
     <SiteDocumentLayout
       lang={lang}
       pathname={pathname}
+      tenantId={tenantId}
       baseUrl={baseUrl}
       publishedAt={globalSettings?.publishedAt ?? null}
       globalCustomCodeHead={globalSettings?.globalCustomCodeHead ?? null}

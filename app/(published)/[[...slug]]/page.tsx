@@ -166,8 +166,11 @@ export async function generateStaticParams() {
  * so two sites never share a cached page. Every entry carries the site's own
  * tags (lib/cache-tags.ts), which only that site's publish purges (session 5).
  */
-async function scoped<T>(fn: () => Promise<T>): Promise<T> {
-  const tenantId = await getTenantIdFromHeaders();
+async function scoped<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  // The site is read from the request outside the data cache and passed in: inside an
+  // unstable_cache callback the request headers are out of reach, so a lookup there found
+  // no site and every query that did not take the site as an argument came back empty
+  // (published images, global settings, redirects; OPEN_QUESTIONS 27).
   return tenantId ? runWithTenantId(tenantId, fn) : fn();
 }
 
@@ -192,7 +195,7 @@ async function fetchPublishedPageWithLayers(slugPath: string) {
   const [core, layers] = await Promise.all([
     unstable_cache(
       async () => {
-        const data = await scoped(() => fetchPageByPath(slugPath, true, paginationContext, tenantId || undefined));
+        const data = await scoped(tenantId, () => fetchPageByPath(slugPath, true, paginationContext, tenantId || undefined));
         if (!data) return null;
         return splitPageData(data).core;
       },
@@ -201,7 +204,7 @@ async function fetchPublishedPageWithLayers(slugPath: string) {
     )(),
     unstable_cache(
       async () => {
-        const data = await scoped(() => fetchPageByPath(slugPath, true, paginationContext, tenantId || undefined));
+        const data = await scoped(tenantId, () => fetchPageByPath(slugPath, true, paginationContext, tenantId || undefined));
         if (!data) return null;
         return splitPageData(data).layers;
       },
@@ -223,7 +226,7 @@ async function fetchPublishedHomepage() {
   const [core, layers] = await Promise.all([
     unstable_cache(
       async () => {
-        const data = await scoped(() => fetchHomepage(true, paginationContext, undefined, tenantId || undefined));
+        const data = await scoped(tenantId, () => fetchHomepage(true, paginationContext, undefined, tenantId || undefined));
         if (!data) return null;
         return splitPageData(data as PageData).core;
       },
@@ -232,7 +235,7 @@ async function fetchPublishedHomepage() {
     )(),
     unstable_cache(
       async () => {
-        const data = await scoped(() => fetchHomepage(true, paginationContext, undefined, tenantId || undefined));
+        const data = await scoped(tenantId, () => fetchHomepage(true, paginationContext, undefined, tenantId || undefined));
         if (!data) return null;
         return splitPageData(data as PageData).layers;
       },
@@ -249,7 +252,7 @@ async function fetchCachedRedirects(): Promise<RedirectType[] | null> {
   try {
     const tenantId = (await getTenantIdFromHeaders()) ?? '';
     return await unstable_cache(
-      async () => scoped(() => getSettingByKey('redirects') as Promise<RedirectType[] | null>),
+      async () => scoped(tenantId, () => getSettingByKey('redirects') as Promise<RedirectType[] | null>),
       ['data-for-redirects', tenantId],
       { tags: [buildAllPagesTag(tenantId)], revalidate: false }
     )();
@@ -265,7 +268,7 @@ async function fetchCachedGlobalSettings() {
     // see the new one even when no global resource changed.
     const tenantId = (await getTenantIdFromHeaders()) ?? '';
     return await unstable_cache(
-      async () => scoped(() => fetchGlobalPageSettings()),
+      async () => scoped(tenantId, () => fetchGlobalPageSettings()),
       ['data-for-global-settings', tenantId],
       { tags: [buildAllPagesTag(tenantId), buildGlobalSettingsTag(tenantId)], revalidate: false }
     )();
@@ -289,7 +292,7 @@ async function fetchCachedFoldersForAuth() {
   try {
     const tenantId = (await getTenantIdFromHeaders()) ?? '';
     return await unstable_cache(
-      async () => scoped(() => fetchFoldersForAuth(true)),
+      async () => scoped(tenantId, () => fetchFoldersForAuth(true)),
       ['data-for-auth-folders', tenantId],
       { tags: [buildAllPagesTag(tenantId)], revalidate: false }
     )();
@@ -508,7 +511,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
   const metaTenantId = (await getTenantIdFromHeaders()) ?? '';
   const routeTag = buildRouteTag(metaTenantId, slugPath);
   const { meta, baseUrl } = await unstable_cache(
-    async () => ({
+    async () => scoped(metaTenantId, async () => ({
       meta: await generatePageMetadata(data.page, {
         fallbackTitle: isHomepage
           ? 'Home'
@@ -519,7 +522,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
         translations: data.translations,
       }),
       baseUrl: getSiteBaseUrl({ globalCanonicalUrl: globalSettings.globalCanonicalUrl }),
-    }),
+    })),
     [isHomepage ? 'data-for-route-/-meta' : `data-for-route-/${slugPath}-meta`, metaTenantId],
     { tags: [routeTag, buildAllPagesTag(metaTenantId)], revalidate: false }
   )();

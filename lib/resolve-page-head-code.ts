@@ -21,7 +21,7 @@ import { fetchErrorPage, fetchHomepage, fetchPageByPathForMetadata } from '@/lib
 import { parsePathnameForPageHead } from '@/lib/page-head-path';
 import { getDraftLayers, getPublishedLayers } from '@/lib/repositories/pageLayersRepository';
 import { resolveCustomCodePlaceholders } from '@/lib/resolve-cms-variables';
-import { getSupabaseAdmin } from '@/lib/supabase-server';
+import { getSupabaseAdmin, runWithTenantId } from '@/lib/supabase-server';
 
 import type { HreflangAlternate } from '@/lib/hreflang-utils';
 import type { CollectionField, CollectionItemWithValues, Page } from '@/types';
@@ -217,7 +217,8 @@ export async function resolvePageDocumentChrome(
     : buildRouteTag(tenantId, slugPath);
 
   return unstable_cache(
-    () => loadPageDocumentChrome(slugPath, true, errorCode, options),
+    // The site goes in explicitly: inside the data cache the request is out of reach (OPEN_QUESTIONS 25).
+    () => (tenantId ? runWithTenantId(tenantId, () => loadPageDocumentChrome(slugPath, true, errorCode, options)) : loadPageDocumentChrome(slugPath, true, errorCode, options)),
     ['page-document-chrome-v2', cacheKey, tenantId ?? 'default'],
     { tags: [routeTag, buildAllPagesTag(tenantId)], revalidate: false }
   )();
