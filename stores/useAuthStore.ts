@@ -7,7 +7,7 @@
 import { create } from 'zustand';
 import { createBrowserClient } from '../lib/supabase-browser';
 import { extractRoleFromUser } from '@/lib/roles';
-import type { User, Session } from '@supabase/supabase-js';
+import type { User, Session } from '@/lib/platform/types';
 
 interface AuthState {
   user: User | null;
@@ -203,7 +203,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const { error } = await supabase.auth.signOut();
 
       if (error) {
-        set({ loading: false, error: error.message });
+        set({ loading: false, error: (error as { message?: string }).message ?? 'Sign out failed' });
         return;
       }
 

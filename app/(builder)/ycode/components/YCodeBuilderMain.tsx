@@ -20,7 +20,6 @@
 
 // 1. React/Next.js
 import { useEffect, useState, useMemo, useRef, useCallback, Suspense, lazy } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 // 2. Internal components
 import AiChatPanel from '../components/ai/AiChatPanel';
@@ -100,6 +99,8 @@ import { Field } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertTitle } from '@/components/ui/alert';
+import SiteLockBanner from '@/lib/platform/SiteLockBanner';
+import { isReadOnly, useSiteLock } from '@/lib/platform/site-lock-client';
 
 interface YCodeBuilderProps {
   children?: React.ReactNode;
@@ -198,6 +199,8 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
   const migrationsComplete = useMigrationStore((state) => state.migrationsComplete);
   const setMigrationsComplete = useMigrationStore((state) => state.setMigrationsComplete);
   const [isSaving, setIsSaving] = useState(false);
+  // Another user holds the site's editor lock: nothing is saved from here (part 1, session 6).
+  const readOnly = isReadOnly(useSiteLock());
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -506,8 +509,9 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     onNormalPaste: handleNormalPaste,
   });
 
-  // Check if Supabase is configured, redirect to setup if not
+  // Check that the server is configured (DATABASE_URL); there is no setup wizard to send the user to
   const [supabaseConfigured, setSupabaseConfigured] = useState<boolean | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkSupabaseConfig = async () => {
@@ -516,21 +520,19 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
         const data = await response.json();
 
         if (!data.is_configured) {
-          // Redirect to setup wizard
-          router.push('/ycode/welcome');
+          setConfigError('Web Studio is not configured on this server');
           return;
         }
 
         setSupabaseConfigured(true);
       } catch (err) {
-        console.error('Failed to check Supabase config:', err);
-        // On error, redirect to setup to be safe
-        router.push('/ycode/welcome');
+        console.error('Failed to check server config:', err);
+        setConfigError('Web Studio could not reach its server');
       }
     };
 
     checkSupabaseConfig();
-  }, [router]);
+  }, []);
 
   // Sync viewportMode with activeBreakpoint in store
   useEffect(() => {
@@ -1233,6 +1235,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
 
   // Immediate save function (bypasses debouncing)
   const saveImmediately = useCallback(async (pageId: string) => {
+    if (readOnly) return;
     // Clear any pending debounced save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -1251,10 +1254,11 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     } finally {
       setIsSaving(false);
     }
-  }, [saveDraft]);
+  }, [saveDraft, readOnly]);
 
   // Debounced autosave function
   const debouncedSave = useCallback((pageId: string) => {
+    if (readOnly) return;
     // Clear existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -1274,7 +1278,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
         setIsSaving(false);
       }
     }, 2000);
-  }, [saveDraft]);
+  }, [saveDraft, readOnly]);
 
   // Save before navigating to a different page
   useEffect(() => {
@@ -1311,7 +1315,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     const lastLayers = lastLayersByPageRef.current.get(currentPageId);
 
     // Only trigger save if the layers array reference actually changed for THIS page
-    if (lastLayers && lastLayers !== currentLayers) {
+    if (lastLayers && lastLayers !== currentLayers && !readOnly) {
       if (consumePageMcpSync(currentPageId)) {
         // MCP already saved to DB — cancel any pending autosave and accept
         if (saveTimeoutRef.current) {
@@ -1326,7 +1330,7 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     }
 
     lastLayersByPageRef.current.set(currentPageId, currentLayers);
-  }, [currentPageId, currentDraft, debouncedSave]);
+  }, [currentPageId, currentDraft, debouncedSave, readOnly]);
 
   // Cleanup save timeout on unmount only
   useEffect(() => {
@@ -2158,7 +2162,11 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
     components,
   ]);
 
-  // Show loading screen while checking Supabase config
+  if (configError) {
+    return <BuilderLoading message={configError} />;
+  }
+
+  // Show loading screen while checking server config
   if (supabaseConfigured === null) {
     return <BuilderLoading message="Checking configuration..." />;
   }
@@ -2251,14 +2259,6 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
             </Button>
           </form>
 
-          <div className="mt-4 text-center">
-            <p className="text-xs text-white/50">
-              First time here?{' '}
-              <Link href="/ycode/welcome" className="text-white/80">
-                Complete setup
-              </Link>
-            </p>
-          </div>
         </div>
 
       </div>
@@ -2302,6 +2302,8 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
         }}
         isSettingsRoute={routeType === 'settings' || routeType === 'localization' || routeType === 'profile' || routeType === 'forms' || routeType === 'integrations'}
       />
+
+      <SiteLockBanner />
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">

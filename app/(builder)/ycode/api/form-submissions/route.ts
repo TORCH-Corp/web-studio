@@ -7,6 +7,7 @@ import {
   bulkDeleteFormSubmissions,
 } from '@/lib/repositories/formSubmissionRepository';
 import { dispatchFormSubmittedEvent } from '@/lib/services/webhookService';
+import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
 import { sendFormSubmissionEmail, extractReplyToEmail } from '@/lib/services/emailService';
 import { processAppIntegrations } from '@/lib/apps/integration-service';
 import { noCache } from '@/lib/api-response';
@@ -111,22 +112,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Dispatch webhook event (fire and forget)
-    dispatchFormSubmittedEvent({
+    // Dispatch webhook event (fire and forget). c0 port: the request's
+    // organization is carried into the background work explicitly, because
+    // headers() is gone once the response has been sent.
+    const tenantId = await getTenantIdFromHeaders();
+    const dispatch = () => dispatchFormSubmittedEvent({
       form_id: body.form_id,
       submission_id: submission.id,
       fields: payload,
       metadata,
     });
+    void (tenantId ? runWithTenantId(tenantId, dispatch) : dispatch());
 
     // Send email notification if enabled (fire and forget)
     if (body.email?.enabled && body.email?.to) {
       // Extract reply-to email from form payload (first email field found)
       const replyTo = extractReplyToEmail(payload);
 
-      sendFormSubmissionEmail(
-        body.email.to,
-        body.email.subject || `New form submission: ${body.form_id}`,
+      const email = () => sendFormSubmissionEmail(
+        body.email!.to,
+        body.email!.subject || `New form submission: ${body.form_id}`,
         {
           formId: body.form_id,
           submissionId: submission.id,
@@ -138,10 +143,12 @@ export async function POST(request: NextRequest) {
           replyTo,
         }
       );
+      void (tenantId ? runWithTenantId(tenantId, email) : email());
     }
 
     // Process app integrations (fire and forget)
-    processAppIntegrations(body.form_id, submission.id, payload);
+    const integrations = () => processAppIntegrations(body.form_id, submission.id, payload);
+    void (tenantId ? runWithTenantId(tenantId, integrations) : integrations());
 
     return NextResponse.json(
       { data: submission, message: 'Form submitted successfully' },

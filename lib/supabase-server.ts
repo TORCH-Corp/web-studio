@@ -1,163 +1,60 @@
-import { AsyncLocalStorage } from 'async_hooks';
-
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { credentials } from './credentials';
-import { parseSupabaseConfig } from './supabase-config-parser';
-import type { SupabaseConfig, SupabaseCredentials } from '@/types';
-import { withLimit } from './supabase-limiter';
-
 /**
- * Supabase Server Client
+ * Server data client (c0 port).
  *
- * Creates authenticated Supabase clients for server-side operations
- * Credentials are fetched from file-based storage or environment variables
+ * This module keeps the names ycode's repositories import (`getSupabaseAdmin`,
+ * `getTenantIdFromHeaders`, `runWithTenantId`, `tenantStore`) but returns the
+ * TORCH platform client instead of a Supabase client: plain PostgreSQL through
+ * knex, scoped to the site of the current request.
+ *
+ * "Tenant" in the rest of the code base means the site (part 1, session 1:
+ * an organization has one or more sites, see lib/platform/site.ts).
  */
 
-/**
- * Explicit tenant context for code running outside of a Next.js request
- * (e.g. fire-and-forget webhook processing where headers() is unavailable).
- */
-export const tenantStore = new AsyncLocalStorage<string>();
+import type { SupabaseClient } from '@/lib/platform/types';
+import { createPlatformClient } from '@/lib/platform/pg-client';
+import { resolveSiteId, runWithSite, siteStore } from '@/lib/platform/site';
+import { getKnexClient } from '@/lib/knex-client';
 
-/** Run an async function with an explicit tenant context. */
+export const tenantStore = siteStore;
+
 export function runWithTenantId<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
-  return tenantStore.run(tenantId, fn);
+  return runWithSite(tenantId, fn);
 }
 
 /**
- * Get Supabase credentials from storage
- * Parses the stored config to extract all necessary details
- */
-async function getSupabaseCredentials(): Promise<SupabaseCredentials | null> {
-  const config = await credentials.get<SupabaseConfig>('supabase_config');
-
-  if (!config) {
-    return null;
-  }
-
-  try {
-    return parseSupabaseConfig(config);
-  } catch (error) {
-    console.error('[getSupabaseCredentials] Failed to parse config:', error);
-    return null;
-  }
-}
-
-/**
- * Get Supabase configuration (exported for use in knex-client)
- * Alias for getSupabaseCredentials
- */
-export const getSupabaseConfig = getSupabaseCredentials;
-
-const globalForSupabase = globalThis as unknown as {
-  __supabaseClient?: SupabaseClient;
-  __supabaseCredKey?: string;
-};
-
-/**
- * Get Supabase client with service role key (admin access)
- *
- * Stored on globalThis so the client survives Next.js HMR in dev mode.
- * Module-level variables get reset on each hot reload, which would
- * orphan any in-flight requests on the old client.
+ * The data client for the site of the current request (or the one passed
+ * in). Typed as SupabaseClient so the repositories compile unchanged; the
+ * object implements the query-builder subset they use.
  */
 export async function getSupabaseAdmin(tenantId?: string): Promise<SupabaseClient | null> {
-  const creds = await getSupabaseCredentials();
-
-  if (!creds) {
-    console.error('[getSupabaseAdmin] No credentials returned!');
-    return null;
-  }
-
-  const credKey = `${creds.projectUrl}:${creds.serviceRoleKey}`;
-  if (globalForSupabase.__supabaseClient && globalForSupabase.__supabaseCredKey === credKey) {
-    return globalForSupabase.__supabaseClient;
-  }
-
-  const limitedFetch: typeof globalThis.fetch = (input, init) =>
-    withLimit(() => globalThis.fetch(input, init));
-
-  globalForSupabase.__supabaseClient = createClient(creds.projectUrl, creds.serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-    global: { fetch: limitedFetch },
-  });
-
-  globalForSupabase.__supabaseCredKey = credKey;
-
-  return globalForSupabase.__supabaseClient;
+  const siteId = await resolveSiteId(tenantId);
+  return createPlatformClient(siteId) as unknown as SupabaseClient;
 }
 
-/**
- * Test Supabase connection with full config
- */
-export async function testSupabaseConnection(
-  config: SupabaseConfig
-): Promise<{ success: boolean; error?: string }> {
+/** Kept for the two callers that still read it; there is no Supabase config any more. */
+export const getSupabaseConfig = async (): Promise<null> => null;
+
+export async function testSupabaseConnection(): Promise<{ success: boolean; error?: string }> {
   try {
-    const parsed = parseSupabaseConfig(config);
-
-    const client = createClient(parsed.projectUrl, parsed.serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    const { error } = await client.auth.admin.listUsers({
-      page: 1,
-      perPage: 1,
-    });
-
-    if (error) {
-      console.error('[testSupabaseConnection] Failed:', { url: parsed.projectUrl, error: error.message, status: error.status });
-      return { success: false, error: error.message };
-    }
-
+    const knex = await getKnexClient();
+    await knex.raw('select 1');
     return { success: true };
   } catch (error) {
-    console.error('[testSupabaseConnection] Failed:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Connection failed',
-    };
+    return { success: false, error: error instanceof Error ? error.message : 'Database connection failed' };
   }
 }
 
-/**
- * Get tenant ID from request headers.
- *
- * Base implementation: always returns null (single-tenant, no scoping needed).
- * Overridden via path alias in multi-tenant deployments.
- */
+/** The site id of the current request, used by the direct knex paths to scope their reads. */
 export async function getTenantIdFromHeaders(): Promise<string | null> {
-  return null;
+  return resolveSiteId();
 }
 
-/**
- * Execute raw SQL query
- */
 export async function executeSql(sql: string): Promise<{ success: boolean; error?: string }> {
-  const client = await getSupabaseAdmin();
-
-  if (!client) {
-    return { success: false, error: 'Supabase not configured' };
-  }
-
   try {
-    const { error } = await client.rpc('exec_sql', { sql });
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
+    const knex = await getKnexClient();
+    await knex.raw(sql);
     return { success: true };
   } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'SQL execution failed',
-    };
+    return { success: false, error: error instanceof Error ? error.message : 'SQL failed' };
   }
 }

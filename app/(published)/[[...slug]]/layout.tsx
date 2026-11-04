@@ -4,6 +4,7 @@ import SiteDocumentLayout, { generateSiteMetadata } from '@/components/site-docu
 import { fetchGlobalPageSettings } from '@/lib/generate-page-metadata';
 import { withCustom404Metadata } from '@/lib/not-found-metadata';
 import { resolveHtmlLang } from '@/lib/resolve-html-lang';
+import { getTenantIdFromHeaders } from '@/lib/supabase-server';
 import { getSiteBaseUrl } from '@/lib/url-utils';
 
 interface PublishedLayoutProps {
@@ -32,8 +33,10 @@ export default async function PublishedLayout({
   const slugPath = slug?.join('/') ?? '';
   const pathname = slugPath ? `/${slugPath}` : '/';
 
+  // c0 port: the site comes from the host; the cached lookups are keyed by it.
+  const tenantId = (await getTenantIdFromHeaders()) ?? undefined;
   const [lang, globalSettings] = await Promise.all([
-    resolveHtmlLang(slugPath, true),
+    resolveHtmlLang(slugPath, true, tenantId),
     fetchGlobalPageSettings().catch(() => null),
   ]);
 
@@ -45,6 +48,7 @@ export default async function PublishedLayout({
     <SiteDocumentLayout
       lang={lang}
       pathname={pathname}
+      tenantId={tenantId}
       baseUrl={baseUrl}
       publishedAt={globalSettings?.publishedAt ?? null}
       globalCustomCodeHead={globalSettings?.globalCustomCodeHead ?? null}

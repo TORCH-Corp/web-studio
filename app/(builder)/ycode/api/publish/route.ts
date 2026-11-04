@@ -14,6 +14,7 @@ import {
   invalidateForLocalisationChanges,
 } from '@/lib/services/cacheService';
 import { findAffectedPages, findCollectionsEmbeddingComponents, getEmbeddedComponentIdsForCollections } from '@/lib/repositories/pageLayersRepository';
+import { forgetSiteLookups } from '@/lib/platform/site';
 import { dispatchSitePublishedEvent } from '@/lib/services/webhookService';
 import { getAllDraftPages, hardDeleteSoftDeletedPages, backfillMissingPageHashes } from '@/lib/repositories/pageRepository';
 import { publishComponents, getUnpublishedComponents, hardDeleteSoftDeletedComponents } from '@/lib/repositories/componentRepository';
@@ -898,6 +899,10 @@ export async function POST(request: NextRequest) {
       // Fallback: if selective invalidation fails, nuke everything
       try { await clearAllCache(); } catch { /* non-fatal */ }
     }
+
+    // Part 1 session 5: a publish also refreshes the host lookups, so a host
+    // added to the site since the last publish answers from now on.
+    forgetSiteLookups();
 
     // Dispatch the site.published webhook event. The dispatcher is the only
     // path that delivers to user-configured webhooks for this event type

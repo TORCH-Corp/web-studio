@@ -46,6 +46,8 @@ import { useEditorStore } from '@/stores/useEditorStore';
 import { useComponentsStore } from '@/stores/useComponentsStore';
 import { useEditorActions } from '@/hooks/use-editor-url';
 import { useLocalizationMode } from '@/hooks/use-localization-mode';
+import { useWsParts } from '@/hooks/use-ws-parts';
+import { PART_ELEMENTS } from '@/lib/platform/parts';
 import type { UseLiveLayerUpdatesReturn } from '@/hooks/use-live-layer-updates';
 
 /**
@@ -277,6 +279,10 @@ async function restoreInlinedComponents(
 }
 
 export default function ElementLibrary({ isOpen, onClose, liveLayerUpdates }: ElementLibraryProps) {
+  const wsParts = useWsParts();
+  const visibleCategories = Object.entries(elementCategories).map(([name, elements]): [string, string[]] => (
+    [name, wsParts ? elements : elements.filter((el) => !PART_ELEMENTS.includes(el))]
+  ));
   const addLayerFromTemplate = usePagesStore((s) => s.addLayerFromTemplate);
   const updateLayer = usePagesStore((s) => s.updateLayer);
   const setDraftLayers = usePagesStore((s) => s.setDraftLayers);
@@ -1507,7 +1513,7 @@ export default function ElementLibrary({ isOpen, onClose, liveLayerUpdates }: El
             value="elements" forceMount
             ref={(el) => { tabRefs.current.elements = el; }} className="flex flex-col divide-y overflow-y-auto flex-1 px-4 pb-4 no-scrollbar"
           >
-            {Object.entries(elementCategories).map(([categoryName, elements]) => (
+            {visibleCategories.map(([categoryName, elements]) => (
               <div key={categoryName} className="flex flex-col pb-5">
                 <header className="py-5">
                   <Label>{categoryName}</Label>

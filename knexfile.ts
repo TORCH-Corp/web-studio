@@ -1,74 +1,42 @@
 import type { Knex } from 'knex';
 import path from 'path';
-import { credentials } from './lib/credentials.ts';
-import { parseSupabaseConfig } from './lib/supabase-config-parser.ts';
-import type { SupabaseConfig } from './types/index.ts';
+import pg from 'pg';
 
 /**
- * Knex Configuration for Ycode Supabase Migrations
+ * Knex configuration (c0 port): one PostgreSQL database on the TORCH platform,
+ * given by DATABASE_URL, like every other Business OS service.
  *
- * This configuration is used to run migrations programmatically
- * against the user's Supabase PostgreSQL database.
+ * The pg type parsers below make rows look the way PostgREST returned them:
+ * timestamps as ISO strings, bigint counts as numbers.
  */
+pg.types.setTypeParser(1184, (v: string) => new Date(v).toISOString()); // timestamptz
+pg.types.setTypeParser(1114, (v: string) => new Date(v + 'Z').toISOString()); // timestamp
+pg.types.setTypeParser(20, (v: string) => Number(v)); // int8
+pg.types.setTypeParser(1700, (v: string) => Number(v)); // numeric
 
-/**
- * Load Supabase credentials from centralized storage
- * Uses environment variables on Vercel, file-based storage locally
- */
-async function getSupabaseConnectionParams() {
-  const config = await credentials.get<SupabaseConfig>('supabase_config');
-
-  if (!config?.connectionUrl || !config?.dbPassword) {
-    throw new Error('Supabase not configured. Please run setup first.');
-  }
-
-  const connectionParams = parseSupabaseConfig(config);
-  const isSelfHosted = !!config.supabaseUrl;
-
-  return {
-    host: connectionParams.dbHost,
-    port: connectionParams.dbPort,
-    database: connectionParams.dbName,
-    user: connectionParams.dbUser,
-    password: connectionParams.dbPassword,
-    ssl: isSelfHosted ? false : { rejectUnauthorized: false },
-  };
-}
-
-const createConfig = (): Knex.Config => {
-  const isVercel = process.env.VERCEL === '1';
-
-  return {
-    client: 'pg',
-    connection: async () => {
-      const connectionParams = await getSupabaseConnectionParams();
-
-      return connectionParams;
-    },
-    migrations: {
-      directory: path.join(process.cwd(), 'database/migrations'),
-      extension: 'ts',
-      tableName: 'migrations',
-    },
-    pool: isVercel ? {
-      min: 0,
-      max: 1,
-      acquireTimeoutMillis: 10000,
-      createTimeoutMillis: 10000,
-      idleTimeoutMillis: 1000,
-      reapIntervalMillis: 1000,
-      createRetryIntervalMillis: 200,
-    } : {
-      min: 0,
-      max: 3,
-      idleTimeoutMillis: 30000,
-    },
-  };
-};
+const createConfig = (): Knex.Config => ({
+  client: 'pg',
+  connection: () => {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error('DATABASE_URL is not set. Web Studio needs the platform PostgreSQL.');
+    return Promise.resolve({ connectionString: url, ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false });
+  },
+  migrations: {
+    directory: path.join(process.cwd(), 'database/migrations'),
+    extension: 'ts',
+    tableName: 'migrations',
+  },
+  pool: {
+    min: 0,
+    max: Number(process.env.DATABASE_POOL_MAX || 10),
+    idleTimeoutMillis: 30000,
+  },
+});
 
 const config: { [key: string]: Knex.Config } = {
   development: createConfig(),
   production: createConfig(),
+  test: createConfig(),
 };
 
 export default config;

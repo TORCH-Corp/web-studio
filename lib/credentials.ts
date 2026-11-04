@@ -1,191 +1,32 @@
 /**
- * Supabase Credentials
+ * Platform configuration (c0 port).
  *
- * Always reads from process.env (environment variables).
- * On local dev, writes to .env + sets process.env in-memory.
- * On Vercel, env vars are set via the dashboard — writes are not supported.
+ * ycode used this module to store Supabase credentials in `.env`. Web Studio
+ * takes its database from DATABASE_URL like every other Business OS service,
+ * so "configured" simply means that variable is set. The interface is kept so
+ * the setup and robots/sitemap routes compile unchanged.
  *
- * SERVER-ONLY: This module uses Node.js fs module and should never be imported in client code.
+ * SERVER-ONLY.
  */
 
 import 'server-only';
 
-import fs from 'fs/promises';
-import path from 'path';
-import type { SupabaseConfig } from '@/types';
-
-const ENV_FILE = path.join(process.cwd(), '.env');
-const IS_VERCEL = process.env.VERCEL === '1';
-
-/**
- * Read Supabase config from environment variables.
- * Supports both new (SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY) and legacy
- * (SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY) variable names.
- *
- * SUPABASE_URL is optional — required for self-hosted Supabase instances.
- * When omitted, the API URL is derived from the project ref in the connection string.
- */
-function getSupabaseConfigFromEnv(): SupabaseConfig | null {
-  const anonKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
-  const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const connectionUrl = process.env.SUPABASE_CONNECTION_URL;
-  const dbPassword = process.env.SUPABASE_DB_PASSWORD;
-  const supabaseUrl = process.env.SUPABASE_URL;
-
-  if (anonKey && secretKey && connectionUrl && dbPassword) {
-    return {
-      anonKey,
-      serviceRoleKey: secretKey,
-      connectionUrl,
-      dbPassword,
-      ...(supabaseUrl ? { supabaseUrl } : {}),
-    };
-  }
-
-  return null;
-}
-
-/**
- * Get a value from storage (reads from environment variables).
- */
 export async function get<T = unknown>(key: string): Promise<T | null> {
-  if (key === 'supabase_config') {
-    return getSupabaseConfigFromEnv() as T;
-  }
-  return null;
+  if (key === 'database_url') return (process.env.DATABASE_URL as T) ?? null;
+  return null; // 'supabase_config' and friends no longer exist
 }
 
-/**
- * Set a value in storage.
- * Writes to .env and sets process.env in-memory for immediate availability.
- * On Vercel, throws — env vars must be set via the dashboard.
- */
-export async function set(key: string, value: unknown): Promise<void> {
-  if (IS_VERCEL) {
-    throw new Error(
-      'Cannot write to file system on Vercel. Please set environment variables instead:\n' +
-      '1. Go to Vercel Dashboard → Project Settings → Environment Variables\n' +
-      '2. Add: SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, SUPABASE_CONNECTION_URL, SUPABASE_DB_PASSWORD (and SUPABASE_URL for self-hosted)\n' +
-      '3. Redeploy your application'
-    );
-  }
-
-  if (key === 'supabase_config') {
-    const config = value as SupabaseConfig;
-
-    // Set process.env in-memory so credentials are available immediately
-    // (without waiting for a dev server restart)
-    process.env.SUPABASE_PUBLISHABLE_KEY = config.anonKey;
-    process.env.SUPABASE_SECRET_KEY = config.serviceRoleKey;
-    process.env.SUPABASE_CONNECTION_URL = config.connectionUrl;
-    process.env.SUPABASE_DB_PASSWORD = config.dbPassword;
-
-    if (config.supabaseUrl) {
-      process.env.SUPABASE_URL = config.supabaseUrl;
-    } else {
-      delete process.env.SUPABASE_URL;
-    }
-
-    // Persist to .env so credentials survive a dev server restart
-    await writeEnvFile(config);
-  }
+export async function set(): Promise<void> {
+  throw new Error('Web Studio is configured through environment variables (DATABASE_URL); nothing is written at runtime.');
 }
 
-/**
- * Delete a value from storage.
- */
-export async function del(key: string): Promise<void> {
-  if (key === 'supabase_config') {
-    delete process.env.SUPABASE_PUBLISHABLE_KEY;
-    delete process.env.SUPABASE_SECRET_KEY;
-    delete process.env.SUPABASE_CONNECTION_URL;
-    delete process.env.SUPABASE_DB_PASSWORD;
-    delete process.env.SUPABASE_URL;
-
-    // Remove Supabase vars from .env
-    try {
-      await removeSupabaseVarsFromEnv();
-    } catch {
-      // File may not exist
-    }
-  }
+export async function del(): Promise<void> {
+  // Nothing to delete.
 }
 
-/**
- * Check if Supabase credentials are configured.
- */
+/** True when the platform database is configured. */
 export async function exists(): Promise<boolean> {
-  return getSupabaseConfigFromEnv() !== null;
+  return !!process.env.DATABASE_URL;
 }
 
-const SUPABASE_ENV_KEYS = [
-  'SUPABASE_PUBLISHABLE_KEY',
-  'SUPABASE_SECRET_KEY',
-  'SUPABASE_CONNECTION_URL',
-  'SUPABASE_DB_PASSWORD',
-  'SUPABASE_URL',
-];
-
-/**
- * Write Supabase credentials to .env file.
- * Preserves existing non-Supabase vars, replaces Supabase vars.
- */
-async function writeEnvFile(config: SupabaseConfig): Promise<void> {
-  let existing = '';
-  try {
-    existing = await fs.readFile(ENV_FILE, 'utf-8');
-  } catch {
-    // File doesn't exist yet
-  }
-
-  // Filter out old Supabase vars and the auto-generated comment
-  const filtered = existing
-    .split('\n')
-    .filter((line) => {
-      if (line === '# Auto-generated by Ycode setup wizard') return false;
-      return !SUPABASE_ENV_KEYS.some((key) => line.startsWith(`${key}=`));
-    })
-    .join('\n')
-    .trimEnd();
-
-  const lines = [
-    '# Auto-generated by Ycode setup wizard',
-    `SUPABASE_PUBLISHABLE_KEY="${config.anonKey}"`,
-    `SUPABASE_SECRET_KEY="${config.serviceRoleKey}"`,
-    `SUPABASE_CONNECTION_URL="${config.connectionUrl}"`,
-    `SUPABASE_DB_PASSWORD="${config.dbPassword}"`,
-  ];
-
-  if (config.supabaseUrl) {
-    lines.push(`SUPABASE_URL="${config.supabaseUrl}"`);
-  }
-
-  const supabaseBlock = lines.join('\n');
-
-  const content = filtered ? `${filtered}\n${supabaseBlock}\n` : `${supabaseBlock}\n`;
-  await fs.writeFile(ENV_FILE, content, 'utf-8');
-}
-
-/**
- * Remove Supabase vars from .env file, preserving other vars.
- */
-async function removeSupabaseVarsFromEnv(): Promise<void> {
-  const existing = await fs.readFile(ENV_FILE, 'utf-8');
-  const filtered = existing
-    .split('\n')
-    .filter((line) => {
-      if (line === '# Auto-generated by Ycode setup wizard') return false;
-      return !SUPABASE_ENV_KEYS.some((key) => line.startsWith(`${key}=`));
-    })
-    .join('\n')
-    .trimEnd();
-
-  await fs.writeFile(ENV_FILE, filtered ? `${filtered}\n` : '', 'utf-8');
-}
-
-export const credentials = {
-  get,
-  set,
-  del,
-  exists,
-};
+export const credentials = { get, set, del, exists };

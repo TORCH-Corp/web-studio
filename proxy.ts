@@ -1,63 +1,20 @@
-import { createServerClient } from '@supabase/ssr';
+import { SESSION_COOKIE, SITE_COOKIE, hasFlag, verifySession, verifySiteCookie, type BosSession } from '@/lib/platform/session';
+import { accessFor, isEditingWrite, requirementName } from '@/lib/platform/permissions';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/security-headers-server';
+import { isHiddenBuilderRoute, partsRaised } from '@/lib/platform/parts';
+import { acquireSiteLock } from '@/lib/platform/site-lock';
 import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
 
 /**
- * Public API routes that skip authentication.
+ * Routes that need a session but no site: the sites API, which lists, creates
+ * and opens sites, and the session routes. A stale `ws_site` cookie must not
+ * lock a user out of them (part 1, session 1).
  */
-const PUBLIC_API_PREFIXES = [
-  '/ycode/api/setup/',    // Setup wizard — needed before any user exists
-  '/ycode/api/supabase/', // Supabase config — needed for browser client init
-  '/ycode/api/auth/',     // Auth callbacks and session checks
-  '/ycode/api/v1/',       // Public API — has own API key auth
-];
+const SITELESS_API_PREFIXES = ['/ycode/api/platform/', '/ycode/api/auth/'];
 
-/**
- * Patterns for collection item endpoints that must be accessible on published pages
- * (load-more pagination, filter). Matched via regex since the collection ID is dynamic.
- */
-const PUBLIC_COLLECTION_ITEM_SUFFIXES = ['/items/filter', '/items/load-more'];
-
-const PUBLIC_API_EXACT = [
-  '/ycode/api/revalidate', // Cache revalidation — has own secret token auth
-  '/ycode/api/oauth/register', // RFC 7591 Dynamic Client Registration — anonymous
-  '/ycode/api/oauth/token',    // OAuth token exchange — auth is via PKCE/refresh
-];
-
-/**
- * Derive the Supabase project URL and anon key from environment variables.
- * Returns null if env vars are not set (pre-setup or local dev without .env.local).
- *
- * Uses SUPABASE_URL when set (self-hosted instances), otherwise derives from
- * the project ref in the connection string (hosted Supabase).
- */
-function getSupabaseEnvConfig(): { url: string; anonKey: string } | null {
-  const anonKey = process.env.SUPABASE_PUBLISHABLE_KEY
-    || process.env.SUPABASE_ANON_KEY;
-  const connectionUrl = process.env.SUPABASE_CONNECTION_URL;
-
-  if (!anonKey || !connectionUrl) return null;
-
-  if (process.env.SUPABASE_URL) {
-    return {
-      url: process.env.SUPABASE_URL.replace(/\/+$/, ''),
-      anonKey,
-    };
-  }
-
-  // Hosted Supabase: extract project ID from connection URL
-  const match = connectionUrl.match(/\/\/postgres\.([a-z0-9]+):/);
-  if (!match) return null;
-
-  return {
-    url: `https://${match[1]}.supabase.co`,
-    anonKey,
-  };
-}
-
-/** Attach x-pathname on the request (readable via headers()) and the response. */
+/** Forward the request with its pathname as a header, keeping cookies and headers already set. */
 function withPathname(response: NextResponse, request: NextRequest, pathname: string): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', pathname);
@@ -74,81 +31,90 @@ function withPathname(response: NextResponse, request: NextRequest, pathname: st
   return next;
 }
 
-function isPublicApiRoute(pathname: string, method: string, searchParams: URLSearchParams): boolean {
-  // POST to form-submissions is public (website visitors submitting forms)
-  if (pathname === '/ycode/api/form-submissions' && method === 'POST') {
-    return true;
+/**
+ * The session and the permission a builder request needs (part 1, session 2).
+ *
+ * lib/platform/permissions.ts names the leaf and flag of every route under
+ * /ycode/api (and of the preview and the templates bridge). A public route
+ * passes; any other needs the Business OS session (401 without one), the flag
+ * the route names (403 without it, naming the `leaf.flag` an administrator
+ * ticks), and, unless it is one of the siteless routes, a `ws_site` cookie of
+ * the session's organization. A path the map does not know is not found.
+ * Returns null to continue.
+ */
+async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null> {
+  const { pathname, searchParams } = request.nextUrl;
+  const access = accessFor(pathname, request.method, searchParams);
+  if (!access || access.kind === 'public') return null;
+
+  // A path under /ycode/api that no route names: not found, whoever asks. A
+  // route file without a rule cannot reach here (permissions.test.ts fails on it).
+  if (access.kind === 'unmapped') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // Published error pages are rendered for visitors by the error boundary, so the
-  // published variant must be readable anonymously. Drafts stay behind auth.
-  if (method === 'GET' && pathname === '/ycode/api/error-page'
-      && searchParams.get('published') === 'true') {
-    return true;
+  const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
+  if (!session) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  if (PUBLIC_API_EXACT.includes(pathname)) return true;
-
-  if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
-
-  // Collection item endpoints for published pages (POST only — filter, load-more)
-  if (method === 'POST' && pathname.startsWith('/ycode/api/collections/') &&
-      PUBLIC_COLLECTION_ITEM_SUFFIXES.some(suffix => pathname.endsWith(suffix))) {
-    return true;
+  if (access.kind === 'leaf' && !hasFlag(session, access.leaf, access.flag)) {
+    return NextResponse.json({ error: 'Forbidden', required: requirementName(access) }, { status: 403 });
   }
 
-  return false;
+  if (!SITELESS_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    const refused = await refuseForeignSiteCookie(request, session);
+    if (refused) return refused;
+    if (isEditingWrite(access, request.method)) {
+      const locked = await refuseWriteWithoutLock(request, session);
+      if (locked) return locked;
+    }
+  }
+
+  return NextResponse.next({ request });
 }
 
 /**
- * Verify Supabase session for protected API routes.
- * Returns a 401 response if not authenticated, or null to continue.
+ * Part 1, session 1: the builder works on the site named by the signed
+ * `ws_site` cookie. The cookie carries the organization it was checked
+ * against, so a cookie that is not valid or belongs to another organization
+ * is refused here, with no database lookup, and dropped from the browser.
+ * lib/platform/site.ts then checks the site itself against the database.
  */
-async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null> {
-  if (isPublicApiRoute(request.nextUrl.pathname, request.method, request.nextUrl.searchParams)) {
-    return null;
-  }
+async function refuseForeignSiteCookie(request: NextRequest, session: BosSession): Promise<NextResponse | null> {
+  const raw = request.cookies.get(SITE_COOKIE)?.value;
+  if (!raw) return null;
+  const siteCookie = await verifySiteCookie(raw);
+  if (siteCookie && siteCookie.org === session.org) return null;
+  const response = NextResponse.json({ error: 'Site not found' }, { status: 404 });
+  response.cookies.set({ name: SITE_COOKIE, value: '', path: '/', maxAge: 0 });
+  return response;
+}
 
-  const config = getSupabaseEnvConfig();
-
-  // If env vars aren't set (pre-setup or local dev without .env.local), let through
-  if (!config) return null;
-
-  let response = NextResponse.next({ request });
-
-  const supabase = createServerClient(config.url, config.anonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      },
-    },
-  });
-
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
+/**
+ * Part 1, session 6: one editor at a time. A write to the open site needs the
+ * site's editor lock. A free (or lapsed) lock is taken by the write, which
+ * counts as activity; a lock another user holds answers 423 with that user's
+ * name and nothing is written. Reads never come here. The lock service is the
+ * one statement in lib/platform/site-lock.ts; a failure of it fails the write
+ * (500) rather than letting two editors through.
+ */
+async function refuseWriteWithoutLock(request: NextRequest, session: BosSession): Promise<NextResponse | null> {
+  const raw = request.cookies.get(SITE_COOKIE)?.value;
+  const siteCookie = raw ? await verifySiteCookie(raw) : null;
+  if (!siteCookie) return null; // no site open: nothing to lock, and the route answers as before
+  try {
+    const lock = await acquireSiteLock(siteCookie.site, { id: session.sub, name: session.name || session.email });
+    if (lock.held) return null;
+    const holder = lock.holder?.name ?? 'another editor';
     return NextResponse.json(
-      { error: 'Not authenticated' },
-      { status: 401 }
+      { error: `${holder} is editing this site`, holder, since: lock.holder?.since ?? null },
+      { status: 423 },
     );
+  } catch (error) {
+    console.error('[proxy] editor lock check failed', error);
+    return NextResponse.json({ error: 'Could not check the site\'s editor lock' }, { status: 500 });
   }
-
-  // Authenticated — pass through with any refreshed cookies
-  const authResponse = NextResponse.next({ request });
-  response.cookies.getAll().forEach((cookie) => {
-    authResponse.cookies.set(cookie.name, cookie.value);
-  });
-
-  return authResponse;
 }
 
 export async function proxy(request: NextRequest) {
@@ -162,6 +128,11 @@ export async function proxy(request: NextRequest) {
     return withPathname(NextResponse.next(), request, pathname);
   }
 
+  // Screens removed from the builder, and Collections / Forms until WS_PARTS=1 (part 1, session 3).
+  if (isHiddenBuilderRoute(pathname, partsRaised())) {
+    return new NextResponse('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
   // Debug escape hatch: skip auth on preview routes when explicitly enabled.
   const skipPreviewAuth = process.env.DISABLE_PREVIEW_AUTH === 'true'
     && pathname.startsWith('/ycode/preview');
@@ -172,13 +143,14 @@ export async function proxy(request: NextRequest) {
   if (!skipPreviewAuth && (pathname.startsWith('/ycode/api') || pathname.startsWith('/ycode/preview') || pathname.startsWith('/api/templates'))) {
     const authResponse = await verifyApiAuth(request);
     if (authResponse) {
-      if (authResponse.status === 401) {
-        if (pathname.startsWith('/ycode/preview')) {
+      if (authResponse.status >= 400) {
+        // A preview with no session goes back to the builder, never to a login page.
+        if (authResponse.status === 401 && pathname.startsWith('/ycode/preview')) {
           return NextResponse.redirect(new URL('/ycode', request.url));
         }
         return authResponse;
       }
-      // Authenticated — pass through
+      // Authenticated and permitted — pass through
       return withPathname(authResponse, request, pathname);
     }
   }

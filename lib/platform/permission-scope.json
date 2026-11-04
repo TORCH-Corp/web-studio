@@ -1,0 +1,82 @@
+{
+  "app_name": "Web Studio",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "id": "webstudio.sites",
+      "name": "Sites",
+      "sub_modules": [
+        {
+          "id": "webstudio.sites.sites",
+          "name": "Sites and content",
+          "entities": [
+            {
+              "id": "webstudio.manage_sites",
+              "name": "Sites",
+              "leaf_key": "webstudio.manage_sites",
+              "system_role_defaults": {
+                "manager": { "c": true, "r": true, "u": true, "d": true, "x": true, "export": true, "use_ai": true },
+                "member": { "c": false, "r": true, "u": false, "d": false, "x": false, "export": false, "use_ai": false },
+                "viewer": { "c": false, "r": true, "u": false, "d": false, "x": false, "export": false, "use_ai": false }
+              }
+            },
+            {
+              "id": "webstudio.manage_content",
+              "name": "Pages and publishing",
+              "leaf_key": "webstudio.manage_content",
+              "system_role_defaults": {
+                "manager": { "c": true, "r": true, "u": true, "d": true, "x": true, "export": true, "use_ai": true },
+                "member": { "c": true, "r": true, "u": true, "d": false, "x": false, "export": false, "use_ai": false },
+                "viewer": { "c": false, "r": true, "u": false, "d": false, "x": false, "export": false, "use_ai": false }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "webstudio.forms",
+      "name": "Forms and collections",
+      "sub_modules": [
+        {
+          "id": "webstudio.forms.forms",
+          "name": "Contact form and collections",
+          "entities": [
+            {
+              "id": "webstudio.manage_forms",
+              "name": "Forms and collections",
+              "leaf_key": "webstudio.manage_forms",
+              "system_role_defaults": {
+                "manager": { "c": true, "r": true, "u": true, "d": true, "x": true, "export": true, "use_ai": true },
+                "member": { "c": false, "r": false, "u": false, "d": false, "x": false, "export": false, "use_ai": false },
+                "viewer": { "c": false, "r": false, "u": false, "d": false, "x": false, "export": false, "use_ai": false }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "webstudio.store",
+      "name": "Store",
+      "sub_modules": [
+        {
+          "id": "webstudio.store.orders",
+          "name": "Orders",
+          "entities": [
+            {
+              "id": "webstudio.manage_orders",
+              "name": "Orders",
+              "leaf_key": "webstudio.manage_orders",
+              "system_role_defaults": {
+                "manager": { "c": true, "r": true, "u": true, "d": true, "x": true, "export": true, "use_ai": true },
+                "member": { "c": false, "r": false, "u": false, "d": false, "x": false, "export": false, "use_ai": false },
+                "viewer": { "c": false, "r": false, "u": false, "d": false, "x": false, "export": false, "use_ai": false }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

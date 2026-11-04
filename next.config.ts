@@ -8,26 +8,28 @@ const imageRemotePatterns: NonNullable<NonNullable<NextConfig['images']>['remote
   },
 ];
 
-// Self-hosted Supabase: allow the custom domain for storage image optimization.
-// Supports both "https://supabase.example.com" and bare "supabase.example.com".
-if (process.env.SUPABASE_URL) {
+// TORCH platform storage (c0 port): images are served from this deployment.
+if (process.env.PLATFORM_PUBLIC_URL) {
   try {
-    const parsed = new URL(
-      process.env.SUPABASE_URL.startsWith('http')
-        ? process.env.SUPABASE_URL
-        : `https://${process.env.SUPABASE_URL}`,
-    );
+    const parsed = new URL(process.env.PLATFORM_PUBLIC_URL);
     imageRemotePatterns.push({
-      protocol: (parsed.protocol.replace(':', '') as 'http' | 'https') || 'https',
+      protocol: parsed.protocol.replace(':', '') as 'http' | 'https',
       hostname: parsed.hostname,
-      pathname: '/storage/v1/object/public/**',
+      port: parsed.port || undefined,
+      pathname: '/platform-storage/**',
     });
   } catch {
-    // Invalid SUPABASE_URL — skip adding remote pattern
+    // Invalid PLATFORM_PUBLIC_URL — skip adding remote pattern
   }
 }
 
 const nextConfig: NextConfig = {
+  // The production image (Dockerfile) builds with NEXT_OUTPUT=standalone; every other build is unchanged.
+  ...(process.env.NEXT_OUTPUT === 'standalone' ? { output: 'standalone' as const } : {}),
+  // lib/server/tailwind-compiler.ts reads Tailwind's stylesheet from node_modules at run time (the
+  // per-page CSS compiled at publish). The trace copies the file under .pnpm but not the package
+  // path the compiler opens, so the standalone server could not compile CSS; this names the file.
+  outputFileTracingIncludes: { '/*': ['./node_modules/tailwindcss/index.css'] },
   trailingSlash: false,
   staticPageGenerationTimeout: 120,
   experimental: {
@@ -51,6 +53,8 @@ const nextConfig: NextConfig = {
     'pg-query-stream',
     // Server-side HTML import; its optional `canvas` require must not be bundled
     'linkedom',
+    // TORCH platform: the core event bus client (lib/platform/scope-registration.ts)
+    'ioredis',
   ],
 
   // Turbopack configuration

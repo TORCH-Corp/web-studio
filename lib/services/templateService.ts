@@ -66,6 +66,8 @@ export async function listTemplatesWithCategories(): Promise<{
   templates: Template[];
   categories: TemplateCategory[];
 }> {
+  if (!YCODE_EXTERNAL_API_URL) return { templates: [], categories: [] };
+
   const response = await fetch(`${YCODE_EXTERNAL_API_URL}/api/templates`, {
     cache: 'no-store',
   });
@@ -103,6 +105,8 @@ export async function listCategories(): Promise<TemplateCategory[]> {
  * Get template details from the template service
  */
 export async function getTemplate(id: string): Promise<TemplateDetails | null> {
+  if (!YCODE_EXTERNAL_API_URL) return null;
+
   const response = await fetch(`${YCODE_EXTERNAL_API_URL}/api/templates/${id}`, {
     cache: 'no-store',
   });
@@ -348,6 +352,10 @@ export async function applyTemplate(
   templateId: string,
   tenantId?: string
 ): Promise<ApplyTemplateResult> {
+  if (!YCODE_EXTERNAL_API_URL) {
+    return { success: false, error: 'No template service is configured.' };
+  }
+
   // Test database connection first
   const canConnect = await testKnexConnection();
   if (!canConnect) {

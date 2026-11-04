@@ -6,7 +6,7 @@
  * so the editor UI updates in real time when an AI agent makes changes.
  */
 
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RealtimeChannel } from '@/lib/platform/types';
 
 import { getSupabaseAdmin } from '@/lib/supabase-server';
 import type { Component, Layer, Page } from '@/types';

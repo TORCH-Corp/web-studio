@@ -31,7 +31,7 @@ import type { Locale, Page, PageFolder, Translation } from '@/types'
 
 import { collectPublicAssets, collectSupabaseAssets } from './asset-bundler'
 import { getExportConfig, saveLastExportJob } from './config'
-import { buildDocument, SWIPER_CSS_PATH } from './document'
+import { buildDocument, SWIPER_CSS_PATH, SWIPER_JS_PATH } from './document'
 import { pagePathFromOutputKey } from './paths'
 import {
   buildTranslationsMap,
@@ -55,7 +55,7 @@ import { createS3Writer } from './writers/s3'
  *
  * Handles both bundled asset paths and internal page links.
  */
-const ABSOLUTE_ASSET_RE = /(?<=["'\s,=])\/(?=a\/[A-Za-z0-9]{22}\/|ycode\/layouts\/assets\/|swiper-minimal\.css)/g
+const ABSOLUTE_ASSET_RE = /(?<=["'\s,=])\/(?=a\/[A-Za-z0-9]{22}\/|ycode\/layouts\/assets\/|swiper-minimal\.css|vendor\/swiper-bundle\.min\.js)/g
 const INTERNAL_LINK_RE = /href="\/([^"]*?)"/g
 
 function relativizePaths(html: string, outputKey: string): string {
@@ -266,9 +266,11 @@ export async function exportSite(presetJobId?: string): Promise<ExportJob> {
           }
 
           // When a page contains a slider, bundle Ycode's minimal Swiper CSS
-          // from /public — the export's <link> in <head> points at this path.
+          // and Swiper script from /public — the export's <link> and <script>
+          // point at these paths.
           if (resolved.hasSlider) {
             referencedAssetPaths.add(SWIPER_CSS_PATH)
+            referencedAssetPaths.add(SWIPER_JS_PATH)
           }
 
           const finalHtml = relativizePaths(html, resolved.outputKey)

@@ -119,10 +119,10 @@ function resolveSeoImage(image: PageSeo['image']): string | null {
 // loading the full `swiper-bundle.min.css` from a CDN because the bundle
 // sets `.swiper { display: block }` and `.swiper-slide { display: block }`
 // which override the user's Tailwind `flex` utility at equal specificity.
-// Major version is kept in sync with the `swiper` dependency in package.json
-// so the export and the live builder render identically.
-const SWIPER_VERSION = '12'
-const SWIPER_JS_CDN = `https://cdn.jsdelivr.net/npm/swiper@${SWIPER_VERSION}/swiper-bundle.min.js`
+// The script is the `swiper` dependency's own bundle, copied to public/vendor
+// (scripts/vendor-assets.mjs), so the export and the live builder render
+// identically and the exported site loads nothing from a CDN.
+export const SWIPER_JS_PATH = '/vendor/swiper-bundle.min.js'
 export const SWIPER_CSS_PATH = '/swiper-minimal.css'
 
 const SLIDER_BOOT_SCRIPT = `
@@ -743,7 +743,7 @@ export function buildDocument({
   const indent = '  '
   const trailingScripts: string[] = []
   if (includeSwiper) {
-    trailingScripts.push(`<script src="${SWIPER_JS_CDN}"></script>`)
+    trailingScripts.push(`<script src="${SWIPER_JS_PATH}"></script>`)
     trailingScripts.push(`<script>${SLIDER_BOOT_SCRIPT}</script>`)
   }
   if (interactions.length > 0) {

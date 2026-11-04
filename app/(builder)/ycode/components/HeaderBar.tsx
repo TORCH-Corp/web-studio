@@ -28,17 +28,18 @@ import { buildSlugPath, buildDynamicPageUrl, buildLocalizedSlugPath, buildLocali
 
 // 5. Types
 import type { Page } from '@/types';
-import type { User } from '@supabase/supabase-js';
+import type { User } from '@/lib/platform/types';
 import ActiveUsersInHeader from './ActiveUsersInHeader';
-import InviteUserButton from './InviteUserButton';
 import { LocaleSelector } from './LocaleSelector';
 import PublishPopover from './PublishPopover';
+import { isReadOnly, useSiteLock } from '@/lib/platform/site-lock-client';
 import { Label } from '@/components/ui/label';
 import Icon from '@/components/ui/icon';
 import { Separator } from '@/components/ui/separator';
 import { BackupRestoreDialog } from '@/components/project/BackupRestoreDialog';
 import { isCloudVersion } from '@/lib/utils';
 import { useRole } from '@/hooks/use-role';
+import { useWsParts } from '@/hooks/use-ws-parts';
 
 interface HeaderBarProps {
   user: User | null;
@@ -84,7 +85,9 @@ export default function HeaderBar({
   const router = useRouter();
   const pathname = usePathname();
   const pageDropdownRef = useRef<HTMLDivElement>(null);
-  const { isEditor, canManageSettings, canManageMembers } = useRole();
+  const { isEditor, canManageSettings } = useRole();
+  const lock = useSiteLock();
+  const wsParts = useWsParts();
   const editorSidebarTab = useEditorStore((s) => s.activeSidebarTab);
   const currentPageCollectionItemId = useEditorStore((s) => s.currentPageCollectionItemId);
   const storeCurrentPageId = useEditorStore((s) => s.currentPageId);
@@ -502,12 +505,6 @@ export default function HeaderBar({
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              onClick={() => router.push('/ycode/profile')}
-            >
-              My profile
-            </DropdownMenuItem>
-
-            <DropdownMenuItem
               onClick={async () => {
                 await signOut();
               }}
@@ -575,29 +572,31 @@ export default function HeaderBar({
               Design
             </Button>
           )}
-          <Button
-            variant={activeNavButton === 'cms' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => {
-              const isDesignRoute = routeType === 'layers' || routeType === 'page' || routeType === 'component';
-              if (isDesignRoute) {
-                setLastDesignUrl(window.location.pathname + window.location.search);
-              }
-              setOptimisticNav('cms');
-              setActiveSidebarTab('cms');
-              const targetCollectionId = storeSelectedCollectionId || collections[0]?.id;
-              if (targetCollectionId) {
-                setSelectedCollectionId(targetCollectionId);
-                navigateToCollection(targetCollectionId);
-              } else {
-                navigateToCollections();
-              }
-            }}
-          >
-            <Icon name="database" />
-            CMS
-          </Button>
-          {!isEditor && (
+          {wsParts && (
+            <Button
+              variant={activeNavButton === 'cms' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => {
+                const isDesignRoute = routeType === 'layers' || routeType === 'page' || routeType === 'component';
+                if (isDesignRoute) {
+                  setLastDesignUrl(window.location.pathname + window.location.search);
+                }
+                setOptimisticNav('cms');
+                setActiveSidebarTab('cms');
+                const targetCollectionId = storeSelectedCollectionId || collections[0]?.id;
+                if (targetCollectionId) {
+                  setSelectedCollectionId(targetCollectionId);
+                  navigateToCollection(targetCollectionId);
+                } else {
+                  navigateToCollections();
+                }
+              }}
+            >
+              <Icon name="database" />
+              CMS
+            </Button>
+          )}
+          {wsParts && !isEditor && (
             <Button
               variant={activeNavButton === 'forms' ? 'secondary' : 'ghost'}
               size="sm"
@@ -660,12 +659,13 @@ export default function HeaderBar({
         {/* Active Users */}
         <ActiveUsersInHeader />
 
-        {/* Invite User */}
-        {canManageMembers && <InviteUserButton />}
-
         {/* Save Status Indicator */}
         <div className="flex items-center justify-end w-16 text-xs text-zinc-500 dark:text-white/50">
-          {isSaving ? (
+          {isReadOnly(lock) ? (
+            <>
+              <span>Read-only</span>
+            </>
+          ) : isSaving ? (
             <>
               <span>Saving</span>
             </>
@@ -696,6 +696,7 @@ export default function HeaderBar({
         </Button>
 
         <PublishPopover
+          isDisabled={isReadOnly(lock)}
           isPublishing={isPublishing}
           setIsPublishing={setIsPublishing}
           baseUrl={baseUrl}

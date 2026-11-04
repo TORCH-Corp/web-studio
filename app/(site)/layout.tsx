@@ -40,8 +40,9 @@ export default async function SiteLayout({
   const pathname = headersList.get('x-pathname') || '/';
   const { isPreview, slugPath } = parsePathnameForPageHead(pathname);
 
+  const tenantId = (await getTenantIdFromHeaders()) ?? undefined;
   const [lang, globalSettings] = await Promise.all([
-    resolveHtmlLang(slugPath, !isPreview),
+    resolveHtmlLang(slugPath, !isPreview, tenantId),
     fetchGlobalPageSettings(isPreview).catch(() => null),
   ]);
 
@@ -53,6 +54,7 @@ export default async function SiteLayout({
     <SiteDocumentLayout
       lang={lang}
       pathname={pathname}
+      tenantId={tenantId}
       baseUrl={baseUrl}
       publishedAt={globalSettings?.publishedAt ?? null}
       globalCustomCodeHead={globalSettings?.globalCustomCodeHead ?? null}
