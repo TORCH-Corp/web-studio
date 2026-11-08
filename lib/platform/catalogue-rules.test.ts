@@ -33,7 +33,6 @@ const variant = (id: string, size: string, extra: Partial<CatalogueVariant> = {}
 
 const SHIRT = item('shirt', { name: 'Linen shirt', name_ar: 'قميص كتان', has_variants: true, base_price: '0', category_id: 'shirts', primary_image_document_id: 'img-shirt' });
 const WORKSPACE: VariantWorkspace = {
-  parent: SHIRT,
   axes_summary: [{ specification_id: 'size', specification_code: 'SZ', specification_name: 'Size', specification_name_ar: 'المقاس', options: [{ id: 'size-M', code: 'M', label: 'M', label_ar: null }] }],
   variants: [
     variant('shirt-m', 'M', { status: 'DISCONTINUED', base_price: '30000' }),
@@ -161,8 +160,8 @@ test('the shop home lists the chosen live categories with what the site sells in
 test('the product route shows every image, primary first; an image belongs to the product only if it shows it', () => {
   const shirt = buildCatalogue(input()).byId.get('shirt')!;
   const gallery = [
-    { document_id: 'img-back', content_type: 'image/png', is_primary: false, order_index: 1 },
-    { document_id: 'img-side', content_type: 'image/png', is_primary: false, order_index: 2 },
+    { document_id: 'img-back', is_primary: false, order_index: 1 },
+    { document_id: 'img-side', is_primary: false, order_index: 2 },
   ];
   assert.deepEqual(withImages(shirt, gallery).images.map((i) => i.document_id), ['img-shirt', 'img-back', 'img-side']);
   assert.equal(showsImage(shirt, 'img-shirt', null), true);

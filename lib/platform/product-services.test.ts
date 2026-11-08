@@ -129,7 +129,6 @@ test('a workspace gives the axes in both languages and each variant with its own
     },
   });
   const workspace = (await getVariantWorkspace(ORG, 'p', ENV, answer(200, body(axis))))!;
-  assert.equal(workspace.parent.base_price, '0');
   assert.deepEqual(workspace.axes_summary[0].options, [{ id: 'o1', code: 'M', label: 'Medium', label_ar: 'وسط' }]);
   assert.deepEqual(workspace.variants[0].axes, [{ specification_id: 's1', specification_name: 'Size', specification_name_ar: 'المقاس', option_id: 'o1', option_label: 'Medium', option_label_ar: 'وسط' }]);
   assert.equal(workspace.variants[0].parent_item_id, 'p');

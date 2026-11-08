@@ -26,12 +26,13 @@
  *        whose document id is what Web Studio fetches from Document Center.
  *   GET /items/{id}/variants/workspace   `{ parent, axes_summary, variant_count,
  *        variants }`: the axes with their options and every child with its own
- *        status, price, currency, image and `axes`. P1 adds the Arabic names
+ *        status, price, currency, image and `axes` (the parent is the list's row,
+ *        so `parent` is not read). P1 adds the Arabic names
  *        (`specification_name_ar`, `option_label_ar`, `label_ar`); before it
  *        they are absent and read as null.
  *   GET /items/{id}/documents   the item's documents grouped by link type; the
- *        `product_image` group is its images (`document_id`, `content_type`,
- *        `is_primary`, `order_index`).
+ *        `product_image` group is its images (`document_id`, `is_primary`,
+ *        `order_index`; the media type is the download's).
  *
  * A site's chosen category covers every category under it (owner, 8 Nov 2026),
  * so the store's counts are summed up the tree here (`rollUpTree`).
@@ -242,7 +243,6 @@ export interface AxisSummary {
 }
 
 export interface VariantWorkspace {
-  parent: CatalogueItem;
   axes_summary: AxisSummary[];
   variants: CatalogueVariant[];
 }
@@ -250,7 +250,6 @@ export interface VariantWorkspace {
 /** One image of an item: a Document Center document. */
 export interface ItemImage {
   document_id: string;
-  content_type: string | null;
   is_primary: boolean;
   order_index: number;
 }
@@ -361,7 +360,6 @@ export async function getVariantWorkspace(organizationId: string, parentId: stri
     throw new ProductServicesUnavailableError(`Product & Services answered ${op} without axes_summary and variants lists`);
   }
   return {
-    parent: toItem(op, value.parent),
     axes_summary: value.axes_summary.map((axis) => toAxisSummary(op, axis)),
     variants: value.variants.map((raw) => {
       const variant = record(op, raw, 'a variant');
@@ -384,7 +382,6 @@ export async function listItemImages(organizationId: string, itemId: string, env
       const value = record(op, raw, 'a document');
       return {
         document_id: requiredText(op, value, 'document_id', 'a document'),
-        content_type: optionalText(value.content_type),
         is_primary: value.is_primary === true,
         order_index: typeof value.order_index === 'number' ? value.order_index : 0,
       };
