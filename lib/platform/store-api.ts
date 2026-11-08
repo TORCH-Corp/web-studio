@@ -44,6 +44,9 @@ function unavailableCode(error: unknown): StoreUnavailableCode | null {
   return null;
 }
 
+/** Whether a failure is a platform service that cannot be asked right now (the store then says so; it is not a bug). */
+export const isStoreUnavailable = (error: unknown): boolean => unavailableCode(error) !== null;
+
 /**
  * The answer to a failure: 503 with a stable code when a platform service
  * cannot be asked (the elements show the designed error state), 500 for

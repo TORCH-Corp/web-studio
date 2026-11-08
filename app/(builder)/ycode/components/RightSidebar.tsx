@@ -53,6 +53,7 @@ import HTMLEmbedSettings from './HTMLEmbedSettings';
 import MapSettings from './MapSettings';
 import ProductGridSettings from './ProductGridSettings';
 import ProductCardSettings from './ProductCardSettings';
+import ProductDetailSettings from './ProductDetailSettings';
 import SliderSettings from './SliderSettings';
 import LightboxSettings from './LightboxSettings';
 import InputSettings from './InputSettings';
@@ -3124,6 +3125,11 @@ const RightSidebar = React.memo(function RightSidebar({
             />
 
             <ProductCardSettings
+              layer={selectedLayer}
+              onLayerUpdate={handleLayerUpdate}
+            />
+
+            <ProductDetailSettings
               layer={selectedLayer}
               onLayerUpdate={handleLayerUpdate}
             />

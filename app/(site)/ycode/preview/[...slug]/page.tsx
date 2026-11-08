@@ -62,7 +62,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     notFound();
   }
 
-  const { page, pageLayers, components, collectionItem, collectionFields, pageCollectionSortedItemIds, pageCollectionSortedItemSlugs, locale, availableLocales, translations } = data;
+  const { page, pageLayers, components, collectionItem, collectionFields, pageCollectionSortedItemIds, pageCollectionSortedItemSlugs, storeProduct, locale, availableLocales, translations } = data;
 
   // Check password protection for this page (using all folders for preview)
   const folders = await fetchFoldersForAuth(false);
@@ -125,6 +125,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       generatedCss={draftCSS}
       colorVariablesCss={colorVariablesCss || undefined}
       collectionItem={collectionItem}
+      storeProduct={storeProduct}
       collectionFields={collectionFields}
       pageCollectionSortedItemIds={pageCollectionSortedItemIds}
       pageCollectionSortedItemSlugs={pageCollectionSortedItemSlugs}

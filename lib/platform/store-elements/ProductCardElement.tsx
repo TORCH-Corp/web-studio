@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { cardOf, type CardData } from '@/lib/platform/store-elements/card-data';
 import { CardSkeleton, ErrorAlert, ProductCardView } from '@/lib/platform/store-elements/CardView';
 import { addToCart } from '@/lib/platform/store-elements/add-to-cart';
-import { productHref, type LinkLocale } from '@/lib/platform/store-elements/links';
+import type { StoreLinks } from '@/lib/platform/store-elements/links';
 import { fetchProduct, StoreRequestError } from '@/lib/platform/store-elements/store-client';
 import type { StoreLang } from '@/lib/platform/store-elements/strings';
 
@@ -16,7 +16,7 @@ type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'hidden' } | { ki
  * nothing, so a featured row shortens instead of showing a dead card. A catalogue that cannot be read shows the
  * designed error with a way to try again.
  */
-export default function ProductCardElement({ productId, lang, locale }: { productId: string | null; lang: StoreLang; locale?: LinkLocale | null }) {
+export default function ProductCardElement({ productId, lang, links }: { productId: string | null; lang: StoreLang; links: StoreLinks }) {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
@@ -40,6 +40,6 @@ export default function ProductCardElement({ productId, lang, locale }: { produc
   if (state.kind === 'error') return <ErrorAlert lang={lang} onRetry={() => setAttempt((n) => n + 1)} />;
   return <ProductCardView
     card={state.card} lang={lang}
-    href={productHref(state.card.id, locale)} onAdd={addToCart}
+    href={links.product(state.card.id)} onAdd={addToCart}
          />;
 }

@@ -32,9 +32,19 @@ test('a lone card is a skeleton card when a product is chosen and nothing when n
   assert.equal(html.split('class="ws-sk ws-sk-media"').length - 1, 1);
 });
 
-test('the cart indicator is the empty cart linking to the cart page, under the language\'s prefix', () => {
+test('the cart indicator is the empty cart; the shell knows no store pages, so it links nowhere', () => {
   const html = storeElementHtml({ layer: { name: 'cartIndicator' }, attrs: [], locale: { code: 'en', is_default: false } });
-  assert.ok(html.includes('href="/en/cart"') && html.includes('aria-label="Cart is empty"') && !html.includes('<span class="ws-badge"'));
+  assert.ok(html.includes('href="#"') && html.includes('aria-label="Cart is empty"') && !html.includes('<span class="ws-badge"'));
+});
+
+test('the product page element is a skeleton of the page: gallery, name, price, options and button, in the page\'s language', () => {
+  const html = storeElementHtml({ layer: { name: 'productDetail' }, attrs: ['class="w-full"'] });
+  assert.ok(html.includes('data-ws-store="productDetail"') && html.includes('class="ws-pd"') && html.includes('aria-busy="true"'));
+  assert.ok(html.includes('role="status">Loading the product…'));
+  assert.equal(html.split('class="ws-sk ws-sk-thumb"').length - 1, 4);
+  assert.ok(html.includes('class="ws-sk ws-sk-chip"') && html.includes('class="ws-sk ws-sk-btn"'));
+  const arabic = storeElementHtml({ layer: { name: 'productDetail' }, attrs: [], locale: { code: 'ar', is_default: true } });
+  assert.ok(arabic.includes('dir="rtl"') && arabic.includes('جارٍ تحميل المنتج…'));
 });
 
 test('an attribute value is escaped and a layer that is not a store element is not drawn', () => {

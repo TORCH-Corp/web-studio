@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { compareAmounts, convert, decimalFromNumber, displayAmount, isPositive, rateDay } from './store-money';
+import { addAmounts, compareAmounts, convert, decimalFromNumber, displayAmount, isPositive, multiplyAmount, rateDay } from './store-money';
 
 test('numbers from a JSON body become exact decimal strings, nothing negative or not finite', () => {
   assert.equal(decimalFromNumber(25000, 4), '25000');
@@ -55,4 +55,16 @@ test('amounts compare by value whatever their decimals, and zero is not positive
 test('the day of a rate is Baghdad\'s, whatever the server\'s zone', () => {
   assert.equal(rateDay(new Date('2026-11-08T20:59:59Z')), '2026-11-08');
   assert.equal(rateDay(new Date('2026-11-08T21:00:00Z')), '2026-11-09');
+});
+
+test('a price times a whole quantity and prices added together are exact, never a float', () => {
+  assert.equal(multiplyAmount('25000', 3), '75000');
+  assert.equal(multiplyAmount('12.50', 3), '37.50');
+  assert.equal(multiplyAmount('0.1', 3), '0.3');
+  assert.equal(multiplyAmount('19.99', 99), '1979.01');
+  assert.equal(addAmounts('0.1', '0.2'), '0.3');
+  assert.equal(addAmounts('25000', '12.50'), '25012.50');
+  assert.equal(addAmounts('0', '0'), '0');
+  assert.throws(() => multiplyAmount('25000', 1.5), /whole/);
+  assert.throws(() => multiplyAmount('-1', 2), /decimal/);
 });

@@ -9,8 +9,8 @@ import { buildAllPagesTag, buildGlobalSettingsTag, buildRouteTag } from '@/lib/c
 import { buildSlugPath } from '@/lib/page-utils';
 import { generatePageMetadata, fetchGlobalPageSettings } from '@/lib/generate-page-metadata';
 import { generateCachedErrorPageMetadata } from '@/lib/not-found-metadata';
-import { fetchCachedErrorPage, fetchCachedPageForMetadata } from '@/lib/published-page-cache';
-import { fetchHomepage, fetchPageByPath, splitPageData, reassemblePageData } from '@/lib/page-fetcher';
+import { fetchCachedErrorPage, fetchCachedPageForMetadata, fetchCachedPageWithLayers, isStoreProductRequest, pageRevalidate } from '@/lib/published-page-cache';
+import { fetchHomepage, splitPageData, reassemblePageData } from '@/lib/page-fetcher';
 import type { PageData, PaginationContext } from '@/lib/page-fetcher';
 import PageRenderer from '@/components/PageRenderer';
 import PaginationSeoLinks from '@/components/PaginationSeoLinks';
@@ -174,49 +174,6 @@ async function scoped<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
   return tenantId ? runWithTenantId(tenantId, fn) : fn();
 }
 
-async function fetchPublishedPageWithLayers(slugPath: string) {
-  const tenantId = (await getTenantIdFromHeaders()) ?? '';
-  // Tags are both 'route-/X' AND 'all-pages':
-  // - route-/X lets selective invalidation purge just this page's data cache
-  // - all-pages lets full invalidation (color variables, redirects, etc.)
-  //   sweep every page's data cache in one invalidateByTag call.
-  // Vercel's invalidateByTag is tag-precise — invalidating one route's tag
-  // doesn't cascade to entries that only share 'all-pages'. (Next.js bug
-  // #63509 would apply if we used revalidateTag for selective, but we route
-  // exclusively through invalidateByTag on Vercel.)
-  const tags = [buildRouteTag(tenantId, slugPath), buildAllPagesTag(tenantId)];
-  const opts = { tags, revalidate: false as const };
-
-  // `basePath` lets paginated collections server-render crawlable links to
-  // page 2 (this route only ever renders page 1 — `p_*` params are rewritten
-  // to the force-dynamic route by the proxy).
-  const paginationContext: PaginationContext = { basePath: `/${slugPath}` };
-
-  const [core, layers] = await Promise.all([
-    unstable_cache(
-      async () => {
-        const data = await scoped(tenantId, () => fetchPageByPath(slugPath, true, paginationContext, tenantId || undefined));
-        if (!data) return null;
-        return splitPageData(data).core;
-      },
-      [`core-/${slugPath}`, tenantId],
-      opts
-    )(),
-    unstable_cache(
-      async () => {
-        const data = await scoped(tenantId, () => fetchPageByPath(slugPath, true, paginationContext, tenantId || undefined));
-        if (!data) return null;
-        return splitPageData(data).layers;
-      },
-      [`layers-/${slugPath}`, tenantId],
-      opts
-    )(),
-  ]);
-
-  if (!core) return null;
-  return reassemblePageData(core, layers || []);
-}
-
 async function fetchPublishedHomepage() {
   const tenantId = (await getTenantIdFromHeaders()) ?? '';
   const tags = [buildRouteTag(tenantId, ''), buildAllPagesTag(tenantId)];
@@ -331,10 +288,20 @@ export default async function Page({ params }: PageProps) {
     }
   }
 
+  // The product page (part 2, W5) is answered live: its data lives 60 seconds, and its response is not kept as a
+  // static page (the item may go on or off sale, and a 404 must not stick). `connection()` is what the
+  // password-protected branch below does too.
+  const productRequest = !isHomepage && (await isStoreProductRequest(slugPath, siteId ?? undefined));
+  if (productRequest) await connection();
+
   const [data, globalSettings] = await Promise.all([
-    isHomepage ? fetchPublishedHomepage() : fetchPublishedPageWithLayers(slugPath),
+    isHomepage ? fetchPublishedHomepage() : fetchCachedPageWithLayers(slugPath, siteId ?? '', productRequest),
     fetchCachedGlobalSettings(),
   ]);
+
+  // An item that is no longer available answers 404, and the 404 boundary shows the product page in its
+  // "no longer available" state (app/(site)/not-found.tsx).
+  if (data?.storeProduct?.kind === 'gone') notFound();
 
   if (!data || (isHomepage && !data.pageLayers)) {
     if (isHomepage) {
@@ -361,7 +328,7 @@ export default async function Page({ params }: PageProps) {
     notFound();
   }
 
-  const { page, pageLayers, components, collectionItem, collectionFields, pageCollectionSortedItemIds, pageCollectionSortedItemSlugs, locale, availableLocales, translations, generatedCss } = data;
+  const { page, pageLayers, components, collectionItem, collectionFields, pageCollectionSortedItemIds, pageCollectionSortedItemSlugs, locale, availableLocales, translations, generatedCss, storeProduct } = data;
 
   // Per-page CSS with fallback to global published_css
   const cssForPage = generatedCss || globalSettings.publishedCss || undefined;
@@ -461,6 +428,7 @@ export default async function Page({ params }: PageProps) {
         collectionFields={collectionFields}
         pageCollectionSortedItemIds={pageCollectionSortedItemIds}
         pageCollectionSortedItemSlugs={pageCollectionSortedItemSlugs}
+        storeProduct={storeProduct}
         locale={locale}
         availableLocales={availableLocales}
         translations={translations}
@@ -510,6 +478,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
 
   const metaTenantId = (await getTenantIdFromHeaders()) ?? '';
   const routeTag = buildRouteTag(metaTenantId, slugPath);
+  const metaProductRequest = !isHomepage && (await isStoreProductRequest(slugPath, metaTenantId || undefined));
   const { meta, baseUrl } = await unstable_cache(
     async () => scoped(metaTenantId, async () => ({
       meta: await generatePageMetadata(data.page, {
@@ -524,7 +493,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
       baseUrl: getSiteBaseUrl({ globalCanonicalUrl: globalSettings.globalCanonicalUrl }),
     })),
     [isHomepage ? 'data-for-route-/-meta' : `data-for-route-/${slugPath}-meta`, metaTenantId],
-    { tags: [routeTag, buildAllPagesTag(metaTenantId)], revalidate: false }
+    { tags: [routeTag, buildAllPagesTag(metaTenantId)], revalidate: pageRevalidate(metaProductRequest) }
   )();
 
   if (baseUrl) {

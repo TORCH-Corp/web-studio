@@ -7,6 +7,7 @@
  * Kept free of Next and React imports so it runs under `node --test`.
  */
 
+import type { StoreProduct, StoreVariant } from '@/lib/platform/catalogue-rules';
 import type { CardData } from '@/lib/platform/store-elements/card-data';
 
 interface Sample {
@@ -47,6 +48,7 @@ function toCard(sample: Sample): CardData {
     from: sample.from,
     imageUrl: null,
     hasVariants: sample.from,
+    unit: null,
   };
 }
 
@@ -58,4 +60,68 @@ export function sampleCards(pageSize: number): CardData[] {
 /** The sample card a lone product card shows: by default a plain product, with its "Add to cart" button. */
 export function sampleCard(index = 2): CardData {
   return toCard(SAMPLES[index % SAMPLES.length]);
+}
+
+// ---------------------------------------------------------------------------
+// The product page's sample (handoff browse-product-default: the cotton T-shirt
+// whose Grey and XL cannot be bought, Black and M chosen).
+// ---------------------------------------------------------------------------
+
+const SAMPLE_COLOURS = [
+  { id: 'black', code: 'BLK', label: 'Black', label_ar: 'أسود', available: true },
+  { id: 'white', code: 'WHT', label: 'White', label_ar: 'أبيض', available: true },
+  { id: 'navy', code: 'NVY', label: 'Navy', label_ar: 'كحلي', available: true },
+  { id: 'grey', code: 'GRY', label: 'Grey', label_ar: 'رمادي', available: false },
+];
+const SAMPLE_SIZES = [
+  { id: 's', label: 'S', available: true },
+  { id: 'm', label: 'M', available: true },
+  { id: 'l', label: 'L', available: true },
+  { id: 'xl', label: 'XL', available: false },
+];
+
+const SAMPLE_PRICE = { amount: '25000', currency: 'IQD' as const, converted: false };
+
+/** The options the canvas shows as chosen: Black and M. */
+export const SAMPLE_SELECTION: Record<string, string> = { 'sample-colour': 'black', 'sample-size': 'm' };
+
+/**
+ * The product the canvas draws on a product page element. It has no picture to fetch: the canvas never calls
+ * the store (PRD V1.1), so its images carry no url and the element draws the placeholder tiles.
+ */
+export function sampleProduct(): StoreProduct {
+  const variants = SAMPLE_COLOURS.flatMap((colour) =>
+    SAMPLE_SIZES.map((size): StoreVariant => {
+      const available = colour.available && size.available;
+      return {
+        id: `sample-${colour.id}-${size.id}`,
+        sku: `TS-001-${colour.code}-${size.label}`,
+        price: available ? SAMPLE_PRICE : null,
+        available,
+        unavailable_reason: available ? null : 'inactive',
+        image: null,
+        axes: [
+          { specification_id: 'sample-colour', option_id: colour.id, name: 'Colour', name_ar: 'اللون', option: colour.label, option_ar: colour.label_ar },
+          { specification_id: 'sample-size', option_id: size.id, name: 'Size', name_ar: 'المقاس', option: size.label, option_ar: size.label },
+        ],
+      };
+    }),
+  );
+  return {
+    id: 'sample-1',
+    sku: 'TS-001',
+    name: 'Cotton T-shirt',
+    name_ar: 'قميص قطني',
+    description: 'A pure cotton T-shirt with a relaxed fit for everyday wear. Machine wash cold, iron on low heat.',
+    description_ar: 'قميص من القطن الخالص بقصّة مريحة، مناسب للاستخدام اليومي. يُغسل في الغسالة بماء بارد ويُكوى على حرارة منخفضة.',
+    price: { ...SAMPLE_PRICE, from: true },
+    unit: { name: 'Piece', symbol: 'pcs' },
+    images: [1, 2, 3, 4].map((n) => ({ document_id: `sample-image-${n}`, url: '' })),
+    category: null,
+    variants,
+    axes_summary: [
+      { id: 'sample-colour', code: 'CLR', name: 'Colour', name_ar: 'اللون', options: SAMPLE_COLOURS.map((c) => ({ id: c.id, code: c.id, label: c.label, label_ar: c.label_ar })) },
+      { id: 'sample-size', code: 'SZ', name: 'Size', name_ar: 'المقاس', options: SAMPLE_SIZES.map((s) => ({ id: s.id, code: s.id, label: s.label, label_ar: s.label })) },
+    ],
+  };
 }

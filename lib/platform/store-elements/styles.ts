@@ -22,6 +22,13 @@
  * off under `prefers-reduced-motion: reduce`; colour changes on hover run only
  * where there is hover and no reduced-motion request.
  *
+ * The product page (session W5) adds two. The picker's chips and the
+ * thumbnails change colour, border and ring when chosen (state indication, 150
+ * ms, `ease`; instant under reduced motion) and press in a little (100 ms,
+ * ease-out, only without a reduced-motion request). The "added" notice
+ * (feedback, seen once per add to cart) rises 4 px and fades in over 200 ms on
+ * the strong ease-out; under reduced motion it only fades.
+ *
  * Written as one string so every render path can carry it: the React elements
  * (canvas and published) put it in a <style> inside the element, and the HTML
  * string path (layerToHtml) writes the same text.
@@ -35,8 +42,8 @@ export const STORE_CSS = `
 --ws-primary:var(--ws-store-primary,#0F766E);--ws-primary-soft:var(--ws-store-primary-soft,#E7F3F1);--ws-dark:var(--ws-store-dark,#17201E);
 --ws-white:#FFFFFF;--ws-grey-50:#F6F7F7;--ws-grey-100:#EEF0F0;--ws-grey-200:#E0E4E3;--ws-grey-300:#C7CDCB;--ws-grey-500:#5F6966;--ws-grey-700:#3D4644;
 --ws-font:"IBM Plex Sans Arabic",system-ui,sans-serif;--ws-fw-regular:400;--ws-fw-medium:500;--ws-fw-semibold:600;--ws-fw-bold:700;
---ws-text-xs:12px;--ws-text-sm:14px;--ws-text-md:16px;--ws-text-lg:18px;--ws-lh-tight:1.3;--ws-lh-normal:1.6;
---ws-space-1:4px;--ws-space-2:8px;--ws-space-3:12px;--ws-space-4:16px;--ws-space-5:20px;--ws-space-6:24px;--ws-space-8:40px;--ws-space-9:48px;--ws-space-10:64px;
+--ws-text-xs:12px;--ws-text-sm:14px;--ws-text-md:16px;--ws-text-lg:18px;--ws-text-2xl:28px;--ws-text-3xl:36px;--ws-lh-tight:1.3;--ws-lh-normal:1.6;
+--ws-space-1:4px;--ws-space-2:8px;--ws-space-3:12px;--ws-space-4:16px;--ws-space-5:20px;--ws-space-6:24px;--ws-space-7:32px;--ws-space-8:40px;--ws-space-9:48px;--ws-space-10:64px;
 --ws-radius-sm:6px;--ws-radius-md:10px;--ws-radius-lg:16px;--ws-radius-full:999px;
 --ws-border:1px;--ws-border-strong:2px;--ws-icon-stroke:1.75;--ws-size-icon-sm:16px;--ws-size-icon:20px;--ws-size-icon-lg:32px;--ws-size-icon-xl:64px;
 --ws-size-badge:20px;--ws-size-touch:44px;--ws-size-control:48px;--ws-size-search:320px;--ws-size-text:420px;
@@ -101,8 +108,51 @@ box-sizing:border-box;font-family:var(--ws-font);font-size:var(--ws-text-md);lin
 .ws-store .ws-cart-label{display:none}
 .ws-store .ws-badge{position:absolute;top:calc(var(--ws-space-1) * -1);inset-inline-end:calc(var(--ws-space-1) * -1);display:inline-flex;align-items:center;justify-content:center;min-width:var(--ws-size-badge);height:var(--ws-size-badge);padding-inline:var(--ws-space-1);border:var(--ws-border-strong) solid var(--ws-white);border-radius:var(--ws-radius-full);background:var(--ws-primary);color:var(--ws-white);font-size:var(--ws-text-xs);font-weight:var(--ws-fw-bold);line-height:1}
 .ws-store .ws-badge[data-changed]{animation:ws-badge-settle 160ms cubic-bezier(0.23,1,0.32,1)}
+.ws-store .ws-pd{display:flex;flex-direction:column;gap:var(--ws-space-6)}
+.ws-store .ws-gallery{display:flex;flex-direction:column;gap:var(--ws-space-3)}
+.ws-store .ws-thumbs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--ws-space-2)}
+.ws-store .ws-thumb{display:block;padding:0;border:var(--ws-border) solid var(--ws-grey-200);border-radius:var(--ws-radius-md);background:var(--ws-grey-100);overflow:hidden;cursor:pointer}
+.ws-store .ws-thumb-on{border-color:var(--ws-primary);box-shadow:inset 0 0 0 var(--ws-border) var(--ws-primary)}
+.ws-store .ws-thumb .ws-ph{border-radius:var(--ws-radius-md)}
+.ws-store .ws-info{display:flex;flex-direction:column;gap:var(--ws-space-5);min-width:0}
+.ws-store .ws-pd-head{display:flex;flex-direction:column;gap:var(--ws-space-2)}
+.ws-store .ws-pd-title{margin:0;font-size:var(--ws-text-2xl);line-height:var(--ws-lh-tight);font-weight:var(--ws-fw-bold)}
+.ws-store .ws-sku{margin:0;color:var(--ws-grey-500);font-size:var(--ws-text-sm)}
+.ws-store .ws-pd-price{margin:0;font-size:var(--ws-text-2xl);font-weight:var(--ws-fw-bold);line-height:var(--ws-lh-tight)}
+.ws-store .ws-pd-from{color:var(--ws-grey-500);font-size:var(--ws-text-md);font-weight:var(--ws-fw-regular)}
+.ws-store .ws-pd-unit{color:var(--ws-grey-500);font-size:var(--ws-text-md);font-weight:var(--ws-fw-regular)}
+.ws-store .ws-fs{display:flex;flex-direction:column;gap:var(--ws-space-2);min-width:0;margin:0;padding:0;border:0}
+.ws-store .ws-legend{margin-bottom:var(--ws-space-2);padding:0;color:var(--ws-grey-700);font-size:var(--ws-text-sm)}
+.ws-store .ws-legend-val{color:var(--ws-dark);font-weight:var(--ws-fw-semibold)}
+.ws-store .ws-opts{display:flex;flex-wrap:wrap;gap:var(--ws-space-2)}
+.ws-store .ws-opt{display:inline-flex;align-items:center;justify-content:center;gap:var(--ws-space-1);min-width:var(--ws-size-control);min-height:var(--ws-size-touch);padding-inline:var(--ws-space-4);border:var(--ws-border) solid var(--ws-grey-300);border-radius:var(--ws-radius-md);background:var(--ws-white);color:var(--ws-dark);font-size:var(--ws-text-sm);font-weight:var(--ws-fw-medium);line-height:var(--ws-lh-tight);white-space:nowrap;cursor:pointer}
+.ws-store .ws-opt-on{border-color:var(--ws-primary);box-shadow:inset 0 0 0 var(--ws-border) var(--ws-primary);background:var(--ws-primary-soft);font-weight:var(--ws-fw-semibold)}
+.ws-store .ws-opt-off{border-style:dashed;background:var(--ws-grey-50);color:var(--ws-grey-500);cursor:not-allowed}
+.ws-store .ws-strike{text-decoration:line-through}
+.ws-store .ws-opt-note{font-size:var(--ws-text-xs);font-weight:var(--ws-fw-regular)}
+.ws-store .ws-buy{display:flex;align-items:stretch;gap:var(--ws-space-3)}
+.ws-store .ws-buy-btn{flex:1 1 auto}
+.ws-store .ws-stepper{flex:none;display:inline-flex;align-items:stretch;height:var(--ws-size-control);border:var(--ws-border) solid var(--ws-grey-300);border-radius:var(--ws-radius-md);background:var(--ws-white);overflow:hidden}
+.ws-store .ws-step-btn{display:flex;align-items:center;justify-content:center;width:var(--ws-size-touch);padding:0;border:0;background:var(--ws-white);color:var(--ws-dark);cursor:pointer}
+.ws-store .ws-step-btn[disabled]{color:var(--ws-grey-300);cursor:not-allowed}
+.ws-store .ws-step-val{width:var(--ws-size-touch);padding:0;border:0;background:var(--ws-white);color:var(--ws-dark);font-size:var(--ws-text-md);font-weight:var(--ws-fw-semibold);text-align:center}
+.ws-store .ws-notice{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ws-space-1) var(--ws-space-3);padding:var(--ws-space-2) var(--ws-space-4);border-radius:var(--ws-radius-md);background:var(--ws-primary-soft);color:var(--ws-dark);font-size:var(--ws-text-sm);animation:ws-notice-in 200ms cubic-bezier(0.23,1,0.32,1)}
+.ws-store .ws-notice-icon{color:var(--ws-primary)}
+.ws-store .ws-notice-text{flex:1 1 auto;font-weight:var(--ws-fw-medium)}
+.ws-store .ws-notice-link{display:inline-flex;align-items:center;min-height:var(--ws-size-touch);color:var(--ws-primary);font-weight:var(--ws-fw-semibold)}
+.ws-store .ws-card-note{font-size:var(--ws-text-xs);color:var(--ws-grey-700);line-height:var(--ws-lh-tight)}
+.ws-store .ws-divider{height:0;margin:0;border:0;border-top:var(--ws-border) solid var(--ws-grey-200)}
+.ws-store .ws-stack-2{display:flex;flex-direction:column;gap:var(--ws-space-2)}
+.ws-store .ws-h2{margin:0;font-size:var(--ws-text-lg);line-height:var(--ws-lh-tight);font-weight:var(--ws-fw-bold)}
+.ws-store .ws-desc{color:var(--ws-grey-700);white-space:pre-line}
+.ws-store .ws-sk-title{height:var(--ws-space-6);width:70%}
+.ws-store .ws-sk-chips{display:flex;gap:var(--ws-space-2)}
+.ws-store .ws-sk-chip{width:var(--ws-size-control);height:var(--ws-size-touch);border-radius:var(--ws-radius-md)}
+.ws-store .ws-sk-thumb{aspect-ratio:1 / 1;border-radius:var(--ws-radius-md)}
 @keyframes ws-pulse{50%{opacity:.45}}
 @keyframes ws-badge-settle{from{transform:scale(0.85)}to{transform:scale(1)}}
+@keyframes ws-notice-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes ws-fade-in{from{opacity:0}to{opacity:1}}
 @media (hover:hover) and (prefers-reduced-motion:no-preference){
 .ws-store .ws-btn,.ws-store .ws-chip,.ws-store .ws-card-link,.ws-store .ws-input{transition:background-color 150ms ease,border-color 150ms ease,color 150ms ease}
 }
@@ -110,10 +160,19 @@ box-sizing:border-box;font-family:var(--ws-font);font-size:var(--ws-text-md);lin
 .ws-store .ws-btn-primary:not([disabled]):hover{background:var(--ws-dark);border-color:var(--ws-dark)}
 .ws-store .ws-btn-outline:not([disabled]):hover{background:var(--ws-primary-soft)}
 .ws-store .ws-chip:not(.ws-chip-on):hover{border-color:var(--ws-dark)}
+.ws-store .ws-opt:not(.ws-opt-on):not([disabled]):hover,.ws-store .ws-thumb:not(.ws-thumb-on):hover{border-color:var(--ws-dark)}
+.ws-store .ws-notice-link:hover{text-decoration:underline}
+}
+@media (prefers-reduced-motion:no-preference){
+.ws-store .ws-opt,.ws-store .ws-thumb{transition:background-color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,color 150ms ease,transform 100ms cubic-bezier(0.23,1,0.32,1)}
+.ws-store .ws-step-btn{transition:transform 100ms cubic-bezier(0.23,1,0.32,1)}
+.ws-store .ws-btn.ws-buy-btn{transition:background-color 150ms ease,border-color 150ms ease,color 150ms ease,transform 100ms cubic-bezier(0.23,1,0.32,1)}
+.ws-store .ws-opt:not([disabled]):active,.ws-store .ws-thumb:active,.ws-store .ws-step-btn:not([disabled]):active,.ws-store .ws-buy-btn:active{transform:scale(0.97)}
 }
 @media (prefers-reduced-motion:reduce){
 .ws-store .ws-sk{animation:none}
 .ws-store .ws-badge[data-changed]{animation:none}
+.ws-store .ws-notice{animation:ws-fade-in 150ms ease}
 }
 @media (min-width:960px){
 .ws-store .ws-toolbar{flex-direction:row;align-items:center;justify-content:space-between;gap:var(--ws-space-6)}
@@ -123,5 +182,7 @@ box-sizing:border-box;font-family:var(--ws-font);font-size:var(--ws-text-md);lin
 .ws-store .ws-card-name{font-size:var(--ws-text-md)}
 .ws-store .ws-empty{padding-block:var(--ws-space-10)}
 .ws-store .ws-cart-label{display:inline}
+.ws-store .ws-pd{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ws-space-9);align-items:start}
+.ws-store .ws-pd-title{font-size:var(--ws-text-3xl)}
 }
 `;

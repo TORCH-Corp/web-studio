@@ -124,3 +124,21 @@ export function compareAmounts(a: string, b: string): number {
   const diff = widen(x, scale) - widen(y, scale);
   return diff < BigInt(0) ? -1 : diff > BigInt(0) ? 1 : 0;
 }
+
+/**
+ * A price times a whole quantity (a cart line's total), exact, at the price's
+ * own number of decimals. The quantity is a whole number above zero.
+ */
+export function multiplyAmount(amount: string, quantity: number): string {
+  if (!Number.isInteger(quantity) || quantity < 0) throw new Error(`The quantity must be a whole number: ${quantity}`);
+  const value = parse(amount);
+  return format(value.units * BigInt(quantity), value.scale);
+}
+
+/** Two amounts added, exact, at the larger of their decimals. */
+export function addAmounts(a: string, b: string): string {
+  const x = parse(a);
+  const y = parse(b);
+  const scale = Math.max(x.scale, y.scale);
+  return format(widen(x, scale) + widen(y, scale), scale);
+}

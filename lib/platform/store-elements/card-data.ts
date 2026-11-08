@@ -20,9 +20,11 @@ export interface CardData {
   from: boolean;
   imageUrl: string | null;
   hasVariants: boolean;
+  /** The unit a plain product's line is sold in (a card without variants adds it to the cart). */
+  unit: { name: string; symbol: string } | null;
 }
 
-export type ProductForCard = Pick<StoreProduct, 'id' | 'name' | 'name_ar' | 'price' | 'images' | 'variants'>;
+export type ProductForCard = Pick<StoreProduct, 'id' | 'name' | 'name_ar' | 'price' | 'unit' | 'images' | 'variants'>;
 
 export function cardOf(product: ProductForCard): CardData {
   return {
@@ -33,6 +35,7 @@ export function cardOf(product: ProductForCard): CardData {
     from: product.price.from,
     imageUrl: product.images[0]?.url ?? null,
     hasVariants: product.variants.length > 0,
+    unit: product.unit ? { name: product.unit.name, symbol: product.unit.symbol } : null,
   };
 }
 

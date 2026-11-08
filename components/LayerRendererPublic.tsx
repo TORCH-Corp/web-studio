@@ -38,6 +38,7 @@ import { transformLayerIdsForInstance } from '@/lib/resolve-components';
 import { FormHoneypotField } from '@/components/FormHoneypotField';
 import { PublishedStoreElement } from '@/lib/platform/store-elements/StoreElement';
 import { isStoreElement } from '@/lib/platform/store-elements/settings';
+import type { StorePageContext } from '@/lib/platform/store-elements/pages';
 
 /**
  * Per-layer-type code splitting.
@@ -1469,6 +1470,7 @@ const LayerItem: React.FC<{
           elementProps={elementProps}
           colorVariables={serverSettings?.color_variables as Array<{ id: string; name: string }> | undefined}
           locale={currentLocale}
+          store={serverSettings?.store as StorePageContext | undefined}
         />
       );
     }

@@ -15,6 +15,7 @@ import { publishCollectionWithItems } from '@/lib/services/collectionService';
 import { publishLocalisation } from '@/lib/services/localisationService';
 import { publishFolders } from '@/lib/services/folderService';
 import { publishCSS, savePublishedAt } from '@/lib/services/settingsService';
+import { publishStorePages } from '@/lib/platform/store-elements/product-page';
 import { generateAndSaveDraftCSS } from '@/lib/server/cssGenerator';
 import { clearAllCache } from '@/lib/services/cacheService';
 import { forgetSiteLookups } from '@/lib/platform/site';
@@ -202,6 +203,9 @@ did not go live.`,
       // Save published_at before clearing the cache so re-rendered pages
       // read the new publish date rather than the previous one.
       try { await savePublishedAt(publishedAt); } catch { /* non-fatal */ }
+
+      // Where the page with each store role lives (part 2, W5); the cache is cleared whole just below.
+      try { await publishStorePages(); } catch (err) { console.error('[MCP publish] the store pages could not be written:', err); }
 
       // Clear cache. No warming here: MCP is invoked over JSON-RPC, not HTTP,
       // so there's no Request/host header to build absolute URLs from. The

@@ -50,6 +50,27 @@ export interface StoreStrings {
   cartCount: (count: number) => string;
   /** The currency as the page's language writes it, after the amount. */
   currency: Record<'IQD' | 'USD', string>;
+  // The product page (session W5)
+  sku: string;
+  description: string;
+  quantity: string;
+  decreaseQuantity: string;
+  increaseQuantity: string;
+  /** The chip's note on an option that cannot be bought (the word follows a middle dot). */
+  unavailableOption: string;
+  /** The picker's legend: "Colour:" (the chosen option follows). */
+  axisLabel: (axis: string) => string;
+  showImage: (position: number) => string;
+  /** The "added" notice: the product's name and the options picked. */
+  addedToCart: (name: string, options: string[]) => string;
+  viewCart: string;
+  cartFull: string;
+  /** The product is gone, or the link names none: the designed empty pattern. */
+  notOnSaleTitle: string;
+  notOnSaleText: string;
+  browseProducts: string;
+  /** What the buyer hears while the product page loads. */
+  loadingProduct: string;
 }
 
 export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
@@ -79,6 +100,21 @@ export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
     cartEmpty: 'Cart is empty',
     cartCount: (count) => `Cart: ${count} ${count === 1 ? 'item' : 'items'}`,
     currency: { IQD: 'IQD', USD: 'USD' },
+    sku: 'SKU',
+    description: 'Description',
+    quantity: 'Quantity',
+    decreaseQuantity: 'Decrease quantity',
+    increaseQuantity: 'Increase quantity',
+    unavailableOption: 'unavailable',
+    axisLabel: (axis) => `${axis}:`,
+    showImage: (position) => `Show image ${position}`,
+    addedToCart: (name, options) => `${name}${options.length ? ` (${options.join(', ')})` : ''} added to your cart.`,
+    viewCart: 'View cart',
+    cartFull: 'Your cart is full. It holds 50 different items at most; remove one or check out first.',
+    notOnSaleTitle: 'This product is no longer available',
+    notOnSaleText: 'It may have been removed from the shop, or the link is not right. Browse the other products.',
+    browseProducts: 'Browse products',
+    loadingProduct: 'Loading the product…',
   },
   ar: {
     searchLabel: 'ابحث عن منتج بالاسم',
@@ -106,6 +142,21 @@ export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
     cartEmpty: 'السلة فارغة',
     cartCount: (count) => `السلة: ${count} قطع`,
     currency: { IQD: 'د.ع', USD: '$' },
+    sku: 'رمز المنتج',
+    description: 'الوصف',
+    quantity: 'الكمية',
+    decreaseQuantity: 'إنقاص الكمية',
+    increaseQuantity: 'زيادة الكمية',
+    unavailableOption: 'غير متوفر',
+    axisLabel: (axis) => `${axis}:`,
+    showImage: (position) => `عرض الصورة ${position}`,
+    addedToCart: (name, options) => `تمت إضافة ${name}${options.length ? ` (${options.join('، ')})` : ''} إلى السلة.`,
+    viewCart: 'عرض السلة',
+    cartFull: 'السلة ممتلئة. تتسع لـ 50 منتجًا مختلفًا كحد أقصى؛ احذف منتجًا أو أتمّ الطلب أولًا.',
+    notOnSaleTitle: 'هذا المنتج لم يعد متاحًا',
+    notOnSaleText: 'ربما أُزيل من المتجر، أو أن الرابط غير صحيح. تصفّح المنتجات الأخرى.',
+    browseProducts: 'تصفّح المنتجات',
+    loadingProduct: 'جارٍ تحميل المنتج…',
   },
 };
 

@@ -36,3 +36,19 @@ export const AlertIcon = () => (
 export const RetryIcon = () => (
   <Svg className="ws-icon-sm"><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v4.5h-4.5" /></Svg>
 );
+
+export const CheckIcon = ({ className }: { className?: string }) => (
+  <Svg className={className}><path d="M5 12.5l4.5 4.5L19 7.5" /></Svg>
+);
+
+export const MinusIcon = () => (
+  <Svg><path d="M6 12h12" /></Svg>
+);
+
+export const PlusIcon = () => (
+  <Svg><path d="M12 6v12" /><path d="M6 12h12" /></Svg>
+);
+
+export const BoxIcon = () => (
+  <Svg className="ws-icon-lg"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M4 7.5L12 12l8-4.5" /><path d="M12 12v9" /></Svg>
+);
