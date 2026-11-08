@@ -426,6 +426,26 @@ the production schema (8 Nov 2026), and rolls back.
   posts to `/setup/migrate`, and the close aborted whatever query was in flight (another user's save, now the lock check).
 - `e2e/lock.spec.ts` is the done-when check (`pnpm test`: 348; `pnpm e2e`: 46).
 
+## Part 2, session 13: the update check, tanween in the canvas
+- **No update check.** ycode's "Update available" asked `/ycode/api/updates/check`, which
+  asked `api.github.com` for ycode's releases; Web Studio is updated only through this fork.
+  The header's check and button, both `updates` routes, `lib/updates/`, the unused
+  `components/UpdateNotification.tsx` and Settings > Updates (page and menu entry) are
+  deleted; the two routes are out of `lib/platform/permissions.ts`'s map. `e2e/offline.spec.ts`
+  fails if the builder calls `/ycode/api/updates`, shows the notice or the menu entry, or
+  one of the removed routes answers anything but 404 (its blocked-host guard could not see
+  this one: the browser only reached the app's own host, the server made the outside call).
+- **Tanween in the canvas is WebKitGTK's, not the canvas's.** In WebKitGTK (Tauri's webview
+  on Linux) a word that ends in an Arabic mark is drawn above the line, in the canvas and
+  on a published page alike; Chromium draws it right (WebView2 on Windows is Chromium and
+  WKWebView on macOS shapes with CoreText; neither was run). No CSS changes it. `lib/platform/arabic-marks.ts` has the cause and the measurements. The canvas
+  (`components/LayerRenderer.tsx` only; published pages use `LayerRendererPublic`) puts a
+  combining grapheme joiner (U+034F) after each run of Arabic marks, in the text it puts on
+  screen, when the user agent is WebKit on Linux. The layer's data and the in-place text
+  editor never see it, and the published page is untouched, so a visitor on WebKitGTK still
+  sees the defect. Drop `arabic-marks.ts` and its calls in `LayerRenderer.tsx` when WebKitGTK is fixed.
+  `e2e/canvas-marks.spec.ts` checks where the joiner is and is not.
+
 ## Not done (c1 and after)
 - **A published page renders an image layer as ycode's placeholder** (the data-URL SVG of
   `ASSET_PLACEHOLDERS`) while the preview renders the asset (`/a/<token>/file`). Seen in

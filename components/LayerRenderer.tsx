@@ -31,6 +31,7 @@ import { toast } from 'sonner';
 import { resolveInlineVariablesFromData } from '@/lib/inline-variables';
 import { hasPaginationVariables, paginationTextVariableToTemplate, resolvePaginationTextVariable } from '@/lib/pagination-text-utils';
 import { renderRichText, hasBlockElementsWithInlineVariables, getTextStyleClasses, flattenTiptapParagraphs, type RichTextLinkContext, type RenderComponentBlockFn } from '@/lib/text-format-utils';
+import { joinMarks } from '@/lib/platform/arabic-marks';
 import { hasComponentOrVariable, extractPlainTextFromTiptap } from '@/lib/tiptap-utils';
 import LayerContextMenu from '@/app/(builder)/ycode/components/LayerContextMenu';
 import CanvasTextEditor from '@/app/(builder)/ycode/components/CanvasTextEditor';
@@ -1226,6 +1227,11 @@ const LayerItemImpl: React.FC<{
     if (text) return text;
     return undefined;
   })();
+
+  // What goes on screen: WebKitGTK draws a word that ends in an Arabic mark above the line
+  // unless a joiner follows the mark (lib/platform/arabic-marks.ts). `textContent` itself stays
+  // the layer's own text: the in-place editor starts from it.
+  const displayedText = joinMarks(textContent);
 
   // Resolve image source - check for linked component variable first
   const componentVariables = parentComponentVariables || editingComponentVariables;
@@ -3231,7 +3237,7 @@ const LayerItemImpl: React.FC<{
 
       const mediaChildren = (
         <>
-          {textContent && textContent}
+          {displayedText && displayedText}
           {effectiveChildren && effectiveChildren.length > 0 && (
             <LayerRenderer
               layers={effectiveChildren}
@@ -3565,7 +3571,7 @@ const LayerItemImpl: React.FC<{
                 data-collection-item-id={item.id}
                 data-layer-id={layer.id} // Keep same layer ID for all instances
               >
-                {textContent && textContent}
+                {displayedText && displayedText}
 
                 {itemChildren && itemChildren.length > 0 && (
                   <LayerRenderer
@@ -3640,7 +3646,7 @@ const LayerItemImpl: React.FC<{
 
       return (
         <Tag {...elementProps} style={mergedStyle}>
-          {textContent && textContent}
+          {displayedText && displayedText}
 
           {/* Render children with format prop */}
           {effectiveChildren && effectiveChildren.length > 0 && (
@@ -3717,7 +3723,7 @@ const LayerItemImpl: React.FC<{
           <EditingIndicator layerId={layer.id} className="absolute -top-8 right-0 z-20" />
         )}
 
-        {textContent && textContent}
+        {displayedText && displayedText}
 
         {/* Render children */}
         {effectiveChildren && effectiveChildren.length > 0 && (
