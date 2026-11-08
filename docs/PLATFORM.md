@@ -394,11 +394,10 @@ the checkout are W5 and W6. Platform code is `lib/platform/store-elements/`; the
   nothing (grid, card and indicator; the indicator asks `/ycode/api/store/settings`). A catalogue that cannot be read
   (503, or any other failure) shows the failure state with "Try again"; "Load more" adds the next page of the page size.
 - **Cart seam** (`cart-store.ts`). The grid's "Add to cart" (a card without variants) and the indicator's count go
-  through `CartStore { count, subscribe, add }`, kept on `globalThis.__wsCartStore` and set by `connectCartStore()`. W5
-  writes the real cart and connects it; until it does the count is 0 and adding throws `CartStoreNotConnectedError`
-  (loud, not silent). The e2e puts a fake there before the page starts (`e2e/store-elements.spec.ts`).
-- **Links** (`links.ts`): the card opens `/product/{id}` and the indicator `/cart`, under the language's code on a page
-  that is not in the default language. W5 and W6 replace the two functions with the lookup of "the page with role X".
+  through `CartStore`, kept on `globalThis.__wsCartStore` and set by `connectCartStore()`. Session W5 writes the real
+  cart and connects it (below); with none connected the count is 0 and a change throws `CartStoreNotConnectedError`
+  (loud, not silent).
+- **Links** (`links.ts`): session W5 replaced W4's fixed paths with the lookup of "the page with role X" (below).
 - **Colours.** The elements read `--ws-store-primary`, `--ws-store-primary-soft` and `--ws-store-dark`
   (`colours.ts`): the site's ycode colour variables named **Primary**, **Primary soft** and **Dark** (the plain names,
   case and spacing ignored, the first of a name used twice), set on the element's wrapper as `var(--{id})`. A site without
@@ -459,6 +458,68 @@ the checkout are W5 and W6. Platform code is `lib/platform/store-elements/`; the
 - **Test.** `e2e/orders-api.spec.ts`. The platform stub (`e2e/order-services-stub.ts`) answers Sales' list and status route
   (the acting user's flag is read from `e2e/auth-fixtures.ts`, the people the auth stub answers for) and Contact Center's
   `lookup-ids`.
+
+## Product page and the cart (part 2, session W5)
+The **Product page** element (`productDetail`, a leaf like W4's), a page **store role**, the buyer's **cart** in the browser
+and the links between them. Platform code is `lib/platform/store-elements/`; the ycode files only name the element (the
+same places as W4's), add the role to the page settings panel (`PageSettingsPanel.tsx` with `PageStoreRole.tsx`) and
+resolve the product page in `fetchPageByPath`.
+- **The role.** `PageSettings.store = { kind: 'product' }`, set in the page settings panel ("Store page"). Only an ordinary
+  page can have one (not a collection page, an index page or an error page), and a site has one page for each role (the
+  panel refuses a second). W6 adds `cart`, `checkout` and `confirmation` (`PANEL_PAGE_KINDS` in `pages.ts`); the lookup is
+  already written for all four.
+- **The address.** The page answers at its own path and one more segment, the item's id: `/products/{itemId}` for a page
+  with the slug `products` (the slug is not reserved; the role is what matters), under a language's code and with
+  translated slugs in another language. `fetchPageByPath` resolves it after the exact match and the collection pages
+  (`matchProductPage`), reads the item from the catalogue (W2's `getProduct`, through `readProductPage`) and injects it as
+  `PageData.storeProduct` (`found`, `gone`, or `unknown` when the catalogue cannot be asked). A store that does not sell
+  answers the site's own not-found page. The page's own address, with no item, is `gone`.
+- **404 with the page.** An item that is not on sale (unknown, inactive, no price, no rate, outside the site's
+  categories, a variant's own id, not an id) answers 404, and the 404 boundary renders the product page itself with the
+  element in its "This product is no longer available" state (`app/(site)/not-found.tsx`), through the same cached
+  entry the page route read. The same for the pagination route.
+- **Cached per item for 60 seconds** (owner, W5 grill-me): the data-cache entry of a product page request (its path, or
+  its path and an item) lives 60 s with the tenant's tags instead of until a publish (`pageRevalidate` in
+  `lib/published-page-cache.ts`), and the response is rendered live (`connection()`) rather than kept as a static page,
+  so a product put on sale, repriced or gone shows within a minute and a 404 does not stick. Whether a request is for the
+  product page comes from the `store_pages` setting, read through a cached lookup.
+- **Pages with roles, once per publish.** The publish writes the setting `store_pages` (role → path per language,
+  `{ product: { '*': '/products', ar: '/ar/products' } }`: `publishStorePages` in `product-page.ts`, called by the publish
+  route and the MCP publish tool). A publish that changes it renders every page again (a full invalidation, as a colour
+  variable change does), because every page with a store element carries the paths. `PageRenderer` hands the elements
+  `serverSettings.store = { site_id, pages, product? }`; the links are `createStoreLinks` in `links.ts`: a card to the
+  product page's path and the item (`/product/{id}` when no page has the role), the indicator and the "added" notice to the
+  cart page (`#` until W6 offers the cart role).
+- **The element.** `ProductDetail.tsx` (state: the picker, the quantity, the notice) over `ProductDetailView.tsx` (the
+  markup of `browse-product-*`): gallery with thumbnails (the variant's own image, else the product's), name, SKU of the
+  chosen variant, price with the unit (`/ pcs`), one row of chips per axis, a quantity stepper (1 to 999), Add to cart,
+  the notice, the description. The server and the first browser render are the injected product; the element then reads
+  the item again from `/ycode/api/store/products/{id}` (owner, W5 grill-me): an item that has gone shows "no longer
+  available" (status stays what was served), one that changed shows as it is. Three render paths as W4: the canvas draws a
+  sample T-shirt with no network call; the HTML shell is the element's skeleton (`html.ts`); the published element is
+  the client component. The element may be dropped on any page with a product chosen in its settings
+  (`ProductDetailSettings.tsx`), and then shows nothing when none is chosen.
+- **The picker** (`picker.ts`). The page opens on the cheapest variant that can be bought. An option is unavailable
+  ("unavailable", disabled, struck through) when no variant that can be bought has it. Picking an option that goes with the
+  other axes' choice changes that axis only; picking one that does not moves the others to the nearest variant that has
+  it. A variant that cannot be bought cannot be picked.
+- **The cart** (`cart-store.ts`). `localStorage["ws-cart:{siteId}"] = { version: 1, lines }`, a line being
+  `{ item_id (the variant's id when picked), product_id, quantity, snapshot: { name, name_ar, axes, price, image, unit } }`.
+  `add` merges the same item, `setQuantity` (1 to 999), `remove`, `clear`, `count`, `totals` (exact decimals; a cart
+  holding two currencies says so), `subscribe`; at most 50 different items (a checkout takes 50: the fifty-first is
+  refused with `CartFullError`, which the card and the page tell the buyer); other tabs of the site are followed through
+  the `storage` event; what storage holds that is not a cart is an empty cart; a browser that will not store keeps the
+  cart for the visit and says so once in the console. Every published store element connects it when it starts
+  (`connectBrowserCart(siteId)`, idempotent). The snapshot is for display only: prices are read again at checkout.
+- **Motion.** The "added" notice rises 4 px and fades in over 200 ms on the strong ease-out; chips and thumbnails change
+  colour, border and ring over 150 ms and press in to 97 % over 100 ms; under `prefers-reduced-motion: reduce` the notice
+  only fades and the chips change at once.
+- **Design values I had to choose** (the handoff does not draw them): the unit is a muted `/ pcs` after the price; the
+  loading and "no longer available" states use W4's skeleton and empty patterns; the cart-full message is a dark-bordered
+  alert on the page and a small note on a card.
+- **Test.** `e2e/product-page.spec.ts` and the unit tests beside the modules (`cart-store`, `picker`, `pages`, `links`,
+  `add-to-cart`, `settings`, `strings`, `html`, `card-data`, `store-money`).
+
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { cartCount, subscribeToCart } from '@/lib/platform/store-elements/cart-store';
 import { BagIcon } from '@/lib/platform/store-elements/icons';
-import { cartHref, type LinkLocale } from '@/lib/platform/store-elements/links';
+import type { StoreLinks } from '@/lib/platform/store-elements/links';
 import { fetchStoreSettings } from '@/lib/platform/store-elements/store-client';
 import { badgeText, STORE_STRINGS, type StoreLang } from '@/lib/platform/store-elements/strings';
 
@@ -50,7 +50,7 @@ export function CartIndicatorView({ count, lang, href, changes = 0 }: ViewProps)
  * The cart indicator on a published page: the connected cart's count (W5), following it as it changes. A store
  * that does not sell renders nothing, like every store element (PRD V1.1 "Store settings").
  */
-export default function CartIndicator({ lang, locale }: { lang: StoreLang; locale?: LinkLocale | null }) {
+export default function CartIndicator({ lang, links }: { lang: StoreLang; links: StoreLinks }) {
   // The server and the first browser render show an empty cart; the cart is read in the browser.
   const [count, setCount] = useState(0);
   const [changes, setChanges] = useState(0);
@@ -81,7 +81,7 @@ export default function CartIndicator({ lang, locale }: { lang: StoreLang; local
     <CartIndicatorView
       count={count}
       lang={lang}
-      href={cartHref(locale)}
+      href={links.cart()}
       changes={changes}
     />
   );

@@ -2,10 +2,11 @@
 
 import React, { useId } from 'react';
 import clsx from 'clsx';
+import type { AddResult } from '@/lib/platform/store-elements/add-to-cart';
 import type { CardData } from '@/lib/platform/store-elements/card-data';
 import { CardSkeleton, ErrorAlert, ProductCardView } from '@/lib/platform/store-elements/CardView';
 import { GridIcon, SearchIcon, SearchOffIcon } from '@/lib/platform/store-elements/icons';
-import { productHref, type LinkLocale } from '@/lib/platform/store-elements/links';
+import type { StoreLinks } from '@/lib/platform/store-elements/links';
 import { STORE_STRINGS, type StoreLang } from '@/lib/platform/store-elements/strings';
 
 export interface ChipData {
@@ -21,7 +22,7 @@ export type GridPhase =
 
 interface GridViewProps {
   lang: StoreLang;
-  locale?: LinkLocale | null;
+  links: StoreLinks;
   phase: GridPhase;
   showSearch: boolean;
   showCategoryFilter: boolean;
@@ -39,7 +40,7 @@ interface GridViewProps {
   onClearSearch: () => void;
   onLoadMore: () => void;
   onRetry: () => void;
-  onAdd: (card: CardData) => void;
+  onAdd: (card: CardData) => AddResult | void;
 }
 
 function Empty({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action?: { label: string; run: () => void } }) {
@@ -62,7 +63,7 @@ function Empty({ icon, title, text, action }: { icon: React.ReactNode; title: st
  * built from the same patterns (decision 16g), the catalogue-failure state, "Load more" and an empty store.
  */
 export function ProductGridView(props: GridViewProps) {
-  const { lang, locale, phase, chips, selectedCategory, typed, query } = props;
+  const { lang, links, phase, chips, selectedCategory, typed, query } = props;
   const t = STORE_STRINGS[lang];
   const searchId = useId();
   const hasChips = props.showCategoryFilter && chips.length > 0;
@@ -116,7 +117,7 @@ export function ProductGridView(props: GridViewProps) {
           {phase.cards.map((card) => (
             <ProductCardView
               key={card.id} card={card}
-              lang={lang} href={productHref(card.id, locale)}
+              lang={lang} href={links.product(card.id)}
               onAdd={props.onAdd}
             />
           ))}

@@ -61,7 +61,10 @@ export default async function DynamicSlugPage({ params, searchParams }: DynamicS
     notFound();
   }
 
-  const { page, pageLayers, components, collectionItem, collectionFields, pageCollectionSortedItemIds, pageCollectionSortedItemSlugs, locale, availableLocales, translations } = data;
+  // An item that is no longer available answers 404 here too (part 2, W5)
+  if (data.storeProduct?.kind === 'gone') notFound();
+
+  const { page, pageLayers, components, collectionItem, collectionFields, pageCollectionSortedItemIds, pageCollectionSortedItemSlugs, storeProduct, locale, availableLocales, translations } = data;
 
   const folders = await fetchFoldersForAuth(true);
   const protectionCheck = getPasswordProtection(page, folders, null);
@@ -131,6 +134,7 @@ export default async function DynamicSlugPage({ params, searchParams }: DynamicS
         generatedCss={globalSettings.publishedCss || undefined}
         colorVariablesCss={globalSettings.colorVariablesCss || undefined}
         collectionItem={collectionItem}
+        storeProduct={storeProduct}
         collectionFields={collectionFields}
         pageCollectionSortedItemIds={pageCollectionSortedItemIds}
         pageCollectionSortedItemSlugs={pageCollectionSortedItemSlugs}

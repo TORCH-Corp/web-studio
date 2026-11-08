@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { isStoreElement, readProductCardSettings, readProductGridSettings, clampPageSize, cleanCategoryIds, PRODUCT_GRID_DEFAULTS } from './settings';
+import { isStoreElement, readProductCardSettings, readProductDetailSettings, readProductGridSettings, clampPageSize, cleanCategoryIds, PRODUCT_GRID_DEFAULTS } from './settings';
 
 const A = '25252525-0001-4525-8525-252525252525';
 const B = '25252525-0002-4525-8525-252525252525';
 const grid = (productGrid: unknown) => ({ settings: { store: { productGrid } } }) as never;
 const card = (productCard: unknown) => ({ settings: { store: { productCard } } }) as never;
+const detail = (productDetail: unknown) => ({ settings: { store: { productDetail } } }) as never;
 
 test('a grid with no settings is the defaults: twelve a page, search and category filter on, the URL category honoured', () => {
   assert.deepEqual(readProductGridSettings(undefined), PRODUCT_GRID_DEFAULTS);
@@ -64,7 +65,14 @@ test('a card shows the chosen product, or nothing when none, or one that is not 
   assert.deepEqual(readProductCardSettings(card({ product: { id: A } })), { product: { id: A, name: '', name_ar: null } });
 });
 
-test('the three store elements are known by name, nothing else is', () => {
-  for (const name of ['productGrid', 'productCard', 'cartIndicator']) assert.equal(isStoreElement(name), true);
+test('the product page element shows the chosen product only where no URL names one, and reads it as a card does', () => {
+  assert.deepEqual(readProductDetailSettings(undefined), { product: null });
+  assert.deepEqual(readProductDetailSettings(detail({ product: { id: A.toUpperCase(), name: 'Lamp', name_ar: null } })), { product: { id: A, name: 'Lamp', name_ar: null } });
+  assert.deepEqual(readProductDetailSettings(detail({ product: { id: 'lamp' } })), { product: null });
+  assert.deepEqual(readProductDetailSettings(card({ product: { id: A } })), { product: null }, 'a card\'s choice is not the page element\'s');
+});
+
+test('the four store elements are known by name, nothing else is', () => {
+  for (const name of ['productGrid', 'productCard', 'productDetail', 'cartIndicator']) assert.equal(isStoreElement(name), true);
   for (const name of ['button', 'htmlEmbed', 'product', '', undefined, null]) assert.equal(isStoreElement(name), false);
 });

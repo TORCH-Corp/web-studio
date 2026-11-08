@@ -14,7 +14,7 @@
 import { DEFAULT_PAGE_SIZE, MAX_CATEGORIES, MAX_PAGE_SIZE, isUuid } from '@/lib/platform/store-query';
 
 /** Layer names of the elements this module owns (keys of lib/templates/store.ts). */
-export const STORE_ELEMENT_NAMES = ['productGrid', 'productCard', 'cartIndicator'] as const;
+export const STORE_ELEMENT_NAMES = ['productGrid', 'productCard', 'productDetail', 'cartIndicator'] as const;
 export type StoreElementName = (typeof STORE_ELEMENT_NAMES)[number];
 
 export function isStoreElement(name: string | undefined | null): name is StoreElementName {
@@ -43,10 +43,20 @@ export interface ProductCardSettings {
   product: ChosenProduct | null;
 }
 
+/**
+ * The product page element (session W5). On the page with the product role it
+ * shows the item the URL names; the product chosen here is for the element on
+ * any other page (a landing page about one product).
+ */
+export interface ProductDetailSettings {
+  product: ChosenProduct | null;
+}
+
 /** `layer.settings.store`. */
 export interface StoreElementSettings {
   productGrid?: Partial<ProductGridSettings>;
   productCard?: Partial<ProductCardSettings>;
+  productDetail?: Partial<ProductDetailSettings>;
 }
 
 export const PRODUCT_GRID_DEFAULTS: ProductGridSettings = {
@@ -87,14 +97,21 @@ export function readProductGridSettings(layer: WithStore): ProductGridSettings {
   };
 }
 
-export function readProductCardSettings(layer: WithStore): ProductCardSettings {
-  const product = layer?.settings?.store?.productCard?.product;
-  if (!product || typeof product.id !== 'string' || !isUuid(product.id)) return { product: null };
+type ChosenProductStored = { id?: unknown; name?: unknown; name_ar?: unknown } | null | undefined;
+
+function readChosenProduct(product: ChosenProductStored): ChosenProduct | null {
+  if (!product || typeof product.id !== 'string' || !isUuid(product.id)) return null;
   return {
-    product: {
-      id: product.id.toLowerCase(),
-      name: typeof product.name === 'string' ? product.name : '',
-      name_ar: typeof product.name_ar === 'string' ? product.name_ar : null,
-    },
+    id: product.id.toLowerCase(),
+    name: typeof product.name === 'string' ? product.name : '',
+    name_ar: typeof product.name_ar === 'string' ? product.name_ar : null,
   };
+}
+
+export function readProductCardSettings(layer: WithStore): ProductCardSettings {
+  return { product: readChosenProduct(layer?.settings?.store?.productCard?.product) };
+}
+
+export function readProductDetailSettings(layer: WithStore): ProductDetailSettings {
+  return { product: readChosenProduct(layer?.settings?.store?.productDetail?.product) };
 }

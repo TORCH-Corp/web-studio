@@ -8,8 +8,9 @@
  * The catalogue organization of e2e/platform-fixtures.ts, as catalogue.spec.ts
  * has it: the site sells from Clothing and Home (and Toys, which has nothing in
  * it), so it sells the desk lamp and the linen shirt (one product, "from" the
- * cheapest variant, 30,400 IQD). The cart (W5) does not exist yet: the specs put
- * a fake in its place before the page starts, the way W5's cart will connect.
+ * cheapest variant, 30,400 IQD). The buyer's cart is W5's: a published page
+ * connects it from localStorage (`ws-cart:{siteId}`), so the specs here seed that
+ * key before the page starts and read it back after.
  */
 
 import fs from 'node:fs/promises';
@@ -75,31 +76,17 @@ async function putLayers(pageId: string, layers: unknown[]): Promise<void> {
   expect(response.status(), await response.text()).toBe(200);
 }
 
-/** The cart W5 will connect, as a fake: a count, a subscription and the lines added to it. */
-async function connectFakeCart(context: BrowserContext, count = 3): Promise<void> {
-  await context.addInitScript((initial: number) => {
-    const listeners = new Set<() => void>();
-    const fake = {
-      n: initial,
-      added: [] as unknown[],
-      count: () => fake.n,
-      subscribe: (listener: () => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-      add: (line: { quantity: number }) => {
-        fake.added.push(line);
-        fake.n += line.quantity;
-        listeners.forEach((listener) => listener());
-      },
-      set: (n: number) => {
-        fake.n = n;
-        listeners.forEach((listener) => listener());
-      },
-    };
-    (window as unknown as { __wsCartStore: typeof fake }).__wsCartStore = fake;
-  }, count);
+/** The buyer's cart as W5 keeps it: `count` pieces of one item in localStorage under the site's key, there before the page starts. */
+async function seedCart(context: BrowserContext, count: number): Promise<void> {
+  await context.addInitScript(({ key, pieces }: { key: string; pieces: number }) => {
+    if (window.localStorage.getItem(key)) return;
+    const line = { item_id: 'seeded', product_id: 'seeded', quantity: pieces, snapshot: { name: 'Seeded', name_ar: null, axes: [], price: { amount: '1000', currency: 'IQD' }, image: null, unit: null } };
+    window.localStorage.setItem(key, JSON.stringify({ version: 1, lines: [line] }));
+  }, { key: `ws-cart:${site.id}`, pieces: count });
 }
+
+const cartLines = (page: Page) =>
+  page.evaluate((key) => (JSON.parse(window.localStorage.getItem(key) ?? 'null') as { lines: Array<Record<string, unknown>> } | null)?.lines ?? [], `ws-cart:${site.id}`);
 
 async function visitor(browser: Browser, options: { lang?: string } = {}): Promise<BrowserContext> {
   return browser.newContext({ baseURL, extraHTTPHeaders: { 'x-forwarded-host': HOST }, locale: options.lang });
@@ -369,64 +356,67 @@ test('with selling off every store element renders nothing; switched on again th
 test('a product card alone shows the product it was given, with its own Add to cart', async ({ browser }) => {
   const context = await visitor(browser);
   try {
-    await connectFakeCart(context);
     const page = await context.newPage();
     await page.goto('/');
     const lone = page.locator('[data-ws-store="productCard"]');
     await expect(lone.locator('article')).toHaveCount(1);
     await expect(lone.locator('.ws-card-name')).toHaveText('Desk lamp');
     await expect(lone.locator('.ws-card-price')).toHaveText('25,000 IQD');
+    await expect(page.locator('[data-ws-store="productGrid"] article')).toHaveCount(2);
     await lone.getByRole('button', { name: 'Add to cart' }).click();
-    const added = await page.evaluate(() => (window as unknown as { __wsCartStore: { added: unknown[] } }).__wsCartStore.added);
-    expect(added).toEqual([{
+    await expect(page.locator('[data-ws-store="cartIndicator"] .ws-badge')).toHaveText('1');
+    expect(await cartLines(page)).toEqual([{
       item_id: ITEM.lamp,
+      product_id: ITEM.lamp,
       quantity: 1,
-      snapshot: { name: 'Desk lamp', name_ar: 'مصباح مكتب', price: { amount: '25000', currency: 'IQD' }, image: expect.stringContaining(`/store-media/`) },
+      snapshot: {
+        name: 'Desk lamp',
+        name_ar: 'مصباح مكتب',
+        axes: [],
+        price: { amount: '25000', currency: 'IQD' },
+        image: expect.stringContaining('/store-media/'),
+        unit: { name: 'Piece', symbol: 'pcs' },
+      },
     }]);
   } finally {
     await context.close();
   }
 });
 
-test('the cart indicator shows the cart\'s count, follows it, settles the badge once on a change, and says 99+ above 99', async ({ browser }) => {
+test('the cart indicator shows the cart\'s count, follows it (here and in another tab), settles the badge once on a change, and says 99+ above 99', async ({ browser }) => {
   const context = await visitor(browser);
   try {
-    await connectFakeCart(context, 3);
+    await seedCart(context, 3);
     const page = await context.newPage();
     await page.goto('/');
     const cart = page.locator('[data-ws-store="cartIndicator"] a.ws-cart');
     await expect(cart).toHaveAttribute('aria-label', 'Cart: 3 items');
-    await expect(cart).toHaveAttribute('href', '/cart');
+    // No page has the cart role yet (W6 gives it): the indicator goes nowhere rather than to a page that is not there.
+    await expect(cart).toHaveAttribute('href', '#');
     await expect(cart.locator('.ws-badge')).toHaveText('3');
+    // The buyer's own count on opening is not a change: the badge does not settle.
     await expect(cart.locator('.ws-badge')).not.toHaveAttribute('data-changed', /.*/);
 
+    await expect(cards(page)).toHaveCount(2);
     await cards(page).first().getByRole('button', { name: 'Add to cart' }).click();
     await expect(cart).toHaveAttribute('aria-label', 'Cart: 4 items');
     await expect(cart.locator('.ws-badge')).toHaveText('4');
     await expect(cart.locator('.ws-badge')).toHaveAttribute('data-changed', '');
 
-    await page.evaluate(() => (window as unknown as { __wsCartStore: { set(n: number): void } }).__wsCartStore.set(120));
+    // Another tab of the same site changes the cart: this one follows.
+    const other = await context.newPage();
+    await other.goto('/');
+    await other.evaluate((key) => {
+      const stored = JSON.parse(window.localStorage.getItem(key)!);
+      stored.lines[0].quantity = 120;
+      window.localStorage.setItem(key, JSON.stringify(stored));
+    }, `ws-cart:${site.id}`);
     await expect(cart.locator('.ws-badge')).toHaveText('99+');
-    await expect(cart).toHaveAttribute('aria-label', 'Cart: 120 items');
+    await expect(cart).toHaveAttribute('aria-label', 'Cart: 121 items');
 
-    await page.evaluate(() => (window as unknown as { __wsCartStore: { set(n: number): void } }).__wsCartStore.set(0));
+    await other.evaluate((key) => window.localStorage.removeItem(key), `ws-cart:${site.id}`);
     await expect(cart.locator('.ws-badge')).toHaveCount(0);
     await expect(cart).toHaveAttribute('aria-label', 'Cart is empty');
-  } finally {
-    await context.close();
-  }
-});
-
-test('with no cart connected the count is empty and Add to cart fails loudly instead of doing nothing', async ({ browser }) => {
-  const context = await visitor(browser);
-  try {
-    const page = await context.newPage();
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await expect(page.locator('[data-ws-store="cartIndicator"] a.ws-cart')).toHaveAttribute('aria-label', 'Cart is empty');
-    await cards(page).first().getByRole('button', { name: 'Add to cart' }).click();
-    await expect.poll(() => errors.join('\n')).toContain('The cart is not connected');
   } finally {
     await context.close();
   }
@@ -446,7 +436,7 @@ test('an Arabic page reads right to left in Arabic, names and prices included, a
     await expect(cards(page).nth(1).getByRole('link', { name: 'اختر الخيارات' })).toHaveAttribute('href', `/ar/product/${ITEM.shirt}`);
     await expect(gridOf(page).getByRole('group', { name: 'الأقسام' }).getByRole('button')).toHaveText(['الكل', 'ملابس', 'المنزل', 'ألعاب']);
     await expect(gridOf(page).getByRole('searchbox', { name: 'ابحث عن منتج بالاسم' })).toBeVisible();
-    await expect(page.locator('[data-ws-store="cartIndicator"] a.ws-cart')).toHaveAttribute('href', '/ar/cart');
+    await expect(page.locator('[data-ws-store="cartIndicator"] a.ws-cart')).toHaveAttribute('href', '#');
     // The search field's icon sits at the start edge, which is the right one here.
     const field = gridOf(page).locator('.ws-search-input');
     const icon = gridOf(page).locator('.ws-search-icon');

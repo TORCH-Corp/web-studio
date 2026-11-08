@@ -17,6 +17,7 @@ const LAYER_NAME_TO_GROUP: Record<string, string> = {
   htmlEmbed: 'block',
   productGrid: 'block',
   productCard: 'block',
+  productDetail: 'block',
   cartIndicator: 'block',
   filter: 'block',
   localeSelector: 'block',

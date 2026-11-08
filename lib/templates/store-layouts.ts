@@ -2,7 +2,7 @@
  * Store sections (part 2, session W4; PRD V1.1 "Store elements and sections"):
  * the ready sections of the Store category of the Layouts tab, built from the
  * store elements as handoff/store draws them (section-products-*,
- * section-featured-default).
+ * section-featured-default; browse-product-* for the product page, session W5).
  *
  * They are starting points on the design system's own values (Dark text,
  * Primary for the link, the spacing and the type of store/DESIGN_SYSTEM.md);
@@ -110,6 +110,21 @@ export const storeLayoutTemplates: Record<string, LayoutTemplate> = {
         }),
       ],
       'Featured products',
+    ),
+  },
+
+  'Product page': {
+    category: 'Store',
+    previewImage: '/ycode/layouts/previews/store-product-page.webp',
+    // One element holds the whole page body (gallery, name, price, picker, Add to cart, description); the page's own
+    // header, footer and breadcrumb are the page's. Set the page's store role to Product page in its settings.
+    template: band(
+      [
+        layer('productDetail', 'w-[100%]', {
+          settings: { tag: 'div', store: { productDetail: { product: null } } },
+        }),
+      ],
+      'Product page',
     ),
   },
 };

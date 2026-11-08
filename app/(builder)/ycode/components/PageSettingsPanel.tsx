@@ -49,6 +49,8 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { getFieldIcon, IMAGE_FIELD_TYPES, RICH_TEXT_FIELD_TYPES, type FieldGroup as CollectionFieldGroup } from '@/lib/collection-field-utils';
 import CodeEditorFieldVariables from './CodeEditorFieldVariables';
+import PageStoreRole from './PageStoreRole';
+import { canHaveStoreRole, storeKindOf, storePageTaken, type StorePageKind } from '@/lib/platform/store-elements/pages';
 
 export interface PageSettingsPanelHandle {
   checkUnsavedChanges: () => Promise<boolean>;
@@ -144,6 +146,8 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
   // "Previous item" link resolution. `sort_by` is either 'manual' or a field id.
   const [nextPrevSortBy, setNextPrevSortBy] = useState<string>('manual');
   const [nextPrevSortOrder, setNextPrevSortOrder] = useState<'asc' | 'desc'>('asc');
+  // The page's store role (part 2): '' for none.
+  const [storeKind, setStoreKind] = useState<StorePageKind | ''>('');
 
   const { collections, fields } = useCollectionsStore();
 
@@ -218,6 +222,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
     slugFieldId: string | null;
     nextPrevSortBy: string;
     nextPrevSortOrder: 'asc' | 'desc';
+    storeKind: StorePageKind | '';
   } | null>(null);
 
   const pages = usePagesStore((state) => state.pages);
@@ -363,6 +368,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
       slugFieldId !== initial.slugFieldId ||
       nextPrevSortBy !== initial.nextPrevSortBy ||
       nextPrevSortOrder !== initial.nextPrevSortOrder ||
+      storeKind !== initial.storeKind ||
       (canHandleStatus && stageForPublish !== stageForPublishInitialRef.current)
     );
 
@@ -373,7 +379,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
 
     return hasChanges;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, slug, pageFolderId, isIndex, seoTitle, seoDescription, seoImage, seoNoindex, customCodeHead, customCodeBody, authEnabled, authPassword, collectionId, slugFieldId, nextPrevSortBy, nextPrevSortOrder, stageForPublish, canHandleStatus, saveCounter]);
+  }, [name, slug, pageFolderId, isIndex, seoTitle, seoDescription, seoImage, seoNoindex, customCodeHead, customCodeBody, authEnabled, authPassword, collectionId, slugFieldId, nextPrevSortBy, nextPrevSortOrder, storeKind, stageForPublish, canHandleStatus, saveCounter]);
 
   // Expose method to check for unsaved changes externally
   useImperativeHandle(ref, () => ({
@@ -465,6 +471,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
             initialValuesRef.current.nextPrevSortBy = settings?.cms?.next_previous?.sort_by || initialIdFieldId || 'manual';
             initialValuesRef.current.nextPrevSortOrder = settings?.cms?.next_previous?.sort_order || 'asc';
           }
+          initialValuesRef.current.storeKind = storeKindOf(page) ?? '';
         }
         return;
       } else {
@@ -493,6 +500,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
       slugFieldId !== initialValuesRef.current.slugFieldId ||
       nextPrevSortBy !== initialValuesRef.current.nextPrevSortBy ||
       nextPrevSortOrder !== initialValuesRef.current.nextPrevSortOrder ||
+      storeKind !== initialValuesRef.current.storeKind ||
       (canHandleStatus && stageForPublish !== stageForPublishInitialRef.current)
     );
 
@@ -538,6 +546,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
       const initialIdFieldId = fields[settings?.cms?.collection_id || '']?.find(f => f.key === 'id')?.id;
       const initialNextPrevSortBy = settings?.cms?.next_previous?.sort_by || initialIdFieldId || 'manual';
       const initialNextPrevSortOrder: 'asc' | 'desc' = settings?.cms?.next_previous?.sort_order || 'asc';
+      const initialStoreKind: StorePageKind | '' = storeKindOf(currentPage) ?? '';
 
       // IMPORTANT: Save initial values FIRST before updating form state
       // This prevents false "unsaved changes" detection when switching pages
@@ -558,6 +567,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
         slugFieldId: initialSlugFieldId,
         nextPrevSortBy: initialNextPrevSortBy,
         nextPrevSortOrder: initialNextPrevSortOrder,
+        storeKind: initialStoreKind,
       };
 
       setName(initialName);
@@ -576,6 +586,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
       setSlugFieldId(initialSlugFieldId);
       setNextPrevSortBy(initialNextPrevSortBy);
       setNextPrevSortOrder(initialNextPrevSortOrder);
+      setStoreKind(initialStoreKind);
     } else {
       // Reset initial values for new page FIRST
       initialValuesRef.current = {
@@ -595,6 +606,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
         slugFieldId: null,
         nextPrevSortBy: 'manual',
         nextPrevSortOrder: 'asc',
+        storeKind: '',
       };
 
       setName('');
@@ -613,6 +625,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
       setSlugFieldId(null);
       setNextPrevSortBy('manual');
       setNextPrevSortOrder('asc');
+      setStoreKind('');
     }
 
     // Clear error state when page changes
@@ -867,6 +880,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
         setSlugFieldId(initialValuesRef.current.slugFieldId);
         setNextPrevSortBy(initialValuesRef.current.nextPrevSortBy);
         setNextPrevSortOrder(initialValuesRef.current.nextPrevSortOrder);
+        setStoreKind(initialValuesRef.current.storeKind);
         setStageForPublish(stageForPublishInitialRef.current);
       }
 
@@ -897,6 +911,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
         setSlugFieldId(initialValuesRef.current.slugFieldId);
         setNextPrevSortBy(initialValuesRef.current.nextPrevSortBy);
         setNextPrevSortOrder(initialValuesRef.current.nextPrevSortOrder);
+        setStoreKind(initialValuesRef.current.storeKind);
         setStageForPublish(stageForPublishInitialRef.current);
       }
 
@@ -1030,6 +1045,15 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
         }
       }
 
+      // A site has one page for each store role: the store elements lead to it.
+      if (storeKind) {
+        const taken = storePageTaken(pages.filter((p) => p.is_published === (currentPage?.is_published || false)), storeKind, currentPage?.id ?? null);
+        if (taken) {
+          setError(`"${taken.name}" is already the ${storeKind} page. A site has one page for each store role.`);
+          return;
+        }
+      }
+
       // Check if trying to make a page dynamic or move a dynamic page to a folder that already has one
     }
 
@@ -1038,6 +1062,9 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
 
     try {
       const existingSettings = currentPage?.settings as PageSettings | undefined;
+
+      // A page that became an index, collection or error page has no role to keep
+      const savedStoreKind: StorePageKind | '' = storeKind && canHaveStoreRole({ is_dynamic: isDynamicPage, is_index: isIndex, error_page: currentPage?.error_page ?? null }) ? storeKind : '';
 
       const settings: PageSettings = {
         ...existingSettings,
@@ -1064,6 +1091,8 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
             sort_order: nextPrevSortOrder,
           },
         } : undefined,
+        // Explicitly set or clear the store role
+        store: savedStoreKind ? { kind: savedStoreKind } : undefined,
       };
 
       // Sanitize slug and remove trailing dashes before saving
@@ -1115,6 +1144,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
       const savedNextPrevSortOrder: 'asc' | 'desc' = savedCollectionId ? nextPrevSortOrder : 'asc';
       setNextPrevSortBy(savedNextPrevSortBy);
       setNextPrevSortOrder(savedNextPrevSortOrder);
+      setStoreKind(savedStoreKind);
 
       initialValuesRef.current = {
         name: trimmedName,
@@ -1133,6 +1163,7 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
         slugFieldId: savedSlugFieldId,
         nextPrevSortBy: savedNextPrevSortBy,
         nextPrevSortOrder: savedNextPrevSortOrder,
+        storeKind: savedStoreKind,
       };
 
       rejectedPageRef.current = null;
@@ -1456,6 +1487,13 @@ const PageSettingsPanel = React.forwardRef<PageSettingsPanelHandle, PageSettings
                           </FieldDescription>
                         )}
                       </Field>
+                    )}
+
+                    {canHaveStoreRole({ is_dynamic: isDynamicPage, is_index: isIndex, error_page: currentPage?.error_page ?? null }) && (
+                      <PageStoreRole
+                        value={storeKind} onChange={setStoreKind}
+                        addressPreview={slugPathPreview}
+                      />
                     )}
 
                     <Field>

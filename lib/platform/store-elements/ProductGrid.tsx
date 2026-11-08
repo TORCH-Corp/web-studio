@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cardOf, nameFor, type CardData } from '@/lib/platform/store-elements/card-data';
 import { addToCart } from '@/lib/platform/store-elements/add-to-cart';
 import { ProductGridView, type ChipData, type GridPhase } from '@/lib/platform/store-elements/GridView';
-import type { LinkLocale } from '@/lib/platform/store-elements/links';
+import type { StoreLinks } from '@/lib/platform/store-elements/links';
 import type { ProductGridSettings } from '@/lib/platform/store-elements/settings';
 import { fetchCategories, fetchProducts } from '@/lib/platform/store-elements/store-client';
 import type { StoreLang } from '@/lib/platform/store-elements/strings';
@@ -50,7 +50,7 @@ function writeUrl(filters: Filters, honourCategory: boolean): void {
 interface Props {
   settings: ProductGridSettings;
   lang: StoreLang;
-  locale?: LinkLocale | null;
+  links: StoreLinks;
 }
 
 /**
@@ -59,7 +59,7 @@ interface Props {
  * cached page and the hydrated one agree; the URL is read, and the first page asked for, once the page is in
  * the browser. A store that does not sell renders nothing.
  */
-export default function ProductGrid({ settings, lang, locale }: Props) {
+export default function ProductGrid({ settings, lang, links }: Props) {
   const { categories, pageSize, honourUrlCategory } = settings;
   const categoriesKey = categories.join(',');
   const [filters, setFilters] = useState<Filters | null>(null);
@@ -185,7 +185,7 @@ export default function ProductGrid({ settings, lang, locale }: Props) {
   return (
     <ProductGridView
       lang={lang}
-      locale={locale}
+      links={links}
       phase={phase}
       showSearch={settings.showSearch}
       showCategoryFilter={settings.showCategoryFilter}
