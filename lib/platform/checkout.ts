@@ -9,7 +9,8 @@
  *      (lib/platform/checkout-rules.ts): 422 item_unavailable, nothing called;
  *   3. a USD store needs the day's USD→IQD rate, which Sales keeps on every USD
  *      order: none answers 503 before Contact Center (OPEN_QUESTIONS 30);
- *   4. it counts against the site's rate limit for the IP (checkout-limit.ts);
+ *   4. it counts against the site's rate limit for the IP, once per checkout
+ *      and phone, so a retry is not counted again (checkout-limit.ts);
  *   5. Contact Center finds or creates the buyer by the canonical phone;
  *   6. Sales creates the draft order, idempotent per checkout id; a refusal
  *      about items names them (422), anything else Sales refuses is the
@@ -30,7 +31,7 @@ import { getKnexClient } from '@/lib/knex-client';
 import { siteCatalogue } from '@/lib/platform/catalogue';
 import { forgetCatalogue } from '@/lib/platform/catalogue-cache';
 import type { CheckoutInput } from '@/lib/platform/checkout-input';
-import { checkoutCounter, limitKey } from '@/lib/platform/checkout-limit';
+import { checkoutCounter, countedCheckout, limitKey } from '@/lib/platform/checkout-limit';
 import { confirmationOf, salesRefusalAnswer, unavailableLines, type Confirmation, type UnavailableLine } from '@/lib/platform/checkout-rules';
 import { ContactCenterUnavailableError, findOrCreatePerson } from '@/lib/platform/contact-center';
 import { OrgSetupUnavailableError, usdIqdRate } from '@/lib/platform/org-setup';
@@ -105,7 +106,7 @@ async function place(site: Site, store: StoreRow, input: CheckoutInput, ip: stri
   }
   if (!store.branch_id) throw new Error(`Site ${site.id} sells with no branch`);
 
-  if (ip) checkoutCounter(RATE_LIMIT_WINDOW_MS).add(limitKey(site.id, ip), Date.now());
+  if (ip) checkoutCounter(RATE_LIMIT_WINDOW_MS).add(limitKey(site.id, ip), countedCheckout(input.checkout_id, input.buyer.phone_canonical), Date.now());
 
   const person = await findOrCreatePerson(organizationId, { name: input.buyer.name, phone: input.buyer.phone_canonical });
   let order: { id: string; code: string; created: boolean };

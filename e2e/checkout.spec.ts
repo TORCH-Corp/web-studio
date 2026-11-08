@@ -422,6 +422,26 @@ test('the rate limit counts the site\'s checkouts from one IP that reached Conta
   }
 });
 
+test('a checkout tried again after Sales failed is counted once against the rate limit', async () => {
+  await spamSetting(2);
+  try {
+    const ip = { 'x-forwarded-for': `192.0.2.${(Date.now() % 200) + 1}` };
+    const retried = checkoutBody();
+    await servicesDown(['sales']);
+    try {
+      // The design's "Try again" sends the same checkout: each reaches Contact Center, one is counted.
+      for (let i = 0; i < 3; i++) expect((await json(await checkout(retried, visitor, ip), 503)).code).toBe('service_unavailable');
+    } finally {
+      await servicesDown([]);
+    }
+    await json(await checkout(retried, visitor, ip), 201);
+    await json(await checkout(checkoutBody(), visitor, ip), 201);
+    expect((await json(await checkout(checkoutBody(), visitor, ip), 429)).code).toBe('rate_limited');
+  } finally {
+    await spamSetting(1000);
+  }
+});
+
 test('on the builder host, and on a store that does not sell, both routes answer 404', async () => {
   const builder = await request.newContext({ baseURL });
   try {
