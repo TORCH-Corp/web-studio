@@ -172,6 +172,10 @@ The production values are in the compose service `web-studio` (secrets from the 
     ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # the internal routes take the service key (and x-entity-id for the rate and units); Sales holds the same key
     PRODUCT_SERVICES_URL=http://product-services-service:6024   # Product & Services: the category tree (W1), the items, variants and images (W2)
     PRODUCT_SERVICES_API_KEY=<product-services' SERVICE_API_KEY>   # with x-entity-id = the organization
+    CONTACT_CENTER_URL=http://contact-center-service:6017   # the checkout's buyer: find or create a person by phone (W3)
+    CONTACT_CENTER_API_KEY=<contact-center's SERVICE_API_KEY>   # ${CC_SERVICE_API_KEY} in the root .env; with x-entity-id
+    SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
+    SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -322,6 +326,43 @@ description changes: `pnpm templates:seed`.
   /__rate { found }`) and the units; the fake Document Center holds the item images from `e2e/platform-fixtures.ts` and
   counts downloads (`GET /__hits?document=`).
 
+## Checkout (part 2, session W3)
+- **Routes.** `POST /ycode/api/store/checkout` and `GET /ycode/api/store/orders/{checkout_id}`, anonymous on a selling site's
+  own host only (`sellingSite`, as W2's routes; the builder host and a store that does not sell answer 404
+  `store_not_found`), in the proxy's map under `manage_orders` with an anonymous `POST` and `GET`. Each route file's comment
+  gives the body, the answers and their codes. The flow is `lib/platform/checkout.ts`; the body and its field rules
+  `checkout-input.ts`; the line checks, Sales's refusals and the confirmation's shape `checkout-rules.ts`; the cities
+  `iraq-governorates.ts` (19, Halabja included: OPEN_QUESTIONS 27).
+- **One order per checkout.** The page makes `checkout_id` once per cart and keeps it until success. A checkout already in
+  `platform_storefront_orders` is answered from it, with no call. Otherwise: the lines are checked against the site's
+  catalogue (W2's, up to 60 s old: `item_unavailable` names each line, `inactive`, `no_price`, `no_rate`, `parent` or
+  `not_on_sale`); a USD store asks the day's rate first (none: 503, OPEN_QUESTIONS 30); Contact Center finds or creates the
+  person by the canonical phone; Sales creates the draft order; its id and code are stored. Two requests with one checkout
+  in this process share one flight; across processes Sales's idempotency per checkout id and the table's unique (site,
+  checkout) keep it one order. A failure stores nothing; a person made before Sales failed stays and the retry finds it.
+- **What goes where.** Contact Center gets the name and the phone in its canonical form (`964` and the ten national digits).
+  Sales gets `source: storefront`, the site as `sourceReference`, the checkout id, the person as the customer, the store's
+  branch, currency and fee, the lines (item id and quantity, never a price), `cash_on_delivery`, the address with the city
+  in the buyer's language and the phone as typed, and the notes. Web Studio stores the order's id and code only; nothing of
+  the buyer is stored or logged here. The confirmation read asks Sales (`GET /internal/orders/{id}`) each time.
+- **Phone.** Iraqi mobiles only (OPEN_QUESTIONS 33): ten digits starting with 7 after `0`, `964`, `+964` or `00964`, with
+  spaces, dots, dashes or brackets, ASCII or Arabic-Indic digits; at most 32 characters as typed (Sales keeps that much).
+- **Sales's refusals.** An item code (`item_not_found`, `item_inactive`, `item_is_parent`, `item_no_price`,
+  `item_currency_mismatch`) or `no_rate_for_date` with `items` naming lines of the cart is `item_unavailable` for those
+  lines, and the site's catalogue is read again; any other refusal (customer, branch, the order's own rate) answers 503 and
+  is logged as the store's problem. A 400 from Sales is a contract mismatch (500, logged).
+- **Screening** is the form route's `screenFormSubmission` (same origin, size caps, honeypot, rate limit with the site's
+  Security settings), given a counter of its own (`lib/platform/checkout-limit.ts`, the one seam added to ycode's
+  `lib/form-spam-protection.ts`): per site and IP, the checkouts that reached Contact Center in the window, kept in memory
+  (OPEN_QUESTIONS 28). A filled honeypot answers 201 with `code: null`, calls nothing and stores nothing (OPEN_QUESTIONS 31).
+- **Before production:** Contact Center's find-or-create is live (C1, 8 Nov 2026); Sales's service create (SL2) and SL1's
+  order fields must be deployed first, with `deliveryAddress.phone` and the `items` of a 422 (the session plan, amended
+  8 Nov 2026).
+- **Test.** `e2e/checkout.spec.ts`. The platform stub answers Contact Center and Sales (`e2e/order-services-stub.ts`),
+  records every call (`GET /__calls?service=`), and can refuse the next order (`POST /__sales/refuse`) or slow every create
+  (`POST /__sales/delay`). Next fills a missing `x-forwarded-for` with the socket's address, so the spec's requests share one
+  IP and the spec raises its site's limit.
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -357,6 +398,12 @@ with a branch, only the organization's active branches and live categories, a cu
 archived or deleted since they were chosen kept and marked, both services down, a template that never sells and whose store
 a copy does not inherit) passes with `pnpm test` (397) and `pnpm e2e` (92); the migration runs from empty and on a copy of
 the production schema (8 Nov 2026), and rolls back.
+
+Part 2, session W3: `e2e/checkout.spec.ts` (one person and one order per checkout with the bodies Contact Center and Sales
+receive, the repeat and the concurrent pair answered by one order, ineligible lines and a Sales refusal named, field errors in
+Arabic, Sales or Contact Center down storing nothing and the retry finding the person, the confirmation read and its 404s, a USD
+store without the day's rate, cross-origin, honeypot, the rate limit per site and IP, the builder host and a store that does not
+sell) passes with `pnpm test` (471) and `pnpm e2e` (125), against stand-ins of SL2's service create (8 Nov 2026).
 
 ## Session 3: platform assets and trimming
 - **No public host in the builder.** `public/vendor/` holds `@tailwindcss/browser`, GSAP

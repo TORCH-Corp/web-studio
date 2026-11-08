@@ -21,7 +21,8 @@
  *                    webhooks, API keys and the integrations: part 3, hidden by
  *                    session 3
  *   manage_orders    the storefront (part 2): its buyer-facing reads are
- *                    anonymous on GET (session W2); the Orders API comes in W8
+ *                    anonymous on GET (session W2), the checkout on POST and
+ *                    its confirmation read on GET (W3); the Orders API comes in W8
  *
  * Public routes have their own credential (the setup wizard, the public API's
  * API keys, the revalidation secret, the OAuth flows) or are anonymous by
@@ -219,6 +220,9 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'store/products/[id]': orders(undefined, onGet),
   'store/categories': orders(undefined, onGet),
   'store/settings': orders(undefined, onGet),
+  // A visitor checks out (session W3): screened like the form route (same origin, honeypot, rate limit, size caps).
+  'store/checkout': orders(undefined, onPost),
+  'store/orders/[checkout_id]': orders(undefined, onGet), // the confirmation page's read of its order
 
   // Forms and collections (part 3; hidden by session 3).
   'form-submissions': forms(undefined, onPost), // a visitor submits a form anonymously

@@ -3,7 +3,8 @@
  * and Product & Services, per organization (part 2, session W1). Session W2
  * adds the catalogue organization: items with variants, units, the day's rate,
  * and the item images the fake Document Center (e2e/fake-document-center.ts)
- * holds. Session W3 adds Sales and Contact Center.
+ * holds. Session W3 adds the keys of Sales and Contact Center, whose stubs keep
+ * what they are sent (the persons and the orders) in memory.
  *
  * Shapes are the live services' (8 Nov 2026): a branch as auth-service's
  * `POST /api/internal/branches/` row, a category as Product & Services'
@@ -13,6 +14,9 @@
 
 export const ORG_SETUP_KEY = 'e2e-org-setup-key';
 export const PRODUCT_SERVICES_KEY = 'e2e-product-services-key';
+/** Session W3: the keys the stub's Contact Center and Sales take (each service's own SERVICE_API_KEY). */
+export const CONTACT_CENTER_KEY = 'e2e-contact-center-key';
+export const SALES_KEY = 'e2e-sales-key';
 
 /** store-settings.spec.ts's organization and a second one, whose branches and categories must never show. */
 export const STORE_ORG = '05050505-0505-4505-8505-050505050505';
