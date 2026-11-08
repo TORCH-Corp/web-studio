@@ -299,7 +299,7 @@ export interface LayerSettings {
   sortByFieldIds?: string[]; // Which field IDs are enabled as sort-by options
   isPlaceholder?: boolean; // Marks an <option> child as a placeholder (disabled, hidden, selected)
   map?: MapSettings; // Map-specific settings (only for map layers)
-  store?: StoreElementSettings; // Store element settings (only for the store elements: productGrid, productCard, productDetail; lib/platform/store-elements)
+  store?: StoreElementSettings; // Store element settings (only for the store elements with settings: productGrid, productCard, productDetail; lib/platform/store-elements)
 }
 
 export type MapProvider = 'mapbox' | 'google';

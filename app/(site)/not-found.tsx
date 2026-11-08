@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getDocumentSlugPath } from '@/lib/document-path';
-import { fetchCachedErrorPage, fetchCachedPageWithLayers, isStoreProductRequest } from '@/lib/published-page-cache';
+import { fetchCachedErrorPage, fetchCachedPageWithLayers, isStorePageRequest } from '@/lib/published-page-cache';
 import { fetchGlobalPageSettings } from '@/lib/generate-page-metadata';
 import { getSettingByKey } from '@/lib/repositories/settingsRepository';
 import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
@@ -31,7 +31,7 @@ export default async function NotFound() {
   // An item that is no longer available answers 404 with the product page itself, in its "no longer available" state
   // (part 2, W5): the same cached entry the page route read, so this costs nothing more.
   const slugPath = getDocumentSlugPath();
-  if (slugPath && (await isStoreProductRequest(slugPath, tenantId))) {
+  if (slugPath && (await isStorePageRequest(slugPath, tenantId))) {
     const productPage = await fetchCachedPageWithLayers(slugPath, tenantId, true).catch(() => null);
     if (productPage?.storeProduct?.kind === 'gone') {
       const globalSettings = await runWithTenantId(tenantId, () => fetchGlobalPageSettings()).catch(() => null);

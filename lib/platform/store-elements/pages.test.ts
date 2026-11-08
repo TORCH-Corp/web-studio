@@ -5,7 +5,7 @@ import type { Locale, Page, PageFolder, Translation } from '@/types';
 import {
   canHaveStoreRole,
   computeStorePagePaths,
-  isProductPageRequest,
+  isStorePageRequest,
   matchProductPage,
   pageForRole,
   parseStorePagePaths,
@@ -117,14 +117,23 @@ test('a link goes to the role\'s page in the page\'s own language; the default l
 
 test('a request is for the product page when it is the page\'s path, or that path and one more segment (the item), in any language', () => {
   const paths = { product: { '*': '/product', ar: '/ar/منتج' } };
-  assert.equal(isProductPageRequest(`product/${ITEM}`, paths), true);
-  assert.equal(isProductPageRequest(`ar/منتج/${ITEM}`, paths), true);
-  assert.equal(isProductPageRequest(`ar/%D9%85%D9%86%D8%AA%D8%AC/${ITEM}`, paths), true, 'as the address arrives, percent-encoded');
-  assert.equal(isProductPageRequest('product', paths), true, 'the page itself, with no item');
-  assert.equal(isProductPageRequest(`product/${ITEM}/extra`, paths), false);
-  assert.equal(isProductPageRequest(`products/${ITEM}`, paths), false);
-  assert.equal(isProductPageRequest('productive', paths), false);
-  assert.equal(isProductPageRequest(`product/${ITEM}`, {}), false);
+  assert.equal(isStorePageRequest(`product/${ITEM}`, paths), true);
+  assert.equal(isStorePageRequest(`ar/منتج/${ITEM}`, paths), true);
+  assert.equal(isStorePageRequest(`ar/%D9%85%D9%86%D8%AA%D8%AC/${ITEM}`, paths), true, 'as the address arrives, percent-encoded');
+  assert.equal(isStorePageRequest('product', paths), true, 'the page itself, with no item');
+  assert.equal(isStorePageRequest(`product/${ITEM}/extra`, paths), false);
+  assert.equal(isStorePageRequest(`products/${ITEM}`, paths), false);
+  assert.equal(isStorePageRequest('productive', paths), false);
+  assert.equal(isStorePageRequest(`product/${ITEM}`, {}), false);
+});
+
+test('the cart, checkout and confirmation pages are live requests at their own paths only, in any language', () => {
+  const paths = { cart: { '*': '/cart', ar: '/ar/السلة' }, checkout: { '*': '/checkout' }, confirmation: { '*': '/thanks' } };
+  for (const path of ['cart', 'ar/السلة', 'ar/%D8%A7%D9%84%D8%B3%D9%84%D8%A9', 'checkout', 'thanks', 'thanks/']) assert.equal(isStorePageRequest(path, paths), true, path);
+  assert.equal(isStorePageRequest(`cart/${ITEM}`, paths), false, 'only the product page takes an item');
+  assert.equal(isStorePageRequest('carts', paths), false);
+  assert.equal(isStorePageRequest('about', paths), false);
+  assert.equal(isStorePageRequest('thanks', { cart: paths.cart }), false, 'no page has that role');
 });
 
 test('the product page answers at its path and the item id', () => {

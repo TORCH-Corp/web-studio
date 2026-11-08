@@ -2,19 +2,28 @@
 
 import React, { useLayoutEffect } from 'react';
 import { nameFor } from '@/lib/platform/store-elements/card-data';
+import Cart from '@/lib/platform/store-elements/Cart';
+import { CartView } from '@/lib/platform/store-elements/CartView';
 import { connectBrowserCart, MAX_LINE_QUANTITY } from '@/lib/platform/store-elements/cart-store';
+import Checkout from '@/lib/platform/store-elements/Checkout';
+import { CheckoutView } from '@/lib/platform/store-elements/CheckoutView';
+import { ConfirmationView } from '@/lib/platform/store-elements/ConfirmationView';
+import { EMPTY_FORM } from '@/lib/platform/store-elements/checkout-form';
 import { storeColourStyle } from '@/lib/platform/store-elements/colours';
 import CartIndicator, { CartIndicatorView } from '@/lib/platform/store-elements/CartIndicator';
 import { ProductCardView } from '@/lib/platform/store-elements/CardView';
 import { ProductGridView } from '@/lib/platform/store-elements/GridView';
 import { createStoreLinks } from '@/lib/platform/store-elements/links';
+import { summarise } from '@/lib/platform/store-elements/order-summary';
+import OrderConfirmation from '@/lib/platform/store-elements/OrderConfirmation';
+import type { LineView } from '@/lib/platform/store-elements/OrderLines';
 import { parseStorePagePaths, type StorePageContext } from '@/lib/platform/store-elements/pages';
 import { variantFor } from '@/lib/platform/store-elements/picker';
 import ProductCardElement from '@/lib/platform/store-elements/ProductCardElement';
 import ProductDetail from '@/lib/platform/store-elements/ProductDetail';
 import { ProductDetailView } from '@/lib/platform/store-elements/ProductDetailView';
 import ProductGrid from '@/lib/platform/store-elements/ProductGrid';
-import { SAMPLE_CART_COUNT, SAMPLE_CATEGORIES, SAMPLE_SELECTION, sampleCard, sampleCards, sampleProduct } from '@/lib/platform/store-elements/sample-data';
+import { SAMPLE_CART_COUNT, SAMPLE_CART_LINES, SAMPLE_CATEGORIES, SAMPLE_SELECTION, SAMPLE_TERMS, sampleCard, sampleCards, sampleOrder, sampleProduct } from '@/lib/platform/store-elements/sample-data';
 import { readProductCardSettings, readProductDetailSettings, readProductGridSettings, type StoreElementName } from '@/lib/platform/store-elements/settings';
 import { StoreShell } from '@/lib/platform/store-elements/StoreShell';
 import { storeLangOf } from '@/lib/platform/store-elements/strings';
@@ -34,6 +43,14 @@ interface Props {
 }
 
 const noop = () => {};
+
+/** The canvas's cart and checkout: the handoff's three lines and its amounts, with nothing to find out about them. */
+function sampleCart(links: ReturnType<typeof createStoreLinks>) {
+  const summary = summarise(SAMPLE_CART_LINES, SAMPLE_TERMS);
+  if (summary.kind !== 'ready') throw new Error('The sample cart has no summary: its lines and the sample terms must agree on the currency');
+  const lines: LineView[] = summary.lines.map((row) => ({ line: row.line, href: links.product(row.line.product_id), total: row.total, changedFrom: null, unavailable: false }));
+  return { lines, count: summary.count, amounts: { subtotal: summary.subtotal, fee: summary.fee, total: summary.total } };
+}
 
 /**
  * A store element on a published page: the live element, in the page's language and direction, wearing the
@@ -73,6 +90,9 @@ export function PublishedStoreElement({ layer, elementProps, colorVariables, loc
       pageProduct={store?.product} chosenProductId={chosen?.id ?? null}
              />;
   } else if (name === 'cartIndicator') inside = <CartIndicator lang={lang} links={links} />;
+  else if (name === 'cart') inside = <Cart lang={lang} links={links} />;
+  else if (name === 'checkout') inside = <Checkout lang={lang} links={links} />;
+  else if (name === 'orderConfirmation') inside = <OrderConfirmation lang={lang} links={links} />;
   return (
     <StoreShell
       {...elementProps} element={name}
@@ -148,6 +168,42 @@ export function CanvasStoreElement({ layer, elementProps, colorVariables, locale
       count={SAMPLE_CART_COUNT} lang={lang}
       href={links.cart()}
              />;
+  } else if (name === 'cart') {
+    const sample = sampleCart(links);
+    inside = (
+      <CartView
+        lang={lang} links={links}
+        phase="ready" lines={sample.lines}
+        count={sample.count} summary={sample.amounts}
+        pricesNotChecked={false} blocked={false}
+        unavailableCount={0} onQuantity={noop}
+        onRemove={noop} onRetry={noop}
+        onRetryPrices={noop}
+      />
+    );
+  } else if (name === 'checkout') {
+    const sample = sampleCart(links);
+    inside = (
+      <CheckoutView
+        lang={lang} links={links}
+        phase="ready" lines={sample.lines}
+        count={sample.count} summary={sample.amounts}
+        values={EMPTY_FORM} errors={{ fields: {}, general: [] }}
+        banner={null} submitting={false}
+        blocked={false} unavailableCount={0}
+        onChange={noop} onSubmit={noop}
+        onRemove={noop} onRemoveUnavailable={noop}
+        onRetry={noop}
+      />
+    );
+  } else if (name === 'orderConfirmation') {
+    inside = (
+      <ConfirmationView
+        lang={lang} links={links}
+        phase={{ kind: 'ready', order: sampleOrder() }}
+        onRetry={noop}
+      />
+    );
   }
   return (
     <StoreShell

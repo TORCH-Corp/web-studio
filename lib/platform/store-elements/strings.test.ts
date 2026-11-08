@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { badgeText, STORE_STRINGS, storeDirOf, storeLangOf } from './strings';
@@ -59,4 +61,36 @@ test('a product that is gone says it is no longer available, as decision 16g wor
   assert.equal(STORE_STRINGS.en.notOnSaleTitle, 'This product is no longer available');
   assert.equal(STORE_STRINGS.en.browseProducts, 'Browse products');
   assert.equal(STORE_STRINGS.ar.notOnSaleTitle, 'هذا المنتج لم يعد متاحًا');
+});
+
+test('decision 16g: no word of the store pages speaks of stock, and the items that cannot be sold are "no longer available"', () => {
+  // Nothing in the platform holds stock, so no page may say an item is out of it (the handoff's cart said so once).
+  assert.doesNotMatch(readFileSync(join(__dirname, 'strings.ts'), 'utf8'), /stock|مخزون|نفد/i);
+  assert.equal(STORE_STRINGS.en.itemsUnavailableText(['Wool hoodie — Colour: Grey, Size: L']), '“Wool hoodie — Colour: Grey, Size: L” is no longer available. Remove it to place your order.');
+  assert.equal(STORE_STRINGS.en.itemsUnavailableText(['A', 'B']), '“A”, “B” are no longer available. Remove them to place your order.');
+  assert.equal(STORE_STRINGS.ar.itemsUnavailableText(['هودي صوف']), '«هودي صوف» لم يعد متاحًا. أزله لتتمكّن من تأكيد الطلب.');
+  assert.equal(STORE_STRINGS.en.itemsUnavailableTitle(1), 'An item is no longer available');
+  assert.equal(STORE_STRINGS.en.itemsUnavailableTitle(2), 'Some items are no longer available');
+});
+
+test('the cart, checkout and confirmation speak in the handoff\'s words in both languages', () => {
+  const en = STORE_STRINGS.en;
+  const ar = STORE_STRINGS.ar;
+  assert.deepEqual([en.cartTitle, ar.cartTitle], ['Shopping cart', 'سلة التسوق']);
+  assert.deepEqual([en.itemCount(4), en.itemCount(1), ar.itemCount(4)], ['4 items', '1 item', '4 قطع']);
+  assert.deepEqual([en.checkout, ar.checkout], ['Checkout', 'إتمام الطلب']);
+  assert.deepEqual([en.placeOrder('115,000 IQD'), ar.placeOrder('115,000 د.ع')], ['Place order · 115,000 IQD', 'تأكيد الطلب · 115,000 د.ع']);
+  assert.deepEqual([en.placing, ar.placing], ['Placing your order…', 'جارٍ إرسال الطلب…']);
+  assert.deepEqual([en.cashOnDelivery, ar.cashOnDelivery], ['Cash on delivery', 'الدفع عند الاستلام']);
+  assert.deepEqual([en.orderCode, ar.orderCode], ['Order code', 'رمز الطلب']);
+  assert.equal(en.cashReady('115,000 IQD'), 'Have 115,000 IQD in cash ready to pay the courier on delivery.');
+  assert.equal(ar.cashReady('115,000 د.ع'), 'جهّز مبلغ 115,000 د.ع نقدًا لتدفعه للمندوب عند الاستلام.');
+  assert.equal(en.pricePerUnit('25,000 IQD', null), '25,000 IQD each');
+  assert.equal(en.pricePerUnit('25,000 IQD', 'pcs'), '25,000 IQD / pcs');
+  assert.equal(ar.pricePerUnit('25,000 د.ع', null), '25,000 د.ع / للقطعة');
+  assert.equal(en.fixFields(3), 'Your order wasn’t sent. Fix 3 fields:');
+  assert.equal(en.fixFields(1), 'Your order wasn’t sent. Fix 1 field:');
+  assert.equal(ar.fixFields(3), 'لم يُرسَل الطلب. صحّح 3 حقول:');
+  assert.equal(ar.fixFields(2), 'لم يُرسَل الطلب. صحّح الحقلين التاليين:');
+  assert.equal(ar.fixFields(1), 'لم يُرسَل الطلب. صحّح الحقل التالي:');
 });

@@ -2,7 +2,9 @@
  * Store sections (part 2, session W4; PRD V1.1 "Store elements and sections"):
  * the ready sections of the Store category of the Layouts tab, built from the
  * store elements as handoff/store draws them (section-products-*,
- * section-featured-default; browse-product-* for the product page, session W5).
+ * section-featured-default; browse-product-* for the product page, session W5;
+ * checkout-cart-*, checkout-form-* and checkout-confirmation-default for the
+ * cart, checkout and confirmation pages, session W6).
  *
  * They are starting points on the design system's own values (Dark text,
  * Primary for the link, the spacing and the type of store/DESIGN_SYSTEM.md);
@@ -125,6 +127,51 @@ export const storeLayoutTemplates: Record<string, LayoutTemplate> = {
         }),
       ],
       'Product page',
+    ),
+  },
+
+  'Cart page': {
+    category: 'Store',
+    previewImage: '/ycode/layouts/previews/store-cart-page.webp',
+    // One element holds the whole page body (the lines, the summary, Checkout); the page's own header and footer are
+    // the page's. Set the page's store role to Cart page in its settings.
+    template: band(
+      [
+        layer('cart', 'w-[100%]', {
+          settings: { tag: 'div' },
+        }),
+      ],
+      'Cart page',
+    ),
+  },
+
+  'Checkout page': {
+    category: 'Store',
+    previewImage: '/ycode/layouts/previews/store-checkout-page.webp',
+    // The order summary, the delivery form, the cash-on-delivery note and Place order. Set the page's store role to
+    // Checkout page in its settings.
+    template: band(
+      [
+        layer('checkout', 'w-[100%]', {
+          settings: { tag: 'div' },
+        }),
+      ],
+      'Checkout page',
+    ),
+  },
+
+  'Order confirmation': {
+    category: 'Store',
+    previewImage: '/ycode/layouts/previews/store-order-confirmation.webp',
+    // The thank-you, the order code, the lines and the total. Set the page's store role to Confirmation page in its
+    // settings: a placed order leads to it as `?order={checkout id}`.
+    template: band(
+      [
+        layer('orderConfirmation', 'w-[100%]', {
+          settings: { tag: 'div' },
+        }),
+      ],
+      'Order confirmation',
     ),
   },
 };

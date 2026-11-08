@@ -20,7 +20,7 @@ import { getAllLocales } from '@/lib/repositories/localeRepository';
 import { getAllPageFolders } from '@/lib/repositories/pageFolderRepository';
 import { getAllPages } from '@/lib/repositories/pageRepository';
 import { getSettingByKey, setSetting } from '@/lib/repositories/settingsRepository';
-import { getSite, resolveSiteId } from '@/lib/platform/site';
+import { getSite, resolveSiteId, type Site } from '@/lib/platform/site';
 import { isStoreUnavailable } from '@/lib/platform/store-api';
 import { storeOf } from '@/lib/platform/store-settings';
 import {
@@ -34,17 +34,31 @@ import {
 } from '@/lib/platform/store-elements/pages';
 import type { Translation } from '@/types';
 
+/** The site (a real one, not a template) whose store sells; null for a site that does not, or none. */
+async function sellingSiteOf(tenantId: string | undefined): Promise<Site | null> {
+  const siteId = tenantId ?? (await resolveSiteId());
+  if (!siteId) return null;
+  const site = await getSite(siteId);
+  if (!site || site.is_template) return null;
+  return (await storeOf(site.id)).selling ? site : null;
+}
+
+/**
+ * Whether the site's store sells. The cart, checkout and confirmation pages answer the site's own not-found page
+ * while it does not (PRD V1.1 "Store settings"), as the product page does.
+ */
+export async function storeSells(tenantId: string | undefined): Promise<boolean> {
+  return (await sellingSiteOf(tenantId)) !== null;
+}
+
 /**
  * The item a product page's address names, as the site's catalogue has it now. Null when the site's store does not
  * sell (the product page then answers the site's own not-found page, like the cart and checkout pages, PRD V1.1
  * "Store settings"). `itemId` is null for an address whose last segment is not an item id.
  */
 export async function readProductPage(tenantId: string | undefined, itemId: string | null): Promise<ProductPageState | null> {
-  const siteId = tenantId ?? (await resolveSiteId());
-  if (!siteId) return null;
-  const site = await getSite(siteId);
-  if (!site || site.is_template) return null;
-  if (!(await storeOf(site.id)).selling) return null;
+  const site = await sellingSiteOf(tenantId);
+  if (!site) return null;
   if (!itemId) return { kind: 'gone', item_id: null };
   try {
     const product = await getProduct(site, itemId);

@@ -4,10 +4,11 @@
  * templates").
  *
  * A page gains a role in its settings (`PageSettings.store = { kind }`), set
- * in ycode's own page settings panel. W5 offers `product`: the page answers at
- * its own path and one more segment, the item's id (`/product/{itemId}`), and
- * shows that item. W6 offers `cart`, `checkout` and `confirmation`; the lookup
- * here is already written for all four so the links work the day a page has one.
+ * in ycode's own page settings panel. `product` (W5): the page answers at its
+ * own path and one more segment, the item's id (`/product/{itemId}`), and shows
+ * that item. `cart`, `checkout` and `confirmation` (W6): ordinary pages that
+ * hold the cart, the checkout and the confirmation elements, and answer the
+ * site's not-found page while the store does not sell.
  *
  * "Add to cart" and the cart indicator lead the buyer to the page that holds
  * the cart, and the product card to the page that holds the product, so every
@@ -30,8 +31,8 @@ import type { Locale, Page, PageFolder, Translation } from '@/types';
 export const STORE_PAGE_KINDS = ['product', 'cart', 'checkout', 'confirmation'] as const;
 export type StorePageKind = (typeof STORE_PAGE_KINDS)[number];
 
-/** The roles the page settings panel offers. W6 adds the other three. */
-export const PANEL_PAGE_KINDS: readonly StorePageKind[] = ['product'];
+/** The roles the page settings panel offers: all four. */
+export const PANEL_PAGE_KINDS: readonly StorePageKind[] = STORE_PAGE_KINDS;
 
 /** `PageSettings.store`. */
 export interface StorePageSettings {
@@ -177,19 +178,23 @@ function safeDecode(text: string): string {
 }
 
 /**
- * Whether a request path (no leading slash) is for the product page: its own path, or its path and one more
- * segment, the item. Such a request is answered live (the page's data lives 60 seconds, not until the next publish).
+ * Whether a request path (no leading slash) is for a page with a store role: the product page's own path, or its
+ * path and one more segment, the item; the cart, checkout and confirmation pages' own paths. Such a request is
+ * answered live (the page's data lives 60 seconds, not until the next publish): the product page because the
+ * item may go on or off sale, the others because a store that stops selling answers their address with the
+ * site's not-found page (PRD V1.1 "Store settings").
  */
-export function isProductPageRequest(slugPath: string, paths: StorePagePaths): boolean {
-  const known = paths.product;
-  if (!known) return false;
+export function isStorePageRequest(slugPath: string, paths: StorePagePaths): boolean {
   const requested = `/${safeDecode(slugPath).replace(/^\/+|\/+$/g, '')}`;
-  return Object.values(known).some((base) => {
-    if (requested === base) return true;
-    if (!requested.startsWith(`${base}/`)) return false;
-    const rest = requested.slice(base.length + 1);
-    return rest.length > 0 && !rest.includes('/');
-  });
+  return STORE_PAGE_KINDS.some((kind) =>
+    Object.values(paths[kind] ?? {}).some((base) => {
+      if (requested === base) return true;
+      // Only the product page takes one more segment, the item.
+      if (kind !== 'product' || !requested.startsWith(`${base}/`)) return false;
+      const rest = requested.slice(base.length + 1);
+      return rest.length > 0 && !rest.includes('/');
+    }),
+  );
 }
 
 export interface ProductPageMatch {

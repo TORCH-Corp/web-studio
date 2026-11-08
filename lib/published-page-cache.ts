@@ -6,7 +6,7 @@ import { getDocumentSlugPath } from '@/lib/document-path';
 import { fetchErrorPage, fetchPageByPath, fetchPageByPathForMetadata, reassemblePageData, slimPageData, splitPageData } from '@/lib/page-fetcher';
 import { runWithTenantId } from '@/lib/supabase-server';
 import { resolvePathLocaleCode } from '@/lib/resolve-html-lang';
-import { isProductPageRequest, type StorePagePaths } from '@/lib/platform/store-elements/pages';
+import { isStorePageRequest as isStorePagePath, type StorePagePaths } from '@/lib/platform/store-elements/pages';
 import { readStorePagePaths } from '@/lib/platform/store-elements/product-page';
 import type { PageData, PaginationContext } from '@/lib/page-fetcher';
 
@@ -52,11 +52,13 @@ export async function fetchCachedErrorPage(
 }
 
 /**
- * How long a product page's data lives in the data cache (part 2, session W5; owner, W5 grill-me, 8 Nov 2026): the
- * catalogue's own time, so a product put on sale, repriced or gone shows within a minute and a 404 for an item that
- * was not on sale does not stay until the next publish. Every other page lives until a publish purges it.
+ * How long the data of a page with a store role lives in the data cache (part 2, session W5; owner, W5 grill-me,
+ * 8 Nov 2026): the catalogue's own time, so a product put on sale, repriced or gone shows within a minute and a 404
+ * for an item that was not on sale does not stay until the next publish. W6 gives the cart, checkout and
+ * confirmation pages the same life: a store that stops selling answers them with the site's not-found page within a
+ * minute. Every other page lives until a publish purges it.
  */
-export const STORE_PRODUCT_REVALIDATE_SECONDS = 60;
+export const STORE_PAGE_REVALIDATE_SECONDS = 60;
 
 /** Where the pages with a store role live, as the last publish wrote it; purged with every page when it changes. */
 async function cachedStorePagePaths(tenantId?: string): Promise<StorePagePaths> {
@@ -73,13 +75,13 @@ async function cachedStorePagePaths(tenantId?: string): Promise<StorePagePaths> 
   }
 }
 
-/** Whether the request is for the page with the product role: its own address, or its address and an item. */
-export async function isStoreProductRequest(slugPath: string, tenantId?: string): Promise<boolean> {
-  return slugPath !== '' && isProductPageRequest(slugPath, await cachedStorePagePaths(tenantId));
+/** Whether the request is for a page with a store role: the product page's address (and an item), or the cart's, the checkout's or the confirmation's. */
+export async function isStorePageRequest(slugPath: string, tenantId?: string): Promise<boolean> {
+  return slugPath !== '' && isStorePagePath(slugPath, await cachedStorePagePaths(tenantId));
 }
 
-/** The data-cache lifetime of a page: 60 seconds for the product page's requests, until a publish for every other. */
-export const pageRevalidate = (productRequest: boolean): number | false => (productRequest ? STORE_PRODUCT_REVALIDATE_SECONDS : false);
+/** The data-cache lifetime of a page: 60 seconds for a page with a store role, until a publish for every other. */
+export const pageRevalidate = (storePage: boolean): number | false => (storePage ? STORE_PAGE_REVALIDATE_SECONDS : false);
 
 /**
  * Cached lookup of a published page and its layers, per path and site, tagged with the route and the site's
@@ -89,7 +91,7 @@ export const pageRevalidate = (productRequest: boolean): number | false => (prod
  * The site is passed in and the lookup runs with it as tenant context: inside an unstable_cache callback the
  * request headers are out of reach (OPEN_QUESTIONS 27).
  */
-export async function fetchCachedPageWithLayers(slugPath: string, tenantId: string, productRequest: boolean): Promise<PageData | null> {
+export async function fetchCachedPageWithLayers(slugPath: string, tenantId: string, storePage: boolean): Promise<PageData | null> {
   // Tags are both 'route-/X' AND 'all-pages':
   // - route-/X lets selective invalidation purge just this page's data cache
   // - all-pages lets full invalidation (color variables, redirects, etc.)
@@ -99,7 +101,7 @@ export async function fetchCachedPageWithLayers(slugPath: string, tenantId: stri
   // #63509 would apply if we used revalidateTag for selective, but we route
   // exclusively through invalidateByTag on Vercel.)
   const tags = [buildRouteTag(tenantId, slugPath), buildAllPagesTag(tenantId)];
-  const opts = { tags, revalidate: pageRevalidate(productRequest) };
+  const opts = { tags, revalidate: pageRevalidate(storePage) };
 
   // `basePath` lets paginated collections server-render crawlable links to
   // page 2 (this route only ever renders page 1 — `p_*` params are rewritten
@@ -134,16 +136,16 @@ export async function fetchCachedPageWithLayers(slugPath: string, tenantId: stri
 /**
  * Cached metadata-only lookup of a published page (no layer resolution).
  * Shared by the published page route and its layout so both read one entry
- * (and so both give it the same lifetime: see STORE_PRODUCT_REVALIDATE_SECONDS).
+ * (and so both give it the same lifetime: see STORE_PAGE_REVALIDATE_SECONDS).
  */
 export async function fetchCachedPageForMetadata(
   slugPath: string,
   tenantId?: string
 ): Promise<PageData | null> {
-  const productRequest = await isStoreProductRequest(slugPath, tenantId);
+  const storePage = await isStorePageRequest(slugPath, tenantId);
   return unstable_cache(
     async () => inSite(tenantId, () => fetchPageByPathForMetadata(slugPath, true, undefined, tenantId)),
     [`metadata-/${slugPath}`, tenantId ?? ''],
-    { tags: [buildRouteTag(tenantId, slugPath), buildAllPagesTag(tenantId)], revalidate: pageRevalidate(productRequest) }
+    { tags: [buildRouteTag(tenantId, slugPath), buildAllPagesTag(tenantId)], revalidate: pageRevalidate(storePage) }
   )();
 }

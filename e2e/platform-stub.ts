@@ -28,6 +28,9 @@
  *   POST /__down { services: ['org-setup' | 'product-services' | 'contact-center' | 'sales'] }
  *        those answer 503 until the next call; [] restores
  *   POST /__rate { found: boolean }   whether Organization Setup has the day's rate (Sales's stub reads it too)
+ *   POST /__item { id, status?, base_price? }   changes an item of the catalogue (session W6): Product & Services and
+ *        Sales's stub both read it, so "the item turned inactive" or "the price changed" is what both say next;
+ *        POST /__items/reset puts every item back as the fixtures have it
  *   GET  /__calls?service=…, POST /__sales/refuse, POST /__sales/delay  (order-services-stub.ts)
  *
  * The data is e2e/platform-fixtures.ts.
@@ -55,6 +58,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Service = 'org-setup' | 'product-services' | OrderService;
 let down = new Set<Service>();
 let rateFound = true;
+/** The items as the fixtures have them, for `/__items/reset`. */
+const PRISTINE_ITEMS = ITEMS.map((item) => ({ ...item }));
 
 function json(response: http.ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { 'content-type': 'application/json' });
@@ -233,6 +238,18 @@ const server = http.createServer(async (request, response) => {
       const services = Array.isArray(body?.services) ? (body!.services as Service[]) : [];
       down = new Set(services);
       return json(response, 200, { down: [...down] });
+    }
+    if (path === '/__item' && request.method === 'POST') {
+      const body = await readJson(request);
+      const item = ITEMS.find((candidate) => candidate.id === body?.id);
+      if (!item) return json(response, 404, { error: 'No such item', id: body?.id ?? null });
+      if (body?.status === 'ACTIVE' || body?.status === 'INACTIVE' || body?.status === 'DISCONTINUED') item.status = body.status;
+      if (typeof body?.base_price === 'number' || body?.base_price === null) item.base_price = body.base_price;
+      return json(response, 200, { id: item.id, status: item.status, base_price: item.base_price });
+    }
+    if (path === '/__items/reset' && request.method === 'POST') {
+      for (const pristine of PRISTINE_ITEMS) Object.assign(ITEMS.find((item) => item.id === pristine.id)!, pristine);
+      return json(response, 200, { reset: PRISTINE_ITEMS.length });
     }
     if (path === '/__rate' && request.method === 'POST') {
       rateFound = (await readJson(request))?.found !== false;
