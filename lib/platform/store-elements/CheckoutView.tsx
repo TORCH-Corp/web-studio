@@ -262,7 +262,9 @@ export function CheckoutView(props: CheckoutViewProps) {
               props.onSubmit(typeof decoy === 'string' ? decoy : '');
             }}
           >
-            <FormHoneypotField />
+            {/* ycode's decoy field sits 9999 px to the left of the form; on a right to left page that would widen the page by as
+                much, so it is kept in a box of no size that clips it. */}
+            <div className="ws-decoy"><FormHoneypotField /></div>
             <fieldset className="ws-form-sec">
               <legend className="ws-form-sec-title">{t.deliveryDetails}</legend>
               <div className="ws-form-row">
