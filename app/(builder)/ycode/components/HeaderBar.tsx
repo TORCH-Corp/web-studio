@@ -163,28 +163,11 @@ export default function HeaderBar({
     return 'dark';
   });
   const [baseUrl, setBaseUrl] = useState<string>('');
-  const [hasUpdate, setHasUpdate] = useState(false);
   const [showTransferDialog, setShowTransferDialog] = useState(false);
 
   // Get current host after mount
   useEffect(() => {
     setBaseUrl(window.location.protocol + '//' + window.location.host);
-  }, []);
-
-  // Check for updates on mount
-  useEffect(() => {
-    const checkForUpdates = async () => {
-      try {
-        const response = await fetch('/ycode/api/updates/check');
-        if (response.ok) {
-          const data = await response.json();
-          setHasUpdate(data.available === true);
-        }
-      } catch (error) {
-        console.error('Failed to check for updates:', error);
-      }
-    };
-    checkForUpdates();
   }, []);
 
   // Get selected locale (computed from subscribed store values)
@@ -635,23 +618,6 @@ export default function HeaderBar({
             {baseUrl}
           </a>
         </Button>
-
-        {hasUpdate && canManageSettings && (
-          <>
-            <div className="h-5">
-              <Separator orientation="vertical" />
-            </div>
-
-            <Button
-              size="xs"
-              variant="default"
-              className="bg-primary/20 hover:bg-primary/30 text-blue-400 hover:text-blue-300"
-              onClick={() => router.push('/ycode/settings/updates')}
-            >
-              Update available
-            </Button>
-          </>
-        )}
       </div>
 
       {/* Right: User & Actions */}

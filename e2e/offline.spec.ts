@@ -8,6 +8,11 @@
  * static export and MCP screens open. No request may reach another host, none
  * may fail, and the page may log no error. Collections, Forms and the removed
  * screens are absent from the navigation and answer 404.
+ *
+ * Part 2, session 13: ycode's update check is gone. It went browser -> the app's
+ * own /ycode/api/updates -> api.github.com, so the blocked-host guard above never
+ * saw it: the builder may not call /ycode/api/updates at all, shows no "Update
+ * available" and no Updates settings entry, and those routes answer 404.
  */
 
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
@@ -31,6 +36,7 @@ const reachedOtherHosts: string[] = [];
 const failedRequests: string[] = [];
 const errorResponses: string[] = [];
 const pageErrors: string[] = [];
+const requestedUrls: string[] = [];
 
 test.beforeAll(async ({ browser, baseURL: configured }) => {
   baseURL = configured!;
@@ -48,6 +54,7 @@ test.beforeAll(async ({ browser, baseURL: configured }) => {
   });
 
   page = await context.newPage();
+  page.on('request', (request) => requestedUrls.push(request.url()));
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('console', (message) => {
     if (message.type() === 'error' && !/status of 404/.test(message.text())) pageErrors.push(message.text());
@@ -94,6 +101,15 @@ test('part 1 shows Design only: no CMS and no Forms in the header', async () => 
   await expect(page.getByRole('button', { name: 'Forms' })).toHaveCount(0);
 });
 
+test('the header carries no update notice and the builder never asks about updates', async () => {
+  await page.goto(`/ycode/api/platform/sites/${site.id}/open`);
+  await expect(page.getByRole('button', { name: 'Design' })).toBeVisible();
+  // The old check ran once the header mounted; give it the time it needed.
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByText('Update available')).toHaveCount(0);
+  expect(requestedUrls.filter((url) => url.includes('/ycode/api/updates'))).toEqual([]);
+});
+
 test('the AI agent, integrations, static export and MCP screens open without an error', async () => {
   for (const path of ['/ycode/settings/agent', '/ycode/integrations', '/ycode/integrations/mcp', '/ycode/integrations/apps', '/ycode/integrations/api', '/ycode/integrations/webhooks', '/ycode/settings/general']) {
     const response = await page.goto(path);
@@ -104,7 +120,7 @@ test('the AI agent, integrations, static export and MCP screens open without an 
 });
 
 test('Collections, Forms and the removed screens answer 404', async () => {
-  for (const path of ['/ycode/collections', '/ycode/collections/abc', '/ycode/forms', '/ycode/settings/users', '/ycode/profile', '/ycode/accept-invite', '/ycode/welcome']) {
+  for (const path of ['/ycode/collections', '/ycode/collections/abc', '/ycode/forms', '/ycode/settings/users', '/ycode/settings/updates', '/ycode/profile', '/ycode/accept-invite', '/ycode/welcome']) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(404);
   }
@@ -112,6 +128,14 @@ test('Collections, Forms and the removed screens answer 404', async () => {
   const settings = await page.goto('/ycode/settings/general');
   expect(settings?.status()).toBe(200);
   await expect(page.getByRole('link', { name: 'Users' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Updates' })).toHaveCount(0);
+});
+
+test('the update check and its screen are gone: the routes answer 404', async () => {
+  for (const path of ['/ycode/settings/updates', '/ycode/api/updates/check', '/ycode/api/updates/releases']) {
+    const response = await context.request.get(path);
+    expect(response.status(), path).toBe(404);
+  }
 });
 
 test('the icons come from the app and the font mirror refuses what is not a Google font', async () => {
@@ -129,6 +153,6 @@ test('the icons come from the app and the font mirror refuses what is not a Goog
 test('nothing reached, failed or logged an error on the way', () => {
   expect(reachedOtherHosts).toEqual([]);
   expect(failedRequests).toEqual([]);
-  expect(errorResponses.filter((entry) => !/\/ycode\/(collections|forms|settings\/users|profile|accept-invite|welcome)/.test(entry))).toEqual([]);
+  expect(errorResponses.filter((entry) => !/\/ycode\/(collections|forms|settings\/users|settings\/updates|profile|accept-invite|welcome)/.test(entry))).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

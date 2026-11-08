@@ -197,8 +197,6 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'project/export': content({ POST: 'export' }),
   'project/import': content({ POST: 'u' }),
   'maps/geocode': content(),
-  'updates/check': content(),
-  'updates/releases': content(),
   'apps': content(),
   'apps/[appId]/settings': content(),
   'apps/static-export/export': content({ POST: 'export' }),
