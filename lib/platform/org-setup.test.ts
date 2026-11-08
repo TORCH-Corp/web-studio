@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { findBranches, listBranches, OrgSetupUnavailableError } from './org-setup';
+import { findBranches, findUnits, listBranches, OrgSetupUnavailableError, usdIqdRate } from './org-setup';
 
 const ENV = { ORG_SETUP_URL: 'http://auth-service:6001/', ORG_SETUP_API_KEY: 'k' };
 const ORG = '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a';
@@ -53,4 +53,47 @@ test('Organization Setup that cannot be asked is an error that says why, never a
     throw new TypeError('fetch failed');
   }) as unknown as typeof fetch;
   await assert.rejects(listBranches(ORG, ENV, down), (e: Error) => e instanceof OrgSetupUnavailableError && /not reachable/.test(e.message));
+});
+
+test('the day\'s rate is USD to IQD, spot, asked with the service key and the organization', async () => {
+  let seen: { url: string; method?: string; key: string | null; entity: string | null } | null = null;
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    const headers = new Headers(init.headers);
+    seen = { url, method: init.method, key: headers.get('x-service-api-key'), entity: headers.get('x-entity-id') };
+    return new Response(JSON.stringify({ success: true, data: { found: true, rate_type: 'spot', rate: 1520, effective_date: '2026-10-17', source: 'manual' } }));
+  }) as unknown as typeof fetch;
+  assert.equal(await usdIqdRate(ORG, '2026-11-08', ENV, fetchImpl), '1520');
+  assert.deepEqual(seen, {
+    url: 'http://auth-service:6001/api/internal/org-setup/exchange-rates/as-of?from=USD&to=IQD&date=2026-11-08&rate_type=spot',
+    method: 'GET',
+    key: 'k',
+    entity: ORG,
+  });
+  assert.equal(await usdIqdRate(ORG, '2026-11-08', ENV, answer(200, { success: true, data: { found: true, rate_type: 'spot', rate: 1310.25 } })), '1310.25');
+});
+
+test('no rate for the day is an answer (null), a rate of zero is no rate, a broken answer is an error', async () => {
+  assert.equal(await usdIqdRate(ORG, '2026-11-08', ENV, answer(200, { success: true, data: { found: false, rate_type: 'spot', from: 'USD', to: 'IQD', as_of: '2026-11-08' } })), null);
+  assert.equal(await usdIqdRate(ORG, '2026-11-08', ENV, answer(200, { success: true, data: { found: true, rate_type: 'spot', rate: 0 } })), null);
+  await assert.rejects(usdIqdRate(ORG, '2026-11-08', ENV, answer(200, { success: true, data: { found: true, rate: 'many' } })), OrgSetupUnavailableError);
+  await assert.rejects(usdIqdRate(ORG, '2026-11-08', ENV, answer(200, { data: {} })), OrgSetupUnavailableError);
+  await assert.rejects(usdIqdRate(ORG, '2026-11-08', ENV, answer(503, 'down')), /answered 503/);
+});
+
+test('units are looked up by id in calls of 200, archived ones included, an unknown id absent', async () => {
+  const calls: Array<{ ids: string[]; entity: string | null }> = [];
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    const ids = (JSON.parse(String(init.body)) as { ids: string[] }).ids;
+    calls.push({ ids, entity: new Headers(init.headers).get('x-entity-id') });
+    assert.equal(url, 'http://auth-service:6001/api/internal/org-setup/uoms/lookup');
+    return new Response(JSON.stringify({ success: true, data: ids.filter((id) => id !== 'gone').map((id) => ({ id, code: 'UOM-1', symbol: 'pcs', name: `Unit ${id}`, status: id === 'u0' ? 'archived' : 'active' })) }));
+  }) as unknown as typeof fetch;
+  const ids = [...Array.from({ length: 250 }, (_, i) => `u${i}`), 'u0', 'gone'];
+  const units = await findUnits(ORG, ids, ENV, fetchImpl);
+  assert.deepEqual(calls.map((c) => [c.ids.length, c.entity]), [[200, ORG], [51, ORG]]);
+  assert.equal(units.size, 250);
+  assert.deepEqual(units.get('u0'), { id: 'u0', symbol: 'pcs', name: 'Unit u0' });
+  assert.equal(units.has('gone'), false);
+  assert.equal((await findUnits(ORG, [], ENV, fetchImpl)).size, 0);
+  assert.equal(calls.length, 2, 'no ids, no call');
 });

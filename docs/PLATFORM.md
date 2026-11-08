@@ -27,7 +27,8 @@ server from this repository's `Dockerfile` and is not pulled from a registry:
 - **Compose pieces.** Service `web-studio` publishing `127.0.0.1:6030`; `web-studio-db` (postgres:16, database
   `webstudio`, its own volume `web_studio_postgres_data`, no published port, like a service's own database); volume
   `web_studio_storage` at `/var/lib/webstudio/storage`. In `PLATFORM_STORAGE=document-center` mode that volume holds only
-  the font mirror (`_mirror/fonts`); in `disk` mode it holds every site's files. Secrets in the root `.env`:
+  the font mirror (`_mirror/fonts`) and the store's item images (`_store-media`, part 2, W2); in `disk` mode it holds every
+  site's files as well. Secrets in the root `.env`:
   `WEBSTUDIO_DB_PASSWORD`, `WEBSTUDIO_SESSION_SECRET`, `WEBSTUDIO_PAGE_AUTH_SECRET`, plus `WEBSTUDIO_APP_ID` (the
   catalogue id of Web Studio) and `WEBSTUDIO_TEMPLATES_ORG`. The service reuses `AUTH_SERVICE_API_KEY`,
   `DOCUMENT_CENTER_API_KEY` and `DOMAIN_SERVICE_API_KEY` from the same `.env`.
@@ -157,7 +158,7 @@ The production values are in the compose service `web-studio` (secrets from the 
     PLATFORM_PUBLIC_URL=https://web-studio.torchcorp.com
     PLATFORM_STORAGE=disk   # or document-center (session 8; production)
     PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage   # disk mode; the font mirror in either mode
-    DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
+    DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode, and the store's item images in either mode (W2)
     DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
     DOMAIN_SERVICE_URL=http://domain-service:6012   # with DOMAIN_SERVICE_API_KEY: the organization's verified domains
@@ -167,9 +168,9 @@ The production values are in the compose service `web-studio` (secrets from the 
     ALLOW_DEV_LOGIN=false   # absent in production; true only on a dev box: POST /ycode/api/auth/dev-login
     WS_PARTS=1   # absent in production: shows Collections and Forms (parts 2 and 3)
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4); on the server "TORCH corp"
-    ORG_SETUP_URL=http://auth-service:6001   # Organization Setup (served by auth-service): the organization's branches (part 2, W1)
-    ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # POST /api/internal/branches/ takes the service key alone; Sales holds the same key
-    PRODUCT_SERVICES_URL=http://product-services-service:6024   # Product & Services: the category tree (W1), the items (W2)
+    ORG_SETUP_URL=http://auth-service:6001   # Organization Setup (served by auth-service): the branches (W1), the day's rate and unit names (W2)
+    ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # the internal routes take the service key (and x-entity-id for the rate and units); Sales holds the same key
+    PRODUCT_SERVICES_URL=http://product-services-service:6024   # Product & Services: the category tree (W1), the items, variants and images (W2)
     PRODUCT_SERVICES_API_KEY=<product-services' SERVICE_API_KEY>   # with x-entity-id = the organization
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
@@ -279,6 +280,46 @@ description changes: `pnpm templates:seed`.
 - **Test.** `e2e/store-settings.spec.ts`. `e2e/platform-stub.ts` (port `E2E_PORT + 3`, data in `e2e/platform-fixtures.ts`)
   stands in for Organization Setup and Product & Services, and `POST /__down` makes them answer 503; W2 and W3 add their
   routes to it.
+
+## Catalogue and the store API (part 2, session W2)
+- **Routes.** Anonymous `GET`s on a published site's own host: `/ycode/api/store/products` (`category`, `q`, `page`,
+  `page_size` 1 to 48, default 12), `/ycode/api/store/products/{id}`, `/ycode/api/store/categories`,
+  `/ycode/api/store/settings` (`selling`, `currency`, `delivery_fee`), in the proxy's map under `manage_orders` with an
+  anonymous `GET`; and `/store-media/{documentId}?item={productId}` (`app/store-media/[documentId]/route.ts`), the item
+  images. Each route file's comment gives its shape and statuses. The site comes from the host alone
+  (`lib/platform/store-api.ts`): `resolveSiteId` would read the builder's `ws_site` cookie first and serve a store on the
+  builder host, which must answer 404. A store that does not sell answers 404 (`store_not_found`) on every store route, the
+  images included. A service that cannot be asked answers 503 with `product_services_unavailable`,
+  `org_setup_unavailable` or `document_center_unavailable`.
+- **Eligibility** (`lib/platform/catalogue-rules.ts`, the file's header is the rule): ACTIVE, the item's own ECOMMERCE
+  channel on (`GET /items?channel=ecommerce&status=ACTIVE`), never a child row, in the site's categories or under them
+  (none chosen: every item), and a price that is not 0 or null. A product with variants is the parent; each child is an
+  option, `available: false` with `inactive`, `no_price` or `no_rate` when it cannot be bought; the card shows the lowest
+  available price as `from`; a parent none of whose variants can be bought is not on sale (404). A variant without an image
+  shows the product's.
+- **Money** (`lib/platform/store-money.ts`). Exact decimals, never floats. One rate both ways, Organization Setup's USD→IQD
+  spot rate of the day in Baghdad (`/api/internal/org-setup/exchange-rates/as-of`, service key and `x-entity-id`; it has no
+  IQD→USD rate on production and never inverts): USD × rate is IQD, IQD ÷ rate is USD, rounded half up to the currency's
+  precision (IQD whole, USD two decimals), Sales's rule P22. No rate for the day, or a currency other than the two, makes
+  the item or variant unavailable, never an error. Sales's service create (SL2) must charge by the same rule.
+- **Units.** `POST /api/internal/org-setup/uoms/lookup` with the service key, as Sales names a line's unit.
+- **Cache.** A site's whole catalogue is read at once (every page of items, each parent's variants workspace, the units, the
+  rate when needed), because the eligibility cannot be asked of Product & Services and a grid page is cut after it. Kept
+  60 s per site, one read at a time (`lib/platform/catalogue.ts`, `catalogue-cache.ts`), forgotten when the store settings
+  change; a failed read is not kept. A product's images (`GET /items/{id}/documents`, `product_image`) are read the first
+  time its page or image asks, with the catalogue they belong to.
+- **Images** (`lib/platform/store-media.ts`). An image is served only when it is the product's, a variant's or one of the
+  product's own, for a product the site sells now; no other document of the organization comes through a site. The bytes
+  are fetched once from Document Center (`GET /documents/{id}/download`, `DOCUMENT_CENTER_API_KEY` and the organization;
+  every download is logged there) and kept on disk in either storage mode, as the font mirror is:
+  `PLATFORM_STORAGE_DIR/_store-media/{organization}/{document}/{sha256}` with `current.json`. Once a day at most the copy is
+  checked against the document's current version (`GET /documents/{id}`, `currentVersion.fileHash`, which Document Center
+  records as "viewed") and fetched again when it changed; while Document Center cannot be asked the copy is served and the
+  check retried after ten minutes. Raster types only (JPEG, PNG, WebP, GIF, AVIF). Served with
+  `cache-control: public, max-age=86400`, the sha256 as ETag, `nosniff`.
+- **Test.** `e2e/catalogue.spec.ts`. The platform stub answers the items, the workspace, the documents, the rate (`POST
+  /__rate { found }`) and the units; the fake Document Center holds the item images from `e2e/platform-fixtures.ts` and
+  counts downloads (`GET /__hits?document=`).
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream

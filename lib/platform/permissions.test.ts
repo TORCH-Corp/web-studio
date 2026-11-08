@@ -90,6 +90,11 @@ test('public and session-only routes, and the anonymous exceptions for visitors'
   assert.deepEqual(accessFor('/ycode/api/error-page', 'GET', q('code=404&published=true')), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/error-page', 'GET', q('code=404')), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'r' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/filter', 'POST', q()), { kind: 'public' });
+  // The storefront's reads (part 2, W2): anonymous on GET; any other method is the storefront leaf's, which no route serves.
+  for (const path of ['store/products', 'store/products/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'store/categories', 'store/settings']) {
+    assert.deepEqual(accessFor(`/ycode/api/${path}`, 'GET', q('page=2')), { kind: 'public' }, path);
+    assert.deepEqual(accessFor(`/ycode/api/${path}`, 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'c' }, path);
+  }
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/load-more', 'POST', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/i1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'c' });
 });

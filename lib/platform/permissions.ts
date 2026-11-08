@@ -20,7 +20,8 @@
  *   manage_forms     the contact form and its submissions, collections,
  *                    webhooks, API keys and the integrations: part 3, hidden by
  *                    session 3
- *   manage_orders    the storefront: part 2, no route yet
+ *   manage_orders    the storefront (part 2): its buyer-facing reads are
+ *                    anonymous on GET (session W2); the Orders API comes in W8
  *
  * Public routes have their own credential (the setup wizard, the public API's
  * API keys, the revalidation secret, the OAuth flows) or are anonymous by
@@ -82,10 +83,12 @@ const leaf = (key: WebStudioLeaf) => (flags?: LeafRule['flags'], anonymous?: Ano
 const sites = leaf(WEB_STUDIO_LEAF.manageSites);
 const content = leaf(WEB_STUDIO_LEAF.manageContent);
 const forms = leaf(WEB_STUDIO_LEAF.manageForms);
+const orders = leaf(WEB_STUDIO_LEAF.manageOrders);
 const isPublic = (reason: string): PublicRule => ({ kind: 'public', reason });
 const sessionOnly = (reason: string): SessionRule => ({ kind: 'session', reason });
 
 const onPost: Anonymous = (method) => method === 'POST';
+const onGet: Anonymous = (method) => method === 'GET' || method === 'HEAD';
 const whenPublished: Anonymous = (method, searchParams) => method === 'GET' && searchParams.get('published') === 'true';
 
 /** Keyed by the route's path under /ycode/api, as Next names it (`[id]` for a dynamic segment, `[...path]` for the rest of the path). */
@@ -209,6 +212,13 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'ai/chats/[id]': content({ GET: 'use_ai', PUT: 'use_ai', DELETE: 'use_ai' }),
   'mcp-tokens': content({ GET: 'use_ai', POST: 'use_ai' }),
   'mcp-tokens/[id]': content({ GET: 'use_ai', DELETE: 'use_ai' }),
+
+  // The storefront (part 2, session W2): a visitor of a published site reads its catalogue anonymously. The routes
+  // answer only on a site's own host, and only while its store sells (lib/platform/store-api.ts); the builder host 404s.
+  'store/products': orders(undefined, onGet),
+  'store/products/[id]': orders(undefined, onGet),
+  'store/categories': orders(undefined, onGet),
+  'store/settings': orders(undefined, onGet),
 
   // Forms and collections (part 3; hidden by session 3).
   'form-submissions': forms(undefined, onPost), // a visitor submits a form anonymously

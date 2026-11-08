@@ -10,10 +10,17 @@
  *   today, this copy admits it (the guard Web Studio asks Document Center to
  *   widen, OPEN_QUESTIONS item 12);
  * - GET /__state?entity={id} lists what the organization has, for the specs.
+ *
+ * Part 2, session W2: the item images of e2e/platform-fixtures.ts are there
+ * from the start (documents of the catalogue organization, as Product &
+ * Services uploads them); GET /documents/{id} answers the document with its
+ * current version's `fileHash` (sha256); GET /__hits?document={id} counts that
+ * document's downloads and reads, so a spec can see the store fetched it once.
  */
 
 import http from 'http';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
+import { DOCUMENTS } from './platform-fixtures';
 
 const KEY = process.env.FAKE_DC_KEY || 'e2e-document-center-key';
 const PORT = Number(process.env.FAKE_DC_PORT || 3104); // playwright.config.ts passes the app's port + 2
@@ -23,6 +30,13 @@ interface Doc { id: string; name: string; filename: string; mimeType: string; fo
 
 const folders = new Map<string, Folder[]>();
 const docs = new Map<string, Map<string, Doc>>();
+const hits = new Map<string, { downloads: number; reads: number }>();
+const hitsOf = (id: string) => hits.get(id) ?? hits.set(id, { downloads: 0, reads: 0 }).get(id)!;
+
+for (const seed of DOCUMENTS) {
+  const doc: Doc = { id: seed.id, name: seed.filename, filename: seed.filename, mimeType: seed.mimeType, folderId: null, data: Buffer.from(seed.base64, 'base64'), deleted: false };
+  docs.set(seed.entityId, (docs.get(seed.entityId) ?? new Map()).set(doc.id, doc));
+}
 
 function send(res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
   const payload = Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
@@ -46,6 +60,7 @@ http
         const mine = [...(docs.get(entity)?.values() ?? [])].map((d) => ({ id: d.id, name: d.name, filename: d.filename, mimeType: d.mimeType, size: d.data.length, folder: folders.get(entity)?.find((f) => f.id === d.folderId)?.name ?? null, linkedEntityId: d.linkedEntityId, deleted: d.deleted }));
         return send(res, 200, { data: mine });
       }
+      if (url.pathname === '/__hits') return send(res, 200, hitsOf(url.searchParams.get('document') || ''));
       if (req.headers['x-service-api-key'] !== KEY) return send(res, 401, { statusCode: 401, error: 'Unauthorized', message: 'Invalid or expired token' });
       const entity = req.headers['x-entity-id'];
       if (typeof entity !== 'string' || !entity) return send(res, 400, { statusCode: 400, error: 'Bad Request', message: 'x-entity-id header required for service requests' });
@@ -74,7 +89,15 @@ http
       if (match) {
         const doc = docs.get(entity)?.get(match[1]);
         if (!doc || doc.deleted) return send(res, 404, { statusCode: 404, error: 'Not Found', message: 'Document not found' });
-        if (match[2] && req.method === 'GET') return send(res, 200, doc.data, { 'content-type': doc.mimeType, 'content-disposition': `attachment; filename="${doc.filename}"` });
+        if (match[2] && req.method === 'GET') {
+          hitsOf(doc.id).downloads += 1;
+          return send(res, 200, doc.data, { 'content-type': doc.mimeType, 'content-disposition': `attachment; filename="${doc.filename}"` });
+        }
+        if (!match[2] && req.method === 'GET') {
+          hitsOf(doc.id).reads += 1;
+          const fileHash = createHash('sha256').update(doc.data).digest('hex');
+          return send(res, 200, { data: { id: doc.id, name: doc.name, status: 'DRAFT', mimeType: doc.mimeType, currentVersion: { versionNumber: 1, fileName: doc.filename, mimeType: doc.mimeType, fileHash } } });
+        }
         if (!match[2] && req.method === 'DELETE') {
           doc.deleted = true;
           return send(res, 200, { id: doc.id, code: 'DOC-1', name: doc.name, deletedAt: new Date().toISOString(), message: 'Document moved to trash' });
