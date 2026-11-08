@@ -10,8 +10,9 @@
  * (permissions.test.ts) fails on a route file without a rule. PRD V1.0
  * "Roles and permissions".
  *
- *   manage_sites     creating and deleting sites (c, d), site settings and the
- *                    domain (u), the list and opening a site (r)
+ *   manage_sites     creating and deleting sites (c, d), site settings, the
+ *                    domain and the store settings (u), the list, opening a
+ *                    site and reading its settings (r)
  *   manage_content   pages, layers, styles, components, assets, fonts, locales,
  *                    translations, versions (c r u d), publish and revert (u),
  *                    static export and project export (export), the AI agent
@@ -117,6 +118,7 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/sites/[id]': sites(), // GET one site with its editor lock (r, session 6); DELETE (d)
   'platform/sites/[id]/open': sites(), // GET (r)
   'platform/sites/[id]/settings': sites(), // GET (r), PATCH (u): name, languages, domain, SEO defaults, slug (session 7)
+  'platform/sites/[id]/store': sites(), // GET (r), PATCH (u): selling, currency, branch, categories, delivery fee (part 2, W1)
   'platform/sites/[id]/assets': sites(), // GET (r): the site's images a share image can be, for Site settings (session 10)
   'platform/sites/[id]/assets/[assetId]': sites(), // GET (r): one image of the site, served as /a/ serves it (session 10)
   'platform/templates': sites(), // GET (r): TORCH's templates, the same list for every organization (session 4)

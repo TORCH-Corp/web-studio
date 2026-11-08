@@ -46,6 +46,9 @@ test('the flag follows the method unless the route says otherwise', () => {
   assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'PATCH', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'u' });
   assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/open', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'r' });
   assert.deepEqual(accessFor('/ycode/api/platform/templates', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'r' });
+  // Store settings (part 2, W1): seen with r, changed with u, like the site settings.
+  assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/store', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'r' });
+  assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/store', 'PATCH', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'u' });
   assert.deepEqual(accessFor('/ycode/api/pages', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'c' });
   assert.deepEqual(accessFor('/ycode/api/pages/abc/status', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'u' });
   assert.deepEqual(accessFor('/ycode/api/publish', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'u' });
@@ -122,6 +125,7 @@ test('session 6: the writes that need the editor lock are the builder\'s non-rea
   // The sites API is not the open site's content.
   assert.equal(writes('POST', '/ycode/api/platform/sites'), false);
   assert.equal(writes('DELETE', '/ycode/api/platform/sites/5f1a4b0e-0000-4000-8000-000000000000'), false);
+  assert.equal(writes('PATCH', '/ycode/api/platform/sites/5f1a4b0e-0000-4000-8000-000000000000/store'), false);
   // Writes.
   assert.equal(writes('PUT', '/ycode/api/pages/abc'), true);
   assert.equal(writes('POST', '/ycode/api/pages'), true);
