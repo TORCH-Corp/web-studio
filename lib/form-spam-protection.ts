@@ -78,11 +78,16 @@ function getPayloadSizeError(payload: Record<string, any>): string | null {
  *
  * Runs against the raw payload (honeypot still included) — call
  * `stripHoneypotField` before persisting.
+ *
+ * TORCH part 2 (W3): `countRecent` replaces what the rate limit counts. The
+ * storefront checkout writes no form submission and counts its own checkouts
+ * (lib/platform/checkout-limit.ts); without it, form submissions are counted.
  */
 export async function screenFormSubmission(
   headers: Headers,
   payload: Record<string, any>,
-  tenantId?: string
+  tenantId?: string,
+  countRecent: (ip: string, since: string) => Promise<number> = (ip, since) => countRecentSubmissionsByIp(ip, since, tenantId)
 ): Promise<FormSubmissionVerdict> {
   const settings = resolveFormSpamSettings(
     await getSettingByKey(FORM_SPAM_SETTING_KEY, tenantId)
@@ -110,7 +115,7 @@ export async function screenFormSubmission(
   const ip = settings.rateLimitEnabled ? getClientIp(headers) : null;
   if (ip) {
     const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000).toISOString();
-    const recentCount = await countRecentSubmissionsByIp(ip, since, tenantId);
+    const recentCount = await countRecent(ip, since);
 
     if (recentCount >= settings.rateLimitMaxSubmissions) {
       return { outcome: 'reject', status: 429, error: 'Too many submissions. Please try again later.' };

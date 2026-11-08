@@ -131,6 +131,8 @@ export interface Catalogue {
   /** Eligible products in the grid's order (by name, then id). */
   products: StoreProduct[];
   byId: Map<string, StoreProduct>;
+  /** Each variant of a product on sale, by its own item id, with its product: a cart line names the variant (session W3). */
+  variantsById: Map<string, { product: StoreProduct; variant: StoreVariant }>;
   tree: CategoryNode[];
   /** The site's chosen categories, in their saved order. */
   chosen: string[];
@@ -287,6 +289,7 @@ export function buildCatalogue(input: CatalogueInput): Catalogue {
     currency: input.store.currency,
     products,
     byId: new Map(products.map((product) => [product.id, product])),
+    variantsById: new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, { product, variant }] as const))),
     tree: input.tree,
     chosen: input.store.category_ids,
   };

@@ -134,6 +134,11 @@ export async function getProduct(site: Site, itemId: string): Promise<StoreProdu
   return gallery === null ? null : withImages(product, gallery);
 }
 
+/** The site's whole catalogue, the one its pages read: the checkout checks a cart against it (session W3). */
+export async function siteCatalogue(site: Site): Promise<Catalogue> {
+  return (await snapshotOf(site)).catalogue;
+}
+
 /** The shop home's categories with what the site sells in each. */
 export async function listCategories(site: Site): Promise<StoreCategorySummary[]> {
   return categorySummaries((await snapshotOf(site)).catalogue);

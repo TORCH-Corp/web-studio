@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test';
 import { TEMPLATES_ORG } from './e2e/helpers';
 import { ensureTestKeys } from './e2e/test-keys';
 import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
-import { ORG_SETUP_KEY, PRODUCT_SERVICES_KEY } from './e2e/platform-fixtures';
+import { CONTACT_CENTER_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_KEY } from './e2e/platform-fixtures';
 
 /**
  * End-to-end suite for the TORCH fork (part 1, session 1).
@@ -24,7 +24,8 @@ import { ORG_SETUP_KEY, PRODUCT_SERVICES_KEY } from './e2e/platform-fixtures';
  *
  * Part 2, session W1: one stand-in for the platform services the store calls
  * with a service key (e2e/platform-stub.ts: Organization Setup and Product &
- * Services; W2 and W3 add theirs), on the app's port + 3.
+ * Services; W2 and W3 add theirs), on the app's port + 3. Session W3: the same
+ * server stands in for Contact Center and Sales (e2e/order-services-stub.ts).
  */
 const PORT = Number(process.env.E2E_PORT || 3102);
 const AUTH_PORT = Number(process.env.E2E_AUTH_PORT || PORT + 1);
@@ -61,7 +62,7 @@ export default defineConfig({
       env: { FAKE_DC_PORT: String(DC_PORT), FAKE_DC_KEY: DC_KEY },
     },
     {
-      // Organization Setup's branches and Product & Services' categories (part 2, W1).
+      // Organization Setup and Product & Services (part 2, W1, W2), Contact Center and Sales (W3).
       command: 'TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json node --require ts-node/register e2e/platform-stub.ts',
       url: `${PLATFORM_URL}/__health`,
       reuseExistingServer: !process.env.CI,
@@ -102,6 +103,10 @@ export default defineConfig({
         ORG_SETUP_API_KEY: ORG_SETUP_KEY,
         PRODUCT_SERVICES_URL: PLATFORM_URL,
         PRODUCT_SERVICES_API_KEY: PRODUCT_SERVICES_KEY,
+        CONTACT_CENTER_URL: PLATFORM_URL,
+        CONTACT_CENTER_API_KEY: CONTACT_CENTER_KEY,
+        SALES_URL: PLATFORM_URL,
+        SALES_API_KEY: SALES_KEY,
       },
     },
   ],
