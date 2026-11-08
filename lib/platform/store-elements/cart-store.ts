@@ -7,7 +7,13 @@
  * server copy. A line names the item to sell (the variant's own item id when
  * the product has variants) and carries a snapshot of what the cart shows for
  * it. The snapshot is for display only: prices are read again at checkout
- * (W3's route) and the cart element refreshes them on load (W6).
+ * (W3's route) and the cart and checkout elements refresh them on load (W6).
+ *
+ * The cart also holds the id of its checkout (session W6): made the first time
+ * the checkout asks for it, kept with the lines (so a reload on the checkout
+ * page, or a second try after the store was unreachable, sends the same id and
+ * the route makes one order) and dropped with the cart, when it is cleared
+ * after an order or its last line is removed.
  *
  * Three layers:
  * - `createCartStore` is the cart over any storage (pure, runs under
@@ -93,6 +99,13 @@ export interface CartStore {
   remove(itemId: string): void;
   clear(): void;
   totals(): CartTotals;
+  /**
+   * The id of this cart's checkout (a UUID): made on the first call and kept until the cart is cleared or emptied.
+   * An empty cart has no checkout and throws.
+   */
+  checkoutId(): string;
+  /** Replaces what a line shows (name, options, price, picture, unit) with what the catalogue says now; its quantity stays. */
+  refresh(itemId: string, snapshot: CartLineSnapshot): void;
 }
 
 export class CartStoreNotConnectedError extends Error {
@@ -109,11 +122,14 @@ export class CartFullError extends Error {
   }
 }
 
+/** The one empty list every unconnected cart answers, so a reader that compares lines by identity sees no change. */
+const NO_LINES: readonly CartLine[] = Object.freeze([]);
+
 /** What stands in until a cart is connected: empty, and every change refuses rather than being dropped. */
 export const unconnectedCartStore: CartStore = {
   count: () => 0,
   subscribe: () => () => {},
-  lines: () => [],
+  lines: () => NO_LINES,
   add: () => {
     throw new CartStoreNotConnectedError();
   },
@@ -127,6 +143,12 @@ export const unconnectedCartStore: CartStore = {
     throw new CartStoreNotConnectedError();
   },
   totals: () => ({ count: 0, lines: 0, subtotal: null, mixedCurrency: false }),
+  checkoutId: () => {
+    throw new CartStoreNotConnectedError();
+  },
+  refresh: () => {
+    throw new CartStoreNotConnectedError();
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -145,6 +167,8 @@ export interface CartStoreOptions {
   storage: CartStorage;
   /** A storage that cannot be read or written (private mode, no room): called once, then the cart goes on in memory for the visit. */
   onStorageError?: (error: unknown) => void;
+  /** Makes a checkout id (a UUID). The browser's random bytes by default. */
+  newCheckoutId?: () => string;
 }
 
 export interface CartStoreWithReload extends CartStore {
@@ -193,37 +217,61 @@ function lineOf(value: unknown): CartLine | null {
   };
 }
 
-/** The lines a storage value holds: none for anything that is not a cart of this version; a line that is not a line is dropped. */
-function parseLines(raw: string | null): CartLine[] {
-  if (raw === null) return [];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A UUID (version 4) from the browser's random bytes. `crypto.randomUUID` is only there in a secure context, and a
+ * store on a plain-http address (a test site, a preview) is not one; `getRandomValues` is there in both.
+ */
+export function newCheckoutId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+interface StoredCart {
+  lines: CartLine[];
+  /** The checkout the lines were last sent as; null before the first, and for a cart with no lines. */
+  checkoutId: string | null;
+}
+
+const EMPTY_CART: StoredCart = { lines: [], checkoutId: null };
+
+/** The cart a storage value holds: none for anything that is not a cart of this version; a line that is not a line is dropped. */
+function parseCart(raw: string | null): StoredCart {
+  if (raw === null) return EMPTY_CART;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     // Not JSON: a cart some other code or the buyer's hand wrote. Starting empty is the cart's answer; the next change replaces it.
-    return [];
+    return EMPTY_CART;
   }
-  if (!isObject(parsed) || parsed.version !== CART_VERSION || !Array.isArray(parsed.lines)) return [];
+  if (!isObject(parsed) || parsed.version !== CART_VERSION || !Array.isArray(parsed.lines)) return EMPTY_CART;
   const lines: CartLine[] = [];
   for (const candidate of parsed.lines) {
     const line = lineOf(candidate);
     if (line && !lines.some((kept) => kept.item_id === line.item_id) && lines.length < MAX_CART_LINES) lines.push(line);
   }
-  return lines;
+  // A cart saved before the checkout existed has no id; one that is not a UUID is not one the route would take.
+  const checkoutId = lines.length > 0 && isText(parsed.checkout_id) && UUID.test(parsed.checkout_id) ? parsed.checkout_id.toLowerCase() : null;
+  return { lines, checkoutId };
 }
 
 const clampQuantity = (quantity: number): number => Math.min(MAX_LINE_QUANTITY, Math.max(1, Math.round(quantity)));
 
-function copyOf(input: CartLineInput): CartLine {
-  return {
-    item_id: input.item_id,
-    product_id: input.product_id,
-    quantity: input.quantity,
-    snapshot: { ...input.snapshot, price: { ...input.snapshot.price }, axes: input.snapshot.axes.map((axis) => ({ ...axis })), unit: input.snapshot.unit ? { ...input.snapshot.unit } : null },
-  };
+function copySnapshot(snapshot: CartLineSnapshot): CartLineSnapshot {
+  return { ...snapshot, price: { ...snapshot.price }, axes: snapshot.axes.map((axis) => ({ ...axis })), unit: snapshot.unit ? { ...snapshot.unit } : null };
 }
 
-export function createCartStore({ siteId, storage, onStorageError }: CartStoreOptions): CartStoreWithReload {
+function copyOf(input: CartLineInput): CartLine {
+  return { item_id: input.item_id, product_id: input.product_id, quantity: input.quantity, snapshot: copySnapshot(input.snapshot) };
+}
+
+export function createCartStore({ siteId, storage, onStorageError, newCheckoutId: makeCheckoutId = newCheckoutId }: CartStoreOptions): CartStoreWithReload {
   const key = cartStorageKey(siteId);
   const listeners = new Set<() => void>();
   let reported = false;
@@ -243,7 +291,9 @@ export function createCartStore({ siteId, storage, onStorageError }: CartStoreOp
     }
   };
 
-  let current: readonly CartLine[] = Object.freeze(parseLines(read()));
+  const first = parseCart(read());
+  let current: readonly CartLine[] = Object.freeze(first.lines);
+  let checkout: string | null = first.checkoutId;
 
   const notify = () => {
     for (const listener of [...listeners]) listener();
@@ -252,7 +302,7 @@ export function createCartStore({ siteId, storage, onStorageError }: CartStoreOp
   const persist = () => {
     try {
       if (current.length === 0) storage.removeItem(key);
-      else storage.setItem(key, JSON.stringify({ version: CART_VERSION, lines: current }));
+      else storage.setItem(key, JSON.stringify({ version: CART_VERSION, lines: current, ...(checkout ? { checkout_id: checkout } : {}) }));
     } catch (error) {
       // The cart goes on in memory: a buyer who cannot be remembered can still buy.
       report(error);
@@ -261,6 +311,8 @@ export function createCartStore({ siteId, storage, onStorageError }: CartStoreOp
 
   const replace = (lines: CartLine[]) => {
     current = Object.freeze(lines);
+    // A cart with no lines is over: its checkout, sent or not, is not the next cart's.
+    if (lines.length === 0) checkout = null;
     persist();
     notify();
   };
@@ -314,10 +366,27 @@ export function createCartStore({ siteId, storage, onStorageError }: CartStoreOp
       return { count, lines: current.length, subtotal: { amount, currency }, mixedCurrency: false };
     },
 
+    checkoutId() {
+      if (current.length === 0) throw new Error('An empty cart has no checkout');
+      if (!checkout) {
+        checkout = makeCheckoutId();
+        persist();
+      }
+      return checkout;
+    },
+
+    refresh(itemId, snapshot) {
+      const existing = current.find((line) => line.item_id === itemId);
+      // Nothing new is not a change: no write to the storage, no notice to the subscribers.
+      if (!existing || JSON.stringify(existing.snapshot) === JSON.stringify(snapshot)) return;
+      replace(current.map((line) => (line === existing ? { ...line, snapshot: copySnapshot(snapshot) } : line)));
+    },
+
     reload() {
-      const lines = parseLines(read());
-      if (JSON.stringify(lines) === JSON.stringify(current)) return;
-      current = Object.freeze(lines);
+      const stored = parseCart(read());
+      if (JSON.stringify(stored.lines) === JSON.stringify(current) && stored.checkoutId === checkout) return;
+      current = Object.freeze(stored.lines);
+      checkout = stored.checkoutId;
       notify();
     },
   };

@@ -521,6 +521,69 @@ resolve the product page in `fetchPageByPath`.
   `add-to-cart`, `settings`, `strings`, `html`, `card-data`, `store-money`).
 
 
+## Cart, checkout and confirmation (part 2, session W6)
+Three more store elements (`cart`, `checkout`, `orderConfirmation`; leaves like W4's and W5's), the page roles `cart`,
+`checkout` and `confirmation`, and the buyer's way through them. Platform code is `lib/platform/store-elements/`; the ycode
+files only name the elements (the same places as W4's), add the roles to the page settings panel text and answer the
+not-found page for a store that does not sell.
+- **The roles.** `PANEL_PAGE_KINDS` is now all four (`product`, `cart`, `checkout`, `confirmation`); a site has one page for
+  each. The cart indicator, the "added" notice and the product page lead to the cart page, the cart's Checkout button to the
+  checkout page, and a placed order to the confirmation page as `?order={checkout id}` (`createStoreLinks`: `cart()`,
+  `checkout()`, `confirmation(id)`; `#` until a page has the role). A site with no confirmation page shows the order
+  inside the checkout element instead of sending the buyer nowhere.
+- **A store that does not sell** answers the cart, checkout and confirmation pages with the site's own not-found page, as the
+  product page does (PRD V1.1 "Store settings"): `fetchPageByPath` asks `storeSells`. Those pages are live requests like the
+  product page's (`isStorePageRequest`, 60 s data cache, `connection()`), so the answer follows the setting within a minute.
+- **The cart store** gained the checkout id and a snapshot refresh. `checkoutId()` makes a UUID (random bytes, not
+  `crypto.randomUUID`, which a plain-http address does not have) the first time the checkout asks and keeps it in the
+  stored cart (`{ version: 1, lines, checkout_id }`); it goes with the cart when the cart is cleared or its last line is
+  removed, so one cart is one checkout whatever happens between the first try and the last. `refresh(itemId, snapshot)` replaces what a line shows and nothing else.
+- **The cart element** (`Cart.tsx`, state; `CartView.tsx`, the markup of `checkout-cart-*`). Lines from the cart store:
+  picture, name (a link to the product page), the variant's options, the unit price with the unit (`25,000 IQD / pcs`, or
+  `each`), a quantity stepper (1 to 999, typed or stepped), the line total, Remove. The summary beside them (under them on a
+  phone): subtotal, delivery fee and total from `GET /ycode/api/store/settings` (currency and fee), the exact arithmetic of
+  `store-money.ts` (`order-summary.ts`). Empty: the designed empty state with Browse products. **Prices are refreshed on
+  load** (`cart-refresh.ts`, `use-cart.ts`): each product in the cart is read once from `/ycode/api/store/products/{id}`;
+  a line still on sale takes the catalogue's name, options, price, picture and unit (and is marked "Price updated · was …"
+  when the price changed); a line the catalogue no longer sells (product gone, variant gone, no price, cannot be bought) is
+  marked "No longer available" and Checkout is off, with the reason, until it is removed; a catalogue that cannot be read
+  leaves the lines as they are and says so.
+- **The checkout element** (`Checkout.tsx`, state; `CheckoutView.tsx`, the markup of `checkout-form-*`). The order summary
+  (a collapsed bar on a phone that opens, a column on a desktop; both are in the page and CSS shows one), the form (name,
+  phone, city as a select of `iraq-governorates.ts` in the page's language, address, landmark and notes optional), the
+  cash-on-delivery note, Place order with the total. The rules for the fields are the route's (`checkout-input.ts`): the
+  form sends what was typed with `locale` and shows the route's messages under their fields, with the designed alert listing
+  the fields (each a link to its field); typing in a refused field takes its message away. On submit: one request at a
+  time (a ref guard, and the button and the fields disabled with the spinner and "Placing your order…"),
+  `POST /ycode/api/store/checkout` with the cart's `checkout_id`; `item_unavailable` names the items (the route's name, else
+  the cart's) with a Remove that drops them, each line marked with its own Remove, Place order off until they are gone;
+  `service_unavailable` (and a lost connection, and any answer that is not ours, logged) is the designed alert with Try
+  again, the cart and the form kept; `rate_limited` its own alert; success clears the cart and goes to the confirmation
+  page. The page refreshes the cart on load like the cart does.
+- **The confirmation element** (`OrderConfirmation.tsx`, `ConfirmationView.tsx`, `checkout-confirmation-default`). Reads
+  `GET /ycode/api/store/orders/{checkout_id}` for the checkout in `?order=`: the thank-you with the number the buyer typed,
+  the order code, the lines with their options (Sales names a variant's line by the variant's own item, so the name reads
+  "Linen shirt - Small / White" beside "Size: Small · Colour: White"), the fee, the total, the cash-on-delivery note, Back to
+  shop. An address with no checkout, or one this site has no order for, is "We can't find this order"; Sales that cannot be
+  asked is an alert with Try again.
+- **Copy fixes (notebook decision 16g).** The phone message names both forms ("0770 123 4567 or +964 770 123 4567"; the
+  route's, W3, now shown); nothing says "out of stock" (the handoff's sentence is "… is no longer available"); the unit is
+  on the cart, checkout and confirmation lines. Strings are `STORE_STRINGS` in both languages (`strings.ts`); a test fails
+  if a word about stock comes back.
+- **Three render paths as W4.** The canvas draws the handoff's sample cart (three lines, 115,000 IQD) and order
+  (`SO-2026-0142`) with no network call; the HTML shell (`html.ts`) is each element's skeleton; the published elements are
+  the client components. The Store category of the library gains Cart, Checkout and Order confirmation, and the Layouts tab
+  the sections Cart page, Checkout page and Order confirmation (one element in a band each, as the Product page section is).
+- **Motion.** The Place order spinner turns (0.8 s linear) and the summary chevron turns (150 ms), the alerts and the
+  confirmation rise 4 px and fade in over 200 ms on the strong ease-out, Place order presses in to 97 % over 100 ms. Under
+  `prefers-reduced-motion: reduce` the spinner stops (a ring, with the words beside it), the chevron turns at once, and the
+  alerts and the confirmation only fade.
+- **Test.** `e2e/checkout-flow.spec.ts` (the flow and the error paths on a published site, Arabic, a phone, motion, a store
+  that does not sell, the canvas, the library, the static export) and the unit tests beside the modules (`cart-store`,
+  `cart-refresh`, `order-summary`, `checkout-form`, `store-client`, `format`, `strings`, `links`, `pages`, `html`). The
+  platform stub gained `POST /__item { id, status?, base_price? }` and `POST /__items/reset`.
+
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in

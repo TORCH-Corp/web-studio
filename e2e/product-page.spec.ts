@@ -559,7 +559,7 @@ test('the page settings panel offers the Product page role, and a site has one: 
     await openPageSettings(page, 'extra');
     await expect(storeRoleField(page)).toHaveText('None');
     await storeRoleField(page).click();
-    await expect(page.getByRole('option')).toHaveText(['None', 'Product page']);
+    await expect(page.getByRole('option')).toHaveText(['None', 'Product page', 'Cart page', 'Checkout page', 'Confirmation page']);
     await page.getByRole('option', { name: 'Product page' }).click();
     await expect(page.getByText('Answers at /extra/{item id} and shows that item.')).toBeVisible();
     await page.getByRole('button', { name: 'Save' }).click();

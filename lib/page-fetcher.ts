@@ -58,7 +58,7 @@ import type { DynamicVisibilityCondition, FieldVariable, AssetVariable, DynamicT
 import type { DesignColorVariable } from '@/types';
 import { storeElementHtml } from '@/lib/platform/store-elements/html';
 import { canHaveStoreRole, matchProductPage, storeKindOf, type ProductPageState } from '@/lib/platform/store-elements/pages';
-import { readProductPage } from '@/lib/platform/store-elements/product-page';
+import { readProductPage, storeSells } from '@/lib/platform/store-elements/product-page';
 import { isStoreElement } from '@/lib/platform/store-elements/settings';
 
 // Cached map provider tokens for synchronous use inside layerToHtml.
@@ -848,6 +848,12 @@ async function fetchPageByPathInternal(
       const state = await readProductPage(tenantId, productItemId);
       if (!state) return null;
       storeProduct = state;
+    }
+
+    // The cart, checkout and confirmation pages answer the site's own not-found page too while the store does not sell.
+    const storeRole = storeKindOf(matchingPage);
+    if ((storeRole === 'cart' || storeRole === 'checkout' || storeRole === 'confirmation') && canHaveStoreRole(matchingPage) && !(await storeSells(tenantId))) {
+      return null;
     }
 
     // Handle non-dynamic page (exact match)

@@ -10,6 +10,7 @@ import {
   getCartStore,
   MAX_CART_LINES,
   MAX_LINE_QUANTITY,
+  newCheckoutId,
   subscribeToCart,
   unconnectedCartStore,
   type CartLineInput,
@@ -222,6 +223,12 @@ test('with no cart connected the count is 0 and every change fails loudly instea
   assert.throws(() => getCartStore().setQuantity('lamp', 2), CartStoreNotConnectedError);
   assert.throws(() => getCartStore().remove('lamp'), CartStoreNotConnectedError);
   assert.throws(() => getCartStore().clear(), CartStoreNotConnectedError);
+  assert.throws(() => getCartStore().checkoutId(), CartStoreNotConnectedError);
+  assert.throws(() => getCartStore().refresh('lamp', line('lamp').snapshot), CartStoreNotConnectedError);
+});
+
+test('the unconnected cart answers the same empty list every time, so a reader that compares lists by identity sees no change', () => {
+  assert.equal(unconnectedCartStore.lines(), unconnectedCartStore.lines());
 });
 
 test('a connected cart is the one read and added to, and a subscriber hears each add', () => {
@@ -250,4 +257,119 @@ test('an element subscribed before the cart was connected follows it, and is tol
   cart.add(line('hose'));
   assert.equal(heard, 3, 'a cart that is no longer connected is no longer heard');
   stop();
+});
+
+// ---------------------------------------------------------------------------
+// The checkout id (session W6): one per cart, kept until the cart is over
+// ---------------------------------------------------------------------------
+
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+test('a checkout id is a version 4 UUID made from random bytes, so it needs no secure context', () => {
+  const ids = new Set(Array.from({ length: 20 }, () => newCheckoutId()));
+  assert.equal(ids.size, 20);
+  for (const id of ids) assert.match(id, UUID_V4);
+});
+
+test('the checkout id is made once per cart: the same on every ask, and kept in the storage with the lines', () => {
+  const storage = memoryStorage();
+  let made = 0;
+  const cart = createCartStore({ siteId: SITE, storage, newCheckoutId: () => `00000000-0000-4000-8000-00000000000${++made}` });
+  cart.add(line('lamp'));
+  assert.equal(JSON.parse(storage.data.get(KEY)!).checkout_id, undefined, 'none until the checkout asks');
+  const id = cart.checkoutId();
+  assert.equal(id, '00000000-0000-4000-8000-000000000001');
+  assert.equal(cart.checkoutId(), id);
+  assert.equal(made, 1);
+  assert.equal(JSON.parse(storage.data.get(KEY)!).checkout_id, id);
+});
+
+test('a reload keeps the cart and its checkout id; changing the lines does not change the id', () => {
+  const storage = memoryStorage();
+  const first = createCartStore({ siteId: SITE, storage });
+  first.add(line('lamp'));
+  const id = first.checkoutId();
+  const second = createCartStore({ siteId: SITE, storage });
+  assert.equal(second.checkoutId(), id, 'a reload on the checkout page sends the same checkout');
+  second.add(line('hose'));
+  second.setQuantity('lamp', 4);
+  second.remove('hose');
+  assert.equal(second.checkoutId(), id, 'the cart is the same cart while it has lines');
+});
+
+test('a cart that is cleared or whose last line is removed is over: the next one has a new checkout id', () => {
+  const storage = memoryStorage();
+  const cart = createCartStore({ siteId: SITE, storage });
+  cart.add(line('lamp'));
+  const first = cart.checkoutId();
+  cart.clear();
+  assert.equal(storage.data.size, 0, 'nothing is left of it in the storage');
+  cart.add(line('lamp'));
+  const second = cart.checkoutId();
+  assert.notEqual(second, first);
+  cart.remove('lamp');
+  cart.add(line('lamp'));
+  assert.notEqual(cart.checkoutId(), second);
+});
+
+test('an empty cart has no checkout to ask for', () => {
+  assert.throws(() => createCartStore({ siteId: SITE, storage: memoryStorage() }).checkoutId(), /empty cart/);
+});
+
+test('a cart saved before the checkout existed has none until it is asked for; one that is not a UUID is not kept', () => {
+  const old = JSON.stringify({ version: 1, lines: [line('lamp')] });
+  const cart = createCartStore({ siteId: SITE, storage: memoryStorage({ [KEY]: old }) });
+  assert.match(cart.checkoutId(), UUID_V4);
+  const bad = JSON.stringify({ version: 1, lines: [line('lamp')], checkout_id: 'not-an-id' });
+  assert.match(createCartStore({ siteId: SITE, storage: memoryStorage({ [KEY]: bad }) }).checkoutId(), UUID_V4);
+});
+
+test('another tab that makes or clears the checkout is followed by reload()', () => {
+  const storage = memoryStorage();
+  const here = createCartStore({ siteId: SITE, storage });
+  here.add(line('lamp'));
+  const there = createCartStore({ siteId: SITE, storage });
+  const id = there.checkoutId();
+  let heard = 0;
+  here.subscribe(() => heard++);
+  here.reload();
+  assert.equal(heard, 1, 'the id arriving is a change');
+  assert.equal(here.checkoutId(), id);
+  here.reload();
+  assert.equal(heard, 1, 'and reading the same again is not');
+  there.clear();
+  here.reload();
+  assert.equal(here.count(), 0);
+});
+
+// ---------------------------------------------------------------------------
+// Refreshing a line from the catalogue
+// ---------------------------------------------------------------------------
+
+test('refresh replaces what a line shows and keeps its quantity, its place and its checkout', () => {
+  const storage = memoryStorage();
+  const cart = createCartStore({ siteId: SITE, storage });
+  cart.add(line('lamp', { quantity: 3 }));
+  cart.add(line('hose'));
+  const id = cart.checkoutId();
+  const before = cart.lines();
+  cart.refresh('lamp', { ...line('lamp').snapshot, name: 'Desk lamp', price: { amount: '12000', currency: 'IQD' } });
+  assert.deepEqual(cart.lines().map((l) => [l.item_id, l.quantity, l.snapshot.price.amount]), [['lamp', 3, '12000'], ['hose', 1, '9000']]);
+  assert.equal(cart.lines()[0].snapshot.name, 'Desk lamp');
+  assert.notEqual(cart.lines(), before);
+  assert.equal(cart.checkoutId(), id);
+  assert.equal(cart.totals().subtotal?.amount, '45000', '3 × 12,000 + 9,000');
+  assert.equal(JSON.parse(storage.data.get(KEY)!).lines[0].snapshot.price.amount, '12000', 'and it is kept for the next visit');
+});
+
+test('refresh with what the line already shows changes nothing and tells nobody', () => {
+  const cart = createCartStore({ siteId: SITE, storage: memoryStorage() });
+  cart.add(line('lamp'));
+  let heard = 0;
+  cart.subscribe(() => heard++);
+  const before = cart.lines();
+  cart.refresh('lamp', line('lamp').snapshot);
+  cart.refresh('gone', line('gone').snapshot);
+  assert.equal(heard, 0);
+  assert.equal(cart.lines(), before);
 });

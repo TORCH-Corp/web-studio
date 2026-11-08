@@ -9,7 +9,7 @@ import { buildAllPagesTag, buildGlobalSettingsTag, buildRouteTag } from '@/lib/c
 import { buildSlugPath } from '@/lib/page-utils';
 import { generatePageMetadata, fetchGlobalPageSettings } from '@/lib/generate-page-metadata';
 import { generateCachedErrorPageMetadata } from '@/lib/not-found-metadata';
-import { fetchCachedErrorPage, fetchCachedPageForMetadata, fetchCachedPageWithLayers, isStoreProductRequest, pageRevalidate } from '@/lib/published-page-cache';
+import { fetchCachedErrorPage, fetchCachedPageForMetadata, fetchCachedPageWithLayers, isStorePageRequest, pageRevalidate } from '@/lib/published-page-cache';
 import { fetchHomepage, splitPageData, reassemblePageData } from '@/lib/page-fetcher';
 import type { PageData, PaginationContext } from '@/lib/page-fetcher';
 import PageRenderer from '@/components/PageRenderer';
@@ -288,14 +288,15 @@ export default async function Page({ params }: PageProps) {
     }
   }
 
-  // The product page (part 2, W5) is answered live: its data lives 60 seconds, and its response is not kept as a
-  // static page (the item may go on or off sale, and a 404 must not stick). `connection()` is what the
-  // password-protected branch below does too.
-  const productRequest = !isHomepage && (await isStoreProductRequest(slugPath, siteId ?? undefined));
-  if (productRequest) await connection();
+  // The pages with a store role (part 2: the product page, W5; the cart, checkout and confirmation, W6) are answered
+  // live: their data lives 60 seconds, and their response is not kept as a static page (an item may go on or off
+  // sale, a store may stop selling, and a 404 must not stick). `connection()` is what the password-protected branch
+  // below does too.
+  const storePage = !isHomepage && (await isStorePageRequest(slugPath, siteId ?? undefined));
+  if (storePage) await connection();
 
   const [data, globalSettings] = await Promise.all([
-    isHomepage ? fetchPublishedHomepage() : fetchCachedPageWithLayers(slugPath, siteId ?? '', productRequest),
+    isHomepage ? fetchPublishedHomepage() : fetchCachedPageWithLayers(slugPath, siteId ?? '', storePage),
     fetchCachedGlobalSettings(),
   ]);
 
@@ -478,7 +479,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
 
   const metaTenantId = (await getTenantIdFromHeaders()) ?? '';
   const routeTag = buildRouteTag(metaTenantId, slugPath);
-  const metaProductRequest = !isHomepage && (await isStoreProductRequest(slugPath, metaTenantId || undefined));
+  const metaStorePage = !isHomepage && (await isStorePageRequest(slugPath, metaTenantId || undefined));
   const { meta, baseUrl } = await unstable_cache(
     async () => scoped(metaTenantId, async () => ({
       meta: await generatePageMetadata(data.page, {
@@ -493,7 +494,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
       baseUrl: getSiteBaseUrl({ globalCanonicalUrl: globalSettings.globalCanonicalUrl }),
     })),
     [isHomepage ? 'data-for-route-/-meta' : `data-for-route-/${slugPath}-meta`, metaTenantId],
-    { tags: [routeTag, buildAllPagesTag(metaTenantId)], revalidate: pageRevalidate(metaProductRequest) }
+    { tags: [routeTag, buildAllPagesTag(metaTenantId)], revalidate: pageRevalidate(metaStorePage) }
   )();
 
   if (baseUrl) {

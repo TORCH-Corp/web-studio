@@ -3,11 +3,14 @@
  * the page-role lookup in W5).
  *
  * A card opens the page with the `product` role, and the cart indicator and the
- * "added" notice lead to the page with the `cart` role (lib/platform/store-elements/pages.ts;
- * the paths are what the publish wrote). With no page that has the product role
+ * "added" notice lead to the page with the `cart` role, the cart's Checkout
+ * button to the page with the `checkout` role, and a placed order to the page
+ * with the `confirmation` role (lib/platform/store-elements/pages.ts; the
+ * paths are what the publish wrote). With no page that has the product role
  * a card falls back to the conventional `/product/{id}` (owner, W5 grill-me,
- * 8 Nov 2026); the cart has no convention to fall back to, and links to "#"
- * until a page has the cart role (W6 offers it).
+ * 8 Nov 2026); the cart and the checkout have no convention to fall back to,
+ * and link to "#" until a page has the role; the confirmation has none either,
+ * and the checkout then shows the order itself (W6).
  *
  * A page in a language that is not the site's default lives under that
  * language's code, and so do the store links of the pages in it.
@@ -36,6 +39,9 @@ export function productsHref(locale?: LinkLocale | null): string {
 export interface StoreLinks {
   product(productId: string): string;
   cart(): string;
+  checkout(): string;
+  /** The confirmation page of a checkout (`…?order={checkout id}`); null when no page has the confirmation role. */
+  confirmation(checkoutId: string): string | null;
   products(): string;
 }
 
@@ -43,6 +49,11 @@ export function createStoreLinks(locale: LinkLocale | null | undefined, paths: S
   return {
     product: (productId) => `${pathFor(paths, 'product', locale) ?? `${localePrefix(locale)}/product`}/${encodeURIComponent(productId)}`,
     cart: () => pathFor(paths, 'cart', locale) ?? '#',
+    checkout: () => pathFor(paths, 'checkout', locale) ?? '#',
+    confirmation: (checkoutId) => {
+      const path = pathFor(paths, 'confirmation', locale);
+      return path === null ? null : `${path}?order=${encodeURIComponent(checkoutId)}`;
+    },
     products: () => productsHref(locale),
   };
 }

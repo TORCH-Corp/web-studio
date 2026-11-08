@@ -76,3 +76,8 @@ test('the four store elements are known by name, nothing else is', () => {
   for (const name of ['productGrid', 'productCard', 'productDetail', 'cartIndicator']) assert.equal(isStoreElement(name), true);
   for (const name of ['button', 'htmlEmbed', 'product', '', undefined, null]) assert.equal(isStoreElement(name), false);
 });
+
+test('the cart, checkout and order confirmation are store elements, so every render path draws them', () => {
+  for (const name of ['cart', 'checkout', 'orderConfirmation']) assert.equal(isStoreElement(name), true, name);
+  assert.equal(isStoreElement('form'), false);
+});

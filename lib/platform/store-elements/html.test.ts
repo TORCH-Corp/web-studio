@@ -58,3 +58,18 @@ test('a static export has no platform to fetch a font from, so its shell links n
   assert.ok(!html.includes('<link') && !html.includes('/ycode/api/store/font'));
   assert.ok(html.includes('<style>') && html.includes('data-ws-store="productGrid"'));
 });
+
+test('the cart, checkout and confirmation elements are skeletons of their pages, in the page\'s language', () => {
+  const cart = storeElementHtml({ layer: { name: 'cart' }, attrs: ['class="w-full"'] });
+  assert.ok(cart.includes('data-ws-store="cart"') && cart.includes('class="ws-cart-page"') && cart.includes('aria-busy="true"'));
+  assert.ok(cart.includes('role="status">Loading your cart…') && cart.includes('>Shopping cart<'));
+  assert.equal(cart.split('class="ws-sk-row"').length - 1, 3);
+
+  const checkout = storeElementHtml({ layer: { name: 'checkout' }, attrs: [] });
+  assert.ok(checkout.includes('data-ws-store="checkout"') && checkout.includes('class="ws-checkout-page"') && checkout.includes('role="status">Loading the checkout…'));
+  assert.equal(checkout.split('class="ws-sk ws-sk-block"').length - 1, 4);
+
+  const confirmation = storeElementHtml({ layer: { name: 'orderConfirmation' }, attrs: [], locale: { code: 'ar', is_default: true } });
+  assert.ok(confirmation.includes('data-ws-store="orderConfirmation"') && confirmation.includes('dir="rtl"') && confirmation.includes('جارٍ تحميل طلبك…'));
+  assert.ok(!cart.includes('Google') && !checkout.includes('googleapis'));
+});

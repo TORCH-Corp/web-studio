@@ -14,7 +14,7 @@
 import { DEFAULT_PAGE_SIZE, MAX_CATEGORIES, MAX_PAGE_SIZE, isUuid } from '@/lib/platform/store-query';
 
 /** Layer names of the elements this module owns (keys of lib/templates/store.ts). */
-export const STORE_ELEMENT_NAMES = ['productGrid', 'productCard', 'productDetail', 'cartIndicator'] as const;
+export const STORE_ELEMENT_NAMES = ['productGrid', 'productCard', 'productDetail', 'cartIndicator', 'cart', 'checkout', 'orderConfirmation'] as const;
 export type StoreElementName = (typeof STORE_ELEMENT_NAMES)[number];
 
 export function isStoreElement(name: string | undefined | null): name is StoreElementName {

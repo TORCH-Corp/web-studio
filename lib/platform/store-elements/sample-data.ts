@@ -8,7 +8,11 @@
  */
 
 import type { StoreProduct, StoreVariant } from '@/lib/platform/catalogue-rules';
+import type { Confirmation } from '@/lib/platform/checkout-rules';
 import type { CardData } from '@/lib/platform/store-elements/card-data';
+import type { CartLine } from '@/lib/platform/store-elements/cart-store';
+import type { StoreTerms } from '@/lib/platform/store-elements/order-summary';
+import { multiplyAmount } from '@/lib/platform/store-money';
 
 interface Sample {
   id: string;
@@ -123,5 +127,55 @@ export function sampleProduct(): StoreProduct {
       { id: 'sample-colour', code: 'CLR', name: 'Colour', name_ar: 'اللون', options: SAMPLE_COLOURS.map((c) => ({ id: c.id, code: c.id, label: c.label, label_ar: c.label_ar })) },
       { id: 'sample-size', code: 'SZ', name: 'Size', name_ar: 'المقاس', options: SAMPLE_SIZES.map((s) => ({ id: s.id, code: s.id, label: s.label, label_ar: s.label })) },
     ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The cart, checkout and confirmation samples (handoff checkout-cart-default,
+// checkout-form-default, checkout-confirmation-default: a cart of 4 items, 110,000
+// IQD of them, 5,000 IQD of delivery, 115,000 IQD in all, order SO-2026-0142).
+// ---------------------------------------------------------------------------
+
+const TSHIRT_AXES = [
+  { name: 'Colour', name_ar: 'اللون', option: 'Black', option_ar: 'أسود' },
+  { name: 'Size', name_ar: 'المقاس', option: 'M', option_ar: 'M' },
+];
+const HOODIE_AXES = [
+  { name: 'Colour', name_ar: 'اللون', option: 'Grey', option_ar: 'رمادي' },
+  { name: 'Size', name_ar: 'المقاس', option: 'L', option_ar: 'L' },
+];
+
+/** The lines the canvas draws in a cart and a checkout: no picture, the placeholder tiles. */
+export const SAMPLE_CART_LINES: readonly CartLine[] = [
+  { item_id: 'sample-1-black-m', product_id: 'sample-1', quantity: 2, snapshot: { name: 'Cotton T-shirt', name_ar: 'قميص قطني', axes: TSHIRT_AXES, price: { amount: '25000', currency: 'IQD' }, image: null, unit: null } },
+  { item_id: 'sample-2-grey-l', product_id: 'sample-2', quantity: 1, snapshot: { name: 'Wool hoodie', name_ar: 'هودي صوف', axes: HOODIE_AXES, price: { amount: '45000', currency: 'IQD' }, image: null, unit: null } },
+  { item_id: 'sample-3', product_id: 'sample-3', quantity: 1, snapshot: { name: 'Canvas tote bag', name_ar: 'حقيبة قماش', axes: [], price: { amount: '15000', currency: 'IQD' }, image: null, unit: null } },
+];
+
+/** What the store's settings say, in the canvas. */
+export const SAMPLE_TERMS: StoreTerms = { currency: 'IQD', delivery_fee: '5000.00' };
+
+/** The order the canvas draws on a confirmation element: the cart above, as Sales would send it back. */
+export function sampleOrder(): Confirmation {
+  return {
+    checkout_id: '00000000-0000-4000-8000-000000000142',
+    code: 'SO-2026-0142',
+    currency: 'IQD',
+    lines: SAMPLE_CART_LINES.map((line) => ({
+      item_id: line.item_id,
+      sku: line.item_id.toUpperCase(),
+      name: line.snapshot.name,
+      name_ar: line.snapshot.name_ar,
+      axes: line.snapshot.axes,
+      unit: { code: 'UOM-000001', name: 'Piece' },
+      quantity: String(line.quantity),
+      unit_price: line.snapshot.price.amount,
+      line_total: multiplyAmount(line.snapshot.price.amount, line.quantity),
+    })),
+    subtotal: '110000',
+    delivery_fee: '5000.00',
+    total: '115000.00',
+    payment_method: 'cash_on_delivery',
+    phone: '0770 123 4567',
   };
 }

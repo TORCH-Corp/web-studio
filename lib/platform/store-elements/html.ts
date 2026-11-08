@@ -4,7 +4,8 @@
  * routes use. There is no script here to fetch with and the data is live, so an
  * element is its shell: the wrapper with the layer's own attributes, the
  * stylesheet and font, and the loading state (the product grid and card draw
- * their skeleton, the product page its own, the cart indicator its empty cart).
+ * their skeleton, the product page, the cart, the checkout and the confirmation
+ * their own, the cart indicator its empty cart).
  *
  * Kept free of Next and React imports so it runs under `node --test`.
  */
@@ -24,6 +25,20 @@ const SKELETON_CARD = '<div class="ws-card"><div class="ws-sk ws-sk-media"></div
 /** The product page element's loading state: the same blocks as ProductDetailSkeleton. */
 const detailSkeleton = (loading: string) =>
   `<div class="ws-pd" aria-busy="true"><p class="ws-sr" role="status">${escapeHtml(loading)}</p><div class="ws-gallery" aria-hidden="true"><div class="ws-sk ws-sk-media"></div><div class="ws-thumbs">${'<div class="ws-sk ws-sk-thumb"></div>'.repeat(4)}</div></div><div class="ws-info" aria-hidden="true"><div class="ws-sk ws-sk-title"></div><div class="ws-sk ws-sk-line ws-sk-short"></div><div class="ws-sk ws-sk-title ws-sk-short"></div><div class="ws-sk-chips">${'<div class="ws-sk ws-sk-chip"></div>'.repeat(4)}</div><div class="ws-sk ws-sk-btn"></div></div></div>`;
+
+const SKELETON_ROW = '<div class="ws-sk-row"><div class="ws-sk ws-sk-square"></div><div class="ws-stack-2"><div class="ws-sk ws-sk-line"></div><div class="ws-sk ws-sk-line ws-sk-short"></div></div></div>';
+
+/** The cart element's loading state: the same blocks as CartSkeleton. */
+const cartSkeleton = (t: (typeof STORE_STRINGS)['en']) =>
+  `<div class="ws-cart-page" aria-busy="true"><p class="ws-sr" role="status">${escapeHtml(t.loadingCart)}</p><div class="ws-page-head" aria-hidden="true"><h1 class="ws-h1">${escapeHtml(t.cartTitle)}</h1></div><div class="ws-cart-layout" aria-hidden="true"><div class="ws-lines">${SKELETON_ROW.repeat(3)}</div><div class="ws-sk ws-sk-panel"></div></div></div>`;
+
+/** The checkout element's loading state: the same blocks as CheckoutSkeleton. */
+const checkoutSkeleton = (t: (typeof STORE_STRINGS)['en']) =>
+  `<div class="ws-checkout-page" aria-busy="true"><p class="ws-sr" role="status">${escapeHtml(t.loadingCheckout)}</p><div class="ws-page-head" aria-hidden="true"><h1 class="ws-h1">${escapeHtml(t.checkout)}</h1></div><div class="ws-cart-layout" aria-hidden="true"><div class="ws-co-main">${'<div class="ws-sk ws-sk-block"></div>'.repeat(4)}</div><div class="ws-sk ws-sk-panel"></div></div></div>`;
+
+/** The confirmation element's loading state: the same blocks as ConfirmationSkeleton. */
+const confirmationSkeleton = (t: (typeof STORE_STRINGS)['en']) =>
+  `<div class="ws-conf" aria-busy="true"><p class="ws-sr" role="status">${escapeHtml(t.loadingOrder)}</p><div class="ws-conf-head" aria-hidden="true"><div class="ws-sk ws-sk-square" style="width:var(--ws-size-icon-xl);border-radius:var(--ws-radius-full)"></div><div class="ws-sk ws-sk-title" style="width:60%"></div></div><div class="ws-sk ws-sk-block" aria-hidden="true"></div><div class="ws-sk ws-sk-panel" aria-hidden="true"></div></div>`;
 
 const BAG = '<svg class="ws-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13H7L6 7z"></path><path d="M9 7a3 3 0 0 1 6 0"></path></svg>';
 
@@ -58,6 +73,12 @@ export function storeElementHtml({ layer, attrs, locale, staticExport = false }:
     inside = `<p class="ws-sr" role="status">${escapeHtml(t.loading)}</p><div aria-hidden="true">${SKELETON_CARD}</div>`;
   } else if (name === 'productDetail') {
     inside = detailSkeleton(t.loadingProduct);
+  } else if (name === 'cart') {
+    inside = cartSkeleton(t);
+  } else if (name === 'checkout') {
+    inside = checkoutSkeleton(t);
+  } else if (name === 'orderConfirmation') {
+    inside = confirmationSkeleton(t);
   } else if (name === 'cartIndicator') {
     inside = `<a class="ws-cart" href="${escapeHtml(createStoreLinks(locale, {}).cart())}" aria-label="${escapeHtml(t.cartEmpty)}">${BAG}<span class="ws-cart-label" aria-hidden="true">${escapeHtml(t.cartLabel)}</span></a>`;
   } else {

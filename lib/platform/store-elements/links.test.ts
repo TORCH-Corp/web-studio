@@ -28,7 +28,7 @@ test('the cart links to the page with the cart role, in the page\'s language', (
   assert.equal(createStoreLinks({ code: 'ar', is_default: false }, PATHS).cart(), '/ar/السلة');
 });
 
-test('until a page can have the cart role the cart links to "#", so it goes nowhere instead of to a page that is not there', () => {
+test('until a page has the cart role the cart links to "#", so it goes nowhere instead of to a page that is not there', () => {
   assert.equal(createStoreLinks(null, {}).cart(), '#');
   assert.equal(createStoreLinks({ code: 'ar', is_default: false }, { product: PATHS.product }).cart(), '#');
 });
@@ -40,9 +40,21 @@ test('View all of a section goes to the products page, with the language\'s pref
   assert.equal(localePrefix({ code: 'ar', is_default: true }), '');
 });
 
-// W6 gives the cart, checkout and confirmation pages their roles in the page settings panel. The lookup above
-// already links to a cart page once one has the role; this is the check that the panel offers it, so the
-// indicator's "#" is replaced the day W6 lands. It is expected to fail until then (a todo does not fail the run).
-test('the page settings panel offers the cart role', { todo: 'W6 adds the cart, checkout and confirmation roles to the panel' }, () => {
-  assert.ok(PANEL_PAGE_KINDS.includes('cart'));
+test('the checkout links to the page with the checkout role, in the page\'s language, and to "#" until a page has it', () => {
+  const paths = { ...PATHS, checkout: { '*': '/checkout', ar: '/ar/إتمام-الطلب' } };
+  assert.equal(createStoreLinks(null, paths).checkout(), '/checkout');
+  assert.equal(createStoreLinks({ code: 'ar', is_default: false }, paths).checkout(), '/ar/إتمام-الطلب');
+  assert.equal(createStoreLinks(null, PATHS).checkout(), '#');
+});
+
+test('a placed order links to the confirmation page with the checkout id in ?order=, and to nothing when no page has the role', () => {
+  const paths = { confirmation: { '*': '/thanks', ar: '/ar/شكرا' } };
+  const id = '0b3f6f0e-2a53-4b8a-8f3a-6a0d5d1f5a11';
+  assert.equal(createStoreLinks(null, paths).confirmation(id), `/thanks?order=${id}`);
+  assert.equal(createStoreLinks({ code: 'ar', is_default: false }, paths).confirmation(id), `/ar/شكرا?order=${id}`);
+  assert.equal(createStoreLinks(null, PATHS).confirmation(id), null, 'the checkout then shows the order itself');
+});
+
+test('the page settings panel offers all four roles', () => {
+  assert.deepEqual([...PANEL_PAGE_KINDS], ['product', 'cart', 'checkout', 'confirmation']);
 });
