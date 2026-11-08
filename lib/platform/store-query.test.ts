@@ -26,3 +26,21 @@ test('a page size above 48, a page below 1, a category that is not an id, an unk
   assert.deepEqual(parse('page=1&page=2'), { errors: ['page is given more than once'] });
   assert.deepEqual(parse(`q=${'x'.repeat(201)}`), { errors: ['q must be 200 characters at most'] });
 });
+
+const OTHER = '25252525-0002-4525-8525-252525252525';
+
+test('several categories are read as a list, repeated ids once, in any case', () => {
+  assert.deepEqual(parse(`categories=${CATEGORY},${OTHER.toUpperCase()},${CATEGORY}&page_size=4`), {
+    query: { category: null, categories: [CATEGORY, OTHER], search: null, page: 1, pageSize: 4 },
+  });
+});
+
+test('categories is refused when empty, not made of ids, longer than 24, or given with category', () => {
+  const message = 'categories must be 1 to 24 category ids separated by commas';
+  assert.deepEqual(parse('categories='), { errors: [message] });
+  assert.deepEqual(parse(`categories=${CATEGORY},shirts`), { errors: [message] });
+  assert.deepEqual(parse(`categories=${CATEGORY},`), { errors: [message] });
+  const many = Array.from({ length: 25 }, (_, i) => `25252525-00${String(i).padStart(2, '0')}-4525-8525-252525252525`).join(',');
+  assert.deepEqual(parse(`categories=${many}`), { errors: [message] });
+  assert.deepEqual(parse(`category=${CATEGORY}&categories=${OTHER}`), { errors: ['give category or categories, not both'] });
+});

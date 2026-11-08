@@ -51,6 +51,8 @@ import FilterSettings from './FilterSettings';
 import AlertSettings from './AlertSettings';
 import HTMLEmbedSettings from './HTMLEmbedSettings';
 import MapSettings from './MapSettings';
+import ProductGridSettings from './ProductGridSettings';
+import ProductCardSettings from './ProductCardSettings';
 import SliderSettings from './SliderSettings';
 import LightboxSettings from './LightboxSettings';
 import InputSettings from './InputSettings';
@@ -3112,6 +3114,16 @@ const RightSidebar = React.memo(function RightSidebar({
             />
 
             <MapSettings
+              layer={selectedLayer}
+              onLayerUpdate={handleLayerUpdate}
+            />
+
+            <ProductGridSettings
+              layer={selectedLayer}
+              onLayerUpdate={handleLayerUpdate}
+            />
+
+            <ProductCardSettings
               layer={selectedLayer}
               onLayerUpdate={handleLayerUpdate}
             />

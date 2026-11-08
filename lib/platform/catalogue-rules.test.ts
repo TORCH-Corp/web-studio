@@ -170,3 +170,14 @@ test('the product route shows every image, primary first; an image belongs to th
   assert.equal(showsImage(shirt, 'img-back', gallery), true);
   assert.equal(showsImage(shirt, 'img-lamp', gallery), false);
 });
+
+test('a page filters by several categories at once: any of them, and under each', () => {
+  const catalogue = buildCatalogue(input({ store: { currency: 'IQD', category_ids: [] } }));
+  const ids = (categories: string[]) => pageOf(catalogue, { categories, page: 1, pageSize: 12 }).products.map((p) => p.id).sort();
+  assert.deepEqual(ids(['clothing', 'garden']), ['hose', 'shirt']);
+  assert.deepEqual(ids(['garden']), ['hose']);
+  assert.deepEqual(ids(['nowhere']), []);
+  // A single category still wins when both are given; an empty list filters nothing.
+  assert.deepEqual(pageOf(catalogue, { category: 'garden', categories: ['clothing'], page: 1, pageSize: 12 }).products.map((p) => p.id), ['hose']);
+  assert.equal(pageOf(catalogue, { categories: [], page: 1, pageSize: 12 }).total, pageOf(catalogue, { page: 1, pageSize: 12 }).total);
+});

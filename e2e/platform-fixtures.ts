@@ -64,6 +64,8 @@ export const CATEGORY = {
   shirts: '28282828-0002-4828-8828-282828282828',
   home: '28282828-0003-4828-8828-282828282828',
   garden: '28282828-0004-4828-8828-282828282828',
+  /** The catalogue organization's category with nothing in it (part 2, W4: the grid's empty-category state). */
+  toys: '28282828-0005-4828-8828-282828282828',
 } as const;
 
 export const BRANCHES: FixtureBranch[] = [
@@ -86,6 +88,7 @@ export const CATEGORIES: FixtureCategory[] = [
   { id: CATEGORY.shirts, entityId: CATALOGUE_ORG, name: 'Shirts', name_ar: 'قمصان', parent_id: CATEGORY.clothing, archived: false, items_count: 5 },
   { id: CATEGORY.home, entityId: CATALOGUE_ORG, name: 'Home', name_ar: 'المنزل', parent_id: null, archived: false, items_count: 4 },
   { id: CATEGORY.garden, entityId: CATALOGUE_ORG, name: 'Garden', name_ar: 'الحديقة', parent_id: null, archived: false, items_count: 1 },
+  { id: CATEGORY.toys, entityId: CATALOGUE_ORG, name: 'Toys', name_ar: 'ألعاب', parent_id: null, archived: false, items_count: 0 },
 ];
 
 // ---------------------------------------------------------------------------

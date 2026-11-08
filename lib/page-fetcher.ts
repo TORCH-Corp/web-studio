@@ -56,6 +56,8 @@ import { isVirtualAssetField, findDisplayField, hasDynamicDateRule, isDynamicDat
 import { getDefaultFormatId, isFormatValidForFieldType } from '@/lib/variable-format-utils';
 import type { DynamicVisibilityCondition, FieldVariable, AssetVariable, DynamicTextVariable, DynamicRichTextVariable, LinkSettings } from '@/types';
 import type { DesignColorVariable } from '@/types';
+import { storeElementHtml } from '@/lib/platform/store-elements/html';
+import { isStoreElement } from '@/lib/platform/store-elements/settings';
 
 // Cached map provider tokens for synchronous use inside layerToHtml.
 // Set by ensureMapTokens() before HTML generation begins.
@@ -5072,6 +5074,11 @@ export function layerToHtml(
         : '';
       return `<iframe${attrsStr}>${childrenHtml}</iframe>`;
     }
+  }
+
+  // Store elements (part 2): the shell with its loading state; the data is live (lib/platform/store-elements/html.ts)
+  if (isStoreElement(layer.name)) {
+    return storeElementHtml({ layer, attrs, locale, staticExport: pageLinkContext?.isStaticExport });
   }
 
   // Handle Map layers — provider-aware iframe

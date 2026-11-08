@@ -358,6 +358,7 @@ export function getCollectionVariable(layer: Layer): CollectionVariable | null {
 
 const EXCLUDED_FROM_COLLECTION = [
   'body', 'form', 'filter', 'icon', 'htmlEmbed', 'lightbox', 'slider',
+  'productGrid', 'productCard', 'cartIndicator',
   'slides', 'slideNavigationWrapper', 'slideButtonPrev', 'slideButtonNext',
   'slidePaginationWrapper', 'slideBullets', 'slideFraction',
 ];
@@ -1254,7 +1255,7 @@ function layerLabelFallback(layer: Layer): string {
 }
 
 /** Layer types rendered as iframes, where a wrapping link can't receive clicks. */
-export const LINK_UNSUPPORTED_LAYER_NAMES = new Set(['htmlEmbed', 'map']);
+export const LINK_UNSUPPORTED_LAYER_NAMES = new Set(['htmlEmbed', 'map', 'productGrid', 'productCard', 'cartIndicator']);
 
 /**
  * Check if a layer can have a link added
@@ -1406,6 +1407,7 @@ const LEAF_LAYER_NAMES = new Set([
   'heading', 'text', 'richText', 'span', 'label', 'hr',
   'input', 'textarea', 'select', 'checkbox', 'radio',
   'htmlEmbed', 'map',
+  'productGrid', 'productCard', 'cartIndicator',
 ]);
 
 /**
@@ -1822,6 +1824,11 @@ const LAYER_NAME_TO_HTML_TAG: Record<string, string> = {
   // Embedded / special
   htmlEmbed: 'div',
   map: 'div',
+
+  // Store elements (lib/platform/store-elements)
+  productGrid: 'div',
+  productCard: 'div',
+  cartIndicator: 'div',
 
   // Slider family
   slider: 'div',

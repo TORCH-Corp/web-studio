@@ -363,6 +363,59 @@ description changes: `pnpm templates:seed`.
   (`POST /__sales/delay`). Next fills a missing `x-forwarded-for` with the socket's address, so the spec's requests share one
   IP and the spec raises its site's limit.
 
+## Store elements (part 2, session W4)
+The Store category of the element library: **Product grid**, **Product card** and **Cart indicator**, and two ready sections,
+**Products grid** and **Featured products**, under a Store category of the Layouts tab. The cart, the product page and
+the checkout are W5 and W6. Platform code is `lib/platform/store-elements/`; the ycode files only name the elements
+(the seven places the research lists for `htmlEmbed`: `lib/templates/blocks.ts` with `lib/templates/store.ts`,
+`ElementLibrary.tsx`, `lib/layer-utils.ts` (tag, leaf, no collection, no link), `lib/layer-style-groups.ts`,
+`LayerRenderer.tsx`, `LayerRendererPublic.tsx`, `lib/page-fetcher.ts` `layerToHtml`, `RightSidebar.tsx`) and `types/index.ts`
+(`LayerSettings.store`).
+- **Three render paths.** The canvas draws sample data (the handoff's eight products, three categories, a cart of 4) and
+  never calls the store API or asks for an image; the published page (`PublishedStoreElement`) is a client component that
+  fetches `/ycode/api/store/products` (W2) with the element's settings and the page's `?category=` and `?q=`; the HTML
+  string (`layerToHtml`: static export, filter and load-more HTML) is the wrapper with the skeleton (`html.ts`), because
+  the data is live and there is no script to fetch it. The server render and the first browser render of the grid are
+  the skeleton, so the cached page and the hydrated one agree; the URL is read and the first page asked for in the
+  browser. The grid writes the chosen category (when it honours the URL) and `q` back with `history.replaceState`.
+- **Settings** (`layer.settings.store`, read by `settings.ts`, which always returns a complete valid value):
+  `productGrid`: `categories` (ids, empty lists everything the store sells), `pageSize` (12 default, 1 to 48),
+  `showSearch`, `showCategoryFilter` (both on), `honourUrlCategory` (on); `productCard`: `product` `{ id, name, name_ar }`
+  (the names are for the canvas label only). The panels are `ProductGridSettings.tsx` and `ProductCardSettings.tsx`, in
+  the builder's own controls (decision 4). They read the open site's catalogue from two builder routes,
+  `GET /ycode/api/platform/store-elements/categories` and `.../products?q=&page=` (`manage_content` `r`; they work before
+  the store sells, since a site is built first).
+- **Several categories.** The W2 products route also takes `categories={id},{id}` (up to 24; any of them and under them;
+  not together with `category`), which is what a grid that lists chosen categories sends.
+- **Store off.** A store that does not sell answers 404 `store_not_found` on the store routes and the elements render
+  nothing (grid, card and indicator; the indicator asks `/ycode/api/store/settings`). A catalogue that cannot be read
+  (503, or any other failure) shows the failure state with "Try again"; "Load more" adds the next page of the page size.
+- **Cart seam** (`cart-store.ts`). The grid's "Add to cart" (a card without variants) and the indicator's count go
+  through `CartStore { count, subscribe, add }`, kept on `globalThis.__wsCartStore` and set by `connectCartStore()`. W5
+  writes the real cart and connects it; until it does the count is 0 and adding throws `CartStoreNotConnectedError`
+  (loud, not silent). The e2e puts a fake there before the page starts (`e2e/store-elements.spec.ts`).
+- **Links** (`links.ts`): the card opens `/product/{id}` and the indicator `/cart`, under the language's code on a page
+  that is not in the default language. W5 and W6 replace the two functions with the lookup of "the page with role X".
+- **Colours.** The elements read `--ws-store-primary`, `--ws-store-primary-soft` and `--ws-store-dark`
+  (`colours.ts`): the site's ycode colour variables named **Primary**, **Primary soft** and **Dark** (the plain names,
+  case and spacing ignored, the first of a name used twice), set on the element's wrapper as `var(--{id})`. A site without
+  one gets the design system's value (`#0F766E`, `#E7F3F1`, `#17201E`). Task B's templates must create variables by
+  those names. The sections' own layers (headings, "View all") use the design system's values as plain classes.
+- **Font.** IBM Plex Sans Arabic from the platform's mirror: the elements link `/ycode/api/store/font`, an anonymous
+  route that serves the mirrored stylesheet for that one family with its files pointed at
+  `/ycode/api/store/font/files/ibmplexsansarabic/...`. The mirror's own routes stay for the signed-in builder; any other
+  family is a 404 on the anonymous file route. The first request fetches the family from Google into the mirror on the
+  server (as the builder's fonts are); no visitor's browser reaches Google.
+- **Language and direction.** The page's locale: Arabic locales read Arabic, right to left; any other reads English
+  (`strings.ts`). Names come from `name_ar` on an Arabic page when the item has one. Prices are `25,000 IQD` / `25,000 د.ع`
+  (`$` for USD in Arabic), Western digits.
+- **Motion.** The skeleton pulses in opacity and the cart badge settles once on a change (160 ms, from 85 %, never
+  from 0); both are off under `prefers-reduced-motion: reduce`, and colour changes on hover run only with hover and no
+  reduced-motion request.
+- **Test.** `e2e/store-elements.spec.ts` (the platform stub's catalogue organization gains an empty category, Toys) and the
+  unit tests beside the modules (`lib/platform/store-elements/*.test.ts`).
+
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in

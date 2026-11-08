@@ -14,6 +14,8 @@ export const dynamic = 'force-dynamic';
  * per site).
  *
  *   ?category={id}&q=&page=1&page_size=12 (1 to 48; lib/platform/store-query.ts)
+ *   ?categories={id},{id}: instead of category, the products in any of up to 24 categories (a product grid that
+ *   lists chosen categories, W4)
  *   → { data: [product], meta: { page, page_size, total } }, by name. A product:
  *     { id, sku, name, name_ar, description, description_ar,
  *       price: { amount, currency, converted, from }, unit: { name, symbol } | null,
