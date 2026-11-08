@@ -53,6 +53,12 @@ export interface BosSession {
   name: string;
   org: string;
   perms: Partial<Record<WebStudioLeaf, Flag[]>>;
+  /**
+   * The user's x flag on Sales's sales.manage_orders, read at sign-in (part 2, session W8): the app shows confirm
+   * and cancel only when this and webstudio.manage_orders x are both true. Sales checks the user again on every
+   * change. A cookie from before this field has none, which reads as false.
+   */
+  sales_manage_orders_x?: boolean;
   iat: number;
   exp: number;
 }
@@ -157,6 +163,10 @@ export function roleFromPermissions(perms: BosSession['perms']): 'owner' | 'admi
   if (content.includes('c') || content.includes('u')) return 'designer';
   if (content.includes('r') || sites.includes('r')) return 'editor';
   return null;
+}
+
+export function hasSalesOrdersExecute(session: BosSession | null): boolean {
+  return session?.sales_manage_orders_x === true;
 }
 
 export function hasFlag(session: BosSession | null, leaf: WebStudioLeaf, flag: Flag): boolean {

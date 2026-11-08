@@ -4,6 +4,7 @@ import { defineConfig } from '@playwright/test';
 import { TEMPLATES_ORG } from './e2e/helpers';
 import { ensureTestKeys } from './e2e/test-keys';
 import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
+import { CONTACT_CENTER_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_APP_ID, SALES_KEY, WS_APP_ID } from './e2e/platform-fixtures';
 
 /**
  * End-to-end suite for the TORCH fork (part 1, session 1).
@@ -20,12 +21,22 @@ import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
  * Session 2: a stand-in for auth-service (e2e/auth-stub.ts) runs beside the
  * app, and the app verifies access tokens with a test key pair
  * (e2e/test-keys.ts) that the specs sign with.
+ *
+ * Part 2, session W1: one stand-in for the platform services the store calls
+ * with a service key (e2e/platform-stub.ts: Organization Setup and Product &
+ * Services; W2 and W3 add theirs), on the app's port + 3. Session W3: the same
+ * server stands in for Contact Center and Sales (e2e/order-services-stub.ts).
+ * Session W8: the same stubs answer the Orders API (Sales' list and status
+ * route, Contact Center's lookup-ids), and SALES_APP_ID and WS_APP_ID name the
+ * apps its deep links open.
  */
 const PORT = Number(process.env.E2E_PORT || 3102);
 const AUTH_PORT = Number(process.env.E2E_AUTH_PORT || PORT + 1);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const DC_PORT = Number(process.env.E2E_DC_PORT || PORT + 2); // the auth stub holds PORT + 1
 const DC_KEY = 'e2e-document-center-key';
+const PLATFORM_PORT = Number(process.env.E2E_PLATFORM_PORT || PORT + 3); // + 1 auth stub, + 2 Document Center
+const PLATFORM_URL = `http://127.0.0.1:${PLATFORM_PORT}`;
 const DATABASE_URL_TEST = process.env.DATABASE_URL_TEST;
 const { publicKeyPem } = ensureTestKeys();
 
@@ -52,6 +63,13 @@ export default defineConfig({
       url: `http://127.0.0.1:${DC_PORT}/__health`,
       reuseExistingServer: !process.env.CI,
       env: { FAKE_DC_PORT: String(DC_PORT), FAKE_DC_KEY: DC_KEY },
+    },
+    {
+      // Organization Setup and Product & Services (part 2, W1, W2), Contact Center and Sales (W3).
+      command: 'TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json node --require ts-node/register e2e/platform-stub.ts',
+      url: `${PLATFORM_URL}/__health`,
+      reuseExistingServer: !process.env.CI,
+      env: { E2E_PLATFORM_PORT: String(PLATFORM_PORT) },
     },
     {
       command: 'pnpm e2e:auth-stub',
@@ -84,6 +102,16 @@ export default defineConfig({
         PLATFORM_STORAGE: 'document-center',
         DOCUMENT_CENTER_URL: `http://127.0.0.1:${DC_PORT}`,
         DOCUMENT_CENTER_API_KEY: DC_KEY,
+        ORG_SETUP_URL: PLATFORM_URL,
+        ORG_SETUP_API_KEY: ORG_SETUP_KEY,
+        PRODUCT_SERVICES_URL: PLATFORM_URL,
+        PRODUCT_SERVICES_API_KEY: PRODUCT_SERVICES_KEY,
+        CONTACT_CENTER_URL: PLATFORM_URL,
+        CONTACT_CENTER_API_KEY: CONTACT_CENTER_KEY,
+        SALES_URL: PLATFORM_URL,
+        SALES_API_KEY: SALES_KEY,
+        SALES_APP_ID, // the Orders API's deep links (session W8)
+        WS_APP_ID,
       },
     },
   ],

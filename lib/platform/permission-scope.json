@@ -70,8 +70,8 @@
               "leaf_key": "webstudio.manage_orders",
               "system_role_defaults": {
                 "manager": { "c": true, "r": true, "u": true, "d": true, "x": true, "export": true, "use_ai": true },
-                "member": { "c": false, "r": false, "u": false, "d": false, "x": false, "export": false, "use_ai": false },
-                "viewer": { "c": false, "r": false, "u": false, "d": false, "x": false, "export": false, "use_ai": false }
+                "member": { "c": false, "r": true, "u": false, "d": false, "x": false, "export": false, "use_ai": false },
+                "viewer": { "c": false, "r": true, "u": false, "d": false, "x": false, "export": false, "use_ai": false }
               }
             }
           ]

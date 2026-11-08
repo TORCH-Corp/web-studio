@@ -56,6 +56,10 @@ import { isVirtualAssetField, findDisplayField, hasDynamicDateRule, isDynamicDat
 import { getDefaultFormatId, isFormatValidForFieldType } from '@/lib/variable-format-utils';
 import type { DynamicVisibilityCondition, FieldVariable, AssetVariable, DynamicTextVariable, DynamicRichTextVariable, LinkSettings } from '@/types';
 import type { DesignColorVariable } from '@/types';
+import { storeElementHtml } from '@/lib/platform/store-elements/html';
+import { canHaveStoreRole, matchProductPage, storeKindOf, type ProductPageState } from '@/lib/platform/store-elements/pages';
+import { readProductPage, storeSells } from '@/lib/platform/store-elements/product-page';
+import { isStoreElement } from '@/lib/platform/store-elements/settings';
 
 // Cached map provider tokens for synchronous use inside layerToHtml.
 // Set by ensureMapTokens() before HTML generation begins.
@@ -138,6 +142,8 @@ export interface PageData {
   pageLayers: PageLayers;
   components: Component[];
   collectionItem?: CollectionItemWithValues; // For dynamic pages
+  /** For the page with the product role (part 2, W5): what the catalogue says of the item the address names. */
+  storeProduct?: ProductPageState;
   collectionFields?: CollectionField[]; // For dynamic pages
   /**
    * Ordered ids of every item in the dynamic page's collection, sorted by
@@ -590,6 +596,9 @@ async function fetchPageByPathInternal(
       return null;
     }
 
+    // The item a product page's address names (part 2, W5); set when the address is the product page's path and an item.
+    let productItemId: string | null = null;
+
     // First, try to find an exact match (non-dynamic page)
     // Use translated slug matching if translations are available
     let matchingPage = pages.find((page: Page) => {
@@ -822,7 +831,28 @@ async function fetchPageByPathInternal(
         }
       }
 
-      // No matching page found (neither exact nor dynamic)
+      // The page with the product role answers at its path and one more segment, the item (part 2, W5)
+      const productMatch = matchProductPage({ targetPath, pages: pages as Page[], folders: folders as PageFolder[], translations });
+      if (!productMatch) {
+        // No matching page found (neither exact, dynamic nor product)
+        return null;
+      }
+      matchingPage = productMatch.page;
+      productItemId = productMatch.itemId;
+    }
+
+    // The page with the product role shows the item its address names; at its own address, with no item, that is
+    // "no longer available". A store that does not sell answers the site's own not-found page.
+    let storeProduct: ProductPageState | undefined;
+    if (storeKindOf(matchingPage) === 'product' && canHaveStoreRole(matchingPage)) {
+      const state = await readProductPage(tenantId, productItemId);
+      if (!state) return null;
+      storeProduct = state;
+    }
+
+    // The cart, checkout and confirmation pages answer the site's own not-found page too while the store does not sell.
+    const storeRole = storeKindOf(matchingPage);
+    if ((storeRole === 'cart' || storeRole === 'checkout' || storeRole === 'confirmation') && canHaveStoreRole(matchingPage) && !(await storeSells(tenantId))) {
       return null;
     }
 
@@ -835,6 +865,7 @@ async function fetchPageByPathInternal(
         locale: detectedLocale,
         availableLocales: availableLocales as Locale[] || [],
         translations,
+        ...(storeProduct ? { storeProduct } : {}),
       };
     }
 
@@ -887,6 +918,7 @@ async function fetchPageByPathInternal(
       availableLocales: availableLocales as Locale[] || [],
       translations,
       generatedCss: pageLayers?.generated_css || null,
+      ...(storeProduct ? { storeProduct } : {}),
     };
   } catch (error) {
     console.error('Failed to fetch page:', error);
@@ -5072,6 +5104,11 @@ export function layerToHtml(
         : '';
       return `<iframe${attrsStr}>${childrenHtml}</iframe>`;
     }
+  }
+
+  // Store elements (part 2): the shell with its loading state; the data is live (lib/platform/store-elements/html.ts)
+  if (isStoreElement(layer.name)) {
+    return storeElementHtml({ layer, attrs, locale, staticExport: pageLinkContext?.isStaticExport });
   }
 
   // Handle Map layers — provider-aware iframe

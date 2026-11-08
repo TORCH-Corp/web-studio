@@ -11,8 +11,12 @@
  * The scope itself is data, `permission-scope.json`: four leaves in three
  * modules with the flag defaults PRD V1.0 gives the Manager, Member and Viewer
  * profiles (Manager every flag, Member manage_content c r u and manage_sites r,
- * Viewer r on both, nothing on forms and orders). Part 1 enforces the first two
- * leaves; manage_forms and manage_orders are declared now for parts 2 and 3.
+ * Viewer r on both, nothing on forms). Part 1 enforces the first two leaves;
+ * manage_forms is declared now for part 3. Part 2 (PRD V1.1 "Roles and
+ * permissions") enforces manage_orders and gives Member and Viewer r on it: x,
+ * confirm and cancel, stays with the Manager. The scope is published again at
+ * every start, but a profile that already exists is not rewritten: its grants
+ * stay as an administrator set them.
  *
  * `buildWebStudioScope` adds the catalogue app id and gives the shape
  * auth-service's consumer expects (PermissionScopeShape); scope-registration.ts

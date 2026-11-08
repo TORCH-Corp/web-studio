@@ -46,6 +46,9 @@ test('the flag follows the method unless the route says otherwise', () => {
   assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'PATCH', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'u' });
   assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/open', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'r' });
   assert.deepEqual(accessFor('/ycode/api/platform/templates', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'r' });
+  // Store settings (part 2, W1): seen with r, changed with u, like the site settings.
+  assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/store', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'r' });
+  assert.deepEqual(accessFor('/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/store', 'PATCH', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'u' });
   assert.deepEqual(accessFor('/ycode/api/pages', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'c' });
   assert.deepEqual(accessFor('/ycode/api/pages/abc/status', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'u' });
   assert.deepEqual(accessFor('/ycode/api/publish', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'u' });
@@ -87,8 +90,35 @@ test('public and session-only routes, and the anonymous exceptions for visitors'
   assert.deepEqual(accessFor('/ycode/api/error-page', 'GET', q('code=404&published=true')), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/error-page', 'GET', q('code=404')), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'r' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/filter', 'POST', q()), { kind: 'public' });
+  // The storefront's reads (part 2, W2): anonymous on GET; any other method is the storefront leaf's, which no route serves.
+  for (const path of ['store/products', 'store/products/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'store/categories', 'store/settings']) {
+    assert.deepEqual(accessFor(`/ycode/api/${path}`, 'GET', q('page=2')), { kind: 'public' }, path);
+    assert.deepEqual(accessFor(`/ycode/api/${path}`, 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'c' }, path);
+  }
+  // The checkout (W3): anonymous on POST only; its confirmation read on GET only.
+  assert.deepEqual(accessFor('/ycode/api/store/checkout', 'POST', q()), { kind: 'public' });
+  assert.deepEqual(accessFor('/ycode/api/store/checkout', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'r' });
+  assert.deepEqual(accessFor('/ycode/api/store/orders/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'GET', q()), { kind: 'public' });
+  assert.deepEqual(accessFor('/ycode/api/store/orders/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'DELETE', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'd' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/load-more', 'POST', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/i1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'c' });
+});
+
+test('the Orders API (part 2, W8): r to list and read, x to confirm and cancel, on the orders leaf', () => {
+  const ORDER = '3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b';
+  const leaf = (flag: string) => ({ kind: 'leaf', leaf: 'webstudio.manage_orders', flag });
+  assert.deepEqual(accessFor('/ycode/api/platform/orders', 'GET', q('site_id=x&status=draft')), leaf('r'));
+  assert.deepEqual(accessFor('/ycode/api/platform/orders/waiting-count', 'GET', q()), leaf('r'));
+  assert.deepEqual(accessFor(`/ycode/api/platform/orders/${ORDER}`, 'GET', q()), leaf('r'));
+  assert.deepEqual(accessFor(`/ycode/api/platform/orders/${ORDER}/confirm`, 'POST', q()), leaf('x'));
+  assert.deepEqual(accessFor(`/ycode/api/platform/orders/${ORDER}/cancel`, 'POST', q()), leaf('x'));
+  // The waiting count is its own route, not an order called "waiting-count".
+  assert.equal(matchApiRoute('/ycode/api/platform/orders/waiting-count'), 'platform/orders/waiting-count');
+  assert.equal(matchApiRoute(`/ycode/api/platform/orders/${ORDER}`), 'platform/orders/[id]');
+  // Nothing else is served: an order cannot be edited or deleted here, and the other statuses are Sales's.
+  assert.equal(matchApiRoute(`/ycode/api/platform/orders/${ORDER}/deliver`), null);
+  // Orders are not the open site's content: no editor lock.
+  assert.equal(isEditingWrite(accessFor(`/ycode/api/platform/orders/${ORDER}/confirm`, 'POST', q())!, 'POST'), false);
 });
 
 test('a path under /ycode/api that no route names is unmapped; the preview and templates bridge are gated; other paths are not this map\'s', () => {
@@ -122,6 +152,7 @@ test('session 6: the writes that need the editor lock are the builder\'s non-rea
   // The sites API is not the open site's content.
   assert.equal(writes('POST', '/ycode/api/platform/sites'), false);
   assert.equal(writes('DELETE', '/ycode/api/platform/sites/5f1a4b0e-0000-4000-8000-000000000000'), false);
+  assert.equal(writes('PATCH', '/ycode/api/platform/sites/5f1a4b0e-0000-4000-8000-000000000000/store'), false);
   // Writes.
   assert.equal(writes('PUT', '/ycode/api/pages/abc'), true);
   assert.equal(writes('POST', '/ycode/api/pages'), true);

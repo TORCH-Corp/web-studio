@@ -13,7 +13,9 @@ import { actionTemplates } from './actions';
 import { mediaTemplates } from './media';
 import { formTemplates } from './forms';
 import { utilityTemplates } from './utilities';
-import { layoutTemplates } from './layouts';
+import { storeTemplates } from './store';
+import { layoutTemplates as ycodeLayoutTemplates } from './layouts';
+import { storeLayoutTemplates } from './store-layouts';
 
 // Merge all template categories
 const blocks = {
@@ -23,7 +25,11 @@ const blocks = {
   ...mediaTemplates,
   ...formTemplates,
   ...utilityTemplates,
+  ...storeTemplates,
 };
+
+// ycode's layouts plus the fork's Store sections (lib/templates/store-layouts.ts)
+const layoutTemplates = { ...ycodeLayoutTemplates, ...storeLayoutTemplates };
 
 /**
  * Get a layer (with IDs) from a template
@@ -375,6 +381,7 @@ const CATEGORY_ORDER = [
   'FAQ',
   'CTA',
   'Footer',
+  'Store',
   'Custom',
   'Other',
 ];

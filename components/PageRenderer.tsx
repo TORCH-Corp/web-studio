@@ -10,6 +10,8 @@ import YcodeBadge from '@/components/YcodeBadge';
 import { unstable_cache } from 'next/cache';
 import { buildAllPagesTag } from '@/lib/cache-tags';
 import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
+import { computeStorePagePaths, type ProductPageState, type StorePageContext } from '@/lib/platform/store-elements/pages';
+import { readStorePagePaths } from '@/lib/platform/store-elements/product-page';
 import { resolveCustomCodePlaceholders } from '@/lib/resolve-cms-variables';
 import { generateInitialAnimationCSS, type HiddenLayerInfo } from '@/lib/animation-utils';
 import { buildCustomFontsCss, buildFontClassesCss, fetchGoogleFontsCss, getCustomFontPreloads, getGoogleFontLinks } from '@/lib/font-utils';
@@ -348,6 +350,8 @@ interface PageRendererProps {
   generatedCss?: string;
   colorVariablesCss?: string;
   collectionItem?: CollectionItemWithValues;
+  /** The page with the product role: what the catalogue says of the item its address names (part 2, W5). */
+  storeProduct?: ProductPageState;
   collectionFields?: CollectionField[];
   /**
    * Ordered list of collection item ids on the dynamic page's collection.
@@ -406,6 +410,7 @@ export default async function PageRenderer({
   collectionFields = [],
   pageCollectionSortedItemIds,
   pageCollectionSortedItemSlugs,
+  storeProduct,
   locale,
   availableLocales = [],
   isPreview = false,
@@ -647,12 +652,19 @@ export default async function PageRenderer({
 
   // Fetch server-side settings needed by LayerRenderer (map tokens, color variables, timezone)
   // Globals follow the page's draft/published mode so previews see draft values.
-  const [mapboxToken, googleMapsEmbedKey, serverColorVariables, timezoneSetting, globalVariables] = await Promise.all([
+  const [mapboxToken, googleMapsEmbedKey, serverColorVariables, timezoneSetting, globalVariables, storePagePaths] = await Promise.all([
     getMapboxAccessToken(),
     getGoogleMapsEmbedApiKey(),
     getAllColorVariables(),
     getSettingByKey('timezone').catch(() => null),
     getAllGlobalVariables(usePublishedData).catch(() => []),
+    // Where the pages with a store role live: what the last publish wrote, or for a draft preview what the draft pages say.
+    usePublishedData
+      ? readStorePagePaths().catch((error: unknown) => {
+        console.error('[PageRenderer] The store pages could not be read:', error);
+        return {};
+      })
+      : Promise.resolve(computeStorePagePaths({ pages, folders, locales: [], translationsFor: () => undefined })),
   ]);
   // Flat id -> value map merged into resolution at render time.
   const globalsData = buildGlobalsValueMap(globalVariables);
@@ -670,6 +682,11 @@ export default async function PageRenderer({
   }
   if (typeof timezoneSetting === 'string' && timezoneSetting) {
     serverSettings.timezone = timezoneSetting;
+  }
+  // The store elements (part 2): the site their cart belongs to, the pages they lead to, and on the product page its item
+  if (siteId) {
+    const store: StorePageContext = { site_id: siteId, pages: storePagePaths, ...(storeProduct ? { product: storeProduct } : {}) };
+    serverSettings.store = store;
   }
 
   // Pre-resolve all asset URLs for SSR (images, videos, audio, icons, and field values)

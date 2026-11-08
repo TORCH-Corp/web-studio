@@ -6,6 +6,7 @@ import { publishLocalisation } from '@/lib/services/localisationService';
 import type { PublishLocalisationResult } from '@/lib/services/localisationService';
 import { publishFolders } from '@/lib/services/folderService';
 import { publishCSS, savePublishedAt } from '@/lib/services/settingsService';
+import { publishStorePages } from '@/lib/platform/store-elements/product-page';
 import {
   clearAllCache,
   selectiveInvalidation,
@@ -629,6 +630,17 @@ export async function POST(request: NextRequest) {
       // Silently handle - non-fatal
     }
 
+    // Where the page with each store role lives (part 2, W5), written once per publish. The store elements of
+    // every page carry these paths, so a change renders every page again (below). If it cannot be written the
+    // pages are rendered again too, rather than left with a link that may be old.
+    let storePagesChanged = false;
+    try {
+      storePagesChanged = await publishStorePages();
+    } catch (err) {
+      console.error('[Publish] the store pages could not be written:', err);
+      storePagesChanged = true;
+    }
+
     // Selective cache invalidation: only invalidate pages that actually changed.
     //
     // Global triggers (full invalidation):
@@ -656,6 +668,14 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         globalChanged = true;
         globalChangedReason = `color hash check failed: ${err instanceof Error ? err.message : 'unknown'}`;
+      }
+
+      // Every store element carries the paths of the pages with a store role.
+      if (storePagesChanged) {
+        globalChanged = true;
+        globalChangedReason = globalChangedReason
+          ? `${globalChangedReason}; store pages changed`
+          : 'store pages changed';
       }
 
       // Global variables can be injected into any page, so any published

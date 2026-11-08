@@ -36,6 +36,9 @@ import { clsx } from 'clsx';
 import type { HiddenLayerInfo } from '@/lib/animation-utils';
 import { transformLayerIdsForInstance } from '@/lib/resolve-components';
 import { FormHoneypotField } from '@/components/FormHoneypotField';
+import { PublishedStoreElement } from '@/lib/platform/store-elements/StoreElement';
+import { isStoreElement } from '@/lib/platform/store-elements/settings';
+import type { StorePageContext } from '@/lib/platform/store-elements/pages';
 
 /**
  * Per-layer-type code splitting.
@@ -1455,6 +1458,19 @@ const LayerItem: React.FC<{
           data-icon="true"
           style={iconAspectRatio ? { aspectRatio: iconAspectRatio, ...iconElementStyle } : iconElementStyle}
           dangerouslySetInnerHTML={{ __html: iconHtml }}
+        />
+      );
+    }
+
+    // Store elements (part 2): the live catalogue and the buyer's cart, in the page's language
+    if (isStoreElement(layer.name)) {
+      return (
+        <PublishedStoreElement
+          layer={layer}
+          elementProps={elementProps}
+          colorVariables={serverSettings?.color_variables as Array<{ id: string; name: string }> | undefined}
+          locale={currentLocale}
+          store={serverSettings?.store as StorePageContext | undefined}
         />
       );
     }

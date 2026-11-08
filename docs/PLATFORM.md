@@ -1,7 +1,9 @@
 # Web Studio on the TORCH platform (ycode fork)
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below), then part 2 (storefront and cart,
+on `feature/web-studio-storefront-and-cart`: sessions W1 to W8 and D1 below; **"Part 2 in production (session D1)"** is
+the one place that lists its keys, tables, routes, checkout flow, image cache and how it was deployed).
 
 ## How the service runs (session 11)
 One container, `web-studio`, in the platform's compose project on the production server
@@ -27,10 +29,13 @@ server from this repository's `Dockerfile` and is not pulled from a registry:
 - **Compose pieces.** Service `web-studio` publishing `127.0.0.1:6030`; `web-studio-db` (postgres:16, database
   `webstudio`, its own volume `web_studio_postgres_data`, no published port, like a service's own database); volume
   `web_studio_storage` at `/var/lib/webstudio/storage`. In `PLATFORM_STORAGE=document-center` mode that volume holds only
-  the font mirror (`_mirror/fonts`); in `disk` mode it holds every site's files. Secrets in the root `.env`:
+  the font mirror (`_mirror/fonts`) and the store's item images (`_store-media`, part 2, W2); in `disk` mode it holds every
+  site's files as well. Secrets in the root `.env`:
   `WEBSTUDIO_DB_PASSWORD`, `WEBSTUDIO_SESSION_SECRET`, `WEBSTUDIO_PAGE_AUTH_SECRET`, plus `WEBSTUDIO_APP_ID` (the
   catalogue id of Web Studio) and `WEBSTUDIO_TEMPLATES_ORG`. The service reuses `AUTH_SERVICE_API_KEY`,
-  `DOCUMENT_CENTER_API_KEY` and `DOMAIN_SERVICE_API_KEY` from the same `.env`.
+  `DOCUMENT_CENTER_API_KEY` and `DOMAIN_SERVICE_API_KEY` from the same `.env`, and since part 2 the keys of the services
+  the store calls (`AUTH_INTERNAL_SERVICE_API_KEY`, `PS_SERVICE_API_KEY`, `CC_SERVICE_API_KEY`, `SALES_SERVICE_API_KEY`) and
+  `SALES_APP_ID`: see "Part 2 in production".
 - **nginx.** `docker/nginx/` holds what is installed on the server: `web-studio.torchcorp.com` (Cloudflare-proxied,
   origin certificate), `sites.torchcorp.com` (`server_name sites.torchcorp.com *.sites.torchcorp.com`, DNS only, the
   Let's Encrypt wildcard certificate at `/etc/letsencrypt/live/sites.torchcorp.com/`, renewed by certbot's timer, whose
@@ -67,12 +72,30 @@ site answers on its hosts (the default language at `/`, the others at `/{locale}
 an unused host is 404. Details of each step are in the sections below.
 
 ## Server e2e
-`pnpm e2e:server` (`playwright.server.config.ts`, `e2e/server/deployment.spec.ts`) runs against the deployed service over
-HTTPS: health, the dev login refused (404), 401 without a session, an unused address 404, a real access token from
-auth-service through the callback, the three templates, a site created, published and served on
-`https://{slug}.sites.torchcorp.com` in both languages, then deleted. It needs `E2E_BOS_EMAIL` and `E2E_BOS_PASSWORD` (a test
-account; its organization is the test organization) and starts nothing. The local `pnpm e2e` leaves `e2e/server` out
-(`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it drops the schema.
+`pnpm e2e:server` (`playwright.server.config.ts`, `e2e/server/*.spec.ts`) runs against the deployed service over HTTPS. It
+needs `E2E_BOS_EMAIL` and `E2E_BOS_PASSWORD` (a test account; its organization is the test organization) and starts nothing.
+`deployment.spec.ts` (part 1) is: health, the dev login refused (404), 401 without a session, an unused address 404, a real
+access token from auth-service through the callback, the three templates, a site created, published and served on
+`https://{slug}.sites.torchcorp.com` in both languages, then deleted. Part 2 (session D1) adds five, against the real
+Organization Setup, Product & Services, Contact Center, Sales and Document Center, no stub: `store-settings.spec.ts`,
+`catalogue.spec.ts` (with the item's real image), `checkout.spec.ts`, `orders-api.spec.ts` and `storefront-browser.spec.ts` (a
+buyer in a real browser on a published site, and every host the store pages and the builder contact). The local `pnpm e2e`
+leaves `e2e/server` out (`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it
+drops the schema.
+- **What a run uses and leaves** (`e2e/server/real-services.ts`). One login for the whole run (`global-setup.ts` keeps the
+  token in `E2E_ACCESS_TOKEN`, in memory; auth-service answers 429 after 20 logins in 15 minutes). One fixed test item,
+  SKU `E2E-WS-STORE-01` ("E2E Web Studio test item", 25,000 IQD, the "All - General" leaf category, with one 8 x 8 PNG as its
+  `product_image` uploaded through Document Center), found by its SKU or made, put active and on the ECOMMERCE channel at the
+  start, and switched off (channel off, INACTIVE) by `global-teardown.ts`, because Product & Services only deletes drafts. One
+  fixed test buyer, `0770 000 0099` (Contact Center holds the person as `9647700000099`, found by phone on every run). Each
+  spec makes its own site on the test organization (selling, IQD, the headquarters branch, a 2,500 fee) and deletes it. Every
+  Sales order a run makes is **cancelled** by the run through the Orders API's status route, even when a spec fails (each
+  spec's `afterAll`), so the order stays in Sales as cancelled with the reason and the acting user; a run leaves no draft or
+  confirmed order. `platform_storefront_orders` keeps one row per checkout, for the soft-deleted site.
+- **The check that nothing goes to a public host** is `storefront-browser.spec.ts`: it records the host of every request,
+  websockets included, of a published store page in English and in Arabic, and of the builder opening the site and its Store
+  elements. The store pages contact only the site's own host. The builder contacts its own host and one more, Cloudflare's Web
+  Analytics beacon, which Cloudflare's edge injects into the HTML of the proxied builder host (see "Part 2 in production").
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -157,7 +180,7 @@ The production values are in the compose service `web-studio` (secrets from the 
     PLATFORM_PUBLIC_URL=https://web-studio.torchcorp.com
     PLATFORM_STORAGE=disk   # or document-center (session 8; production)
     PLATFORM_STORAGE_DIR=/var/lib/webstudio/storage   # disk mode; the font mirror in either mode
-    DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode
+    DOCUMENT_CENTER_URL=http://document-center-service:6016   # document-center mode, and the store's item images in either mode (W2)
     DOCUMENT_CENTER_API_KEY=<Document Center's SERVICE_API_KEY>
     WS_SITES_DOMAIN=sites.torchcorp.com   # default addresses are {slug}.{this}; required, never guessed
     DOMAIN_SERVICE_URL=http://domain-service:6012   # with DOMAIN_SERVICE_API_KEY: the organization's verified domains
@@ -167,6 +190,15 @@ The production values are in the compose service `web-studio` (secrets from the 
     ALLOW_DEV_LOGIN=false   # absent in production; true only on a dev box: POST /ycode/api/auth/dev-login
     WS_PARTS=1   # absent in production: shows Collections and Forms (parts 2 and 3)
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4); on the server "TORCH corp"
+    ORG_SETUP_URL=http://auth-service:6001   # Organization Setup (served by auth-service): the branches (W1), the day's rate and unit names (W2)
+    ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # ${AUTH_INTERNAL_SERVICE_API_KEY} in the root .env; the internal routes take the service key (and x-entity-id for the rate and units); Sales holds the same key
+    PRODUCT_SERVICES_URL=http://product-services-service:6024   # Product & Services: the category tree (W1), the items, variants and images (W2)
+    PRODUCT_SERVICES_API_KEY=<product-services' SERVICE_API_KEY>   # ${PS_SERVICE_API_KEY} in the root .env; with x-entity-id = the organization
+    CONTACT_CENTER_URL=http://contact-center-service:6017   # the checkout's buyer: find or create a person by phone (W3)
+    CONTACT_CENTER_API_KEY=<contact-center's SERVICE_API_KEY>   # ${CC_SERVICE_API_KEY} in the root .env; with x-entity-id
+    SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
+    SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
+    SALES_APP_ID=<Sales's catalogue app id>   # ${SALES_APP_ID} in the root .env; the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -242,6 +274,421 @@ description changes: `pnpm templates:seed`.
   ycode's `/a/` handler inside `runWithSite`, with `width`, `height` and `quality` passed on. Uploads are
   stored as WebP (`lib/file-upload.ts`), named without their extension. Test: `e2e/site-assets.spec.ts`.
 
+## Store settings (part 2, session W1)
+- **API.** `GET` and `PATCH /ycode/api/platform/sites/{id}/store` (`manage_sites` r / u, the same session and
+  organization checks as the settings route), in `app/(builder)/ycode/api/platform/sites/[id]/store/route.ts`; the logic is
+  `lib/platform/store-settings.ts`, the body and its rules `store-settings-input.ts`. The route's own comment lists the
+  fields and the statuses. Store settings are not page content: they apply to the published site at once, with no publish.
+- **Where they live.** `platform_site_store` (migration `20261108000001_torch_site_store.ts`), one row per site made on the
+  site's first read: `selling`, `currency` (IQD or USD), `branch_id` (Organization Setup's), `category_ids` (Product &
+  Services'), `delivery_fee` numeric(14,2), `updated_at`, `updated_by`. The table refuses selling without a branch. Names,
+  the branches to choose from and the category tree are read live on every `GET`; nothing of theirs is stored.
+- **Checkouts.** `platform_storefront_orders` (same migration): per checkout that became a Sales order, the site, the
+  checkout id, the Sales order's id and code, the time; unique per site and checkout. Written by session W3. No buyer or
+  item data.
+- **Not copied by a template**: neither table is in `COPIED_TABLES`; a copy starts with the defaults, and a template's
+  store cannot be changed (403): a template never sells.
+- **Services.** `lib/platform/org-setup.ts`: `POST /api/internal/branches/` (the organization's active branches, every
+  type, warehouses included) and `/by-ids` (an archived branch's name) on auth-service, with the service key alone, as
+  Sales and queue-service call them; the user-facing `/org-setup/branches` needs Organization Setup access a Web Studio
+  user may lack. Checked on production on 8 Nov 2026, read only: 200 with the key, 401 without.
+  `lib/platform/product-services.ts`: `GET /categories/tree` and `GET /categories/{id}` with the service key and
+  `x-entity-id`. Product & Services counts the items of a category itself, every status; items sit on leaf categories.
+- **Rules** (owner, 8 Nov 2026). A chosen category covers every category under it, and its count is summed up the tree.
+  Selling needs a branch (422 `branch_required`); a currency change needs the fee in the same request (422
+  `fee_required`). A change is checked only for what it changes: a new branch must be an active branch of the
+  organization and the stored one is checked again when selling is switched on (422 `branch_unavailable`); new categories
+  must be live ones of the organization (422 `categories_unavailable`). A branch or category archived or deleted since it
+  was chosen stays stored and is shown with `available: false`. A service that cannot be asked leaves `branches` or
+  `category_tree` null with the reason in `branches_error` / `category_tree_error` and `available: null` on the chosen
+  values; a change that needs its check answers 503 (`org_setup_unavailable`, `product_services_unavailable`).
+- **The published site** reads a site's store through `storeOf(siteId)`, kept 30 s per site and forgotten when a change is
+  saved (another process keeps it for at most 30 s). Sessions W2 and W3 use it.
+- **Test.** `e2e/store-settings.spec.ts`. `e2e/platform-stub.ts` (port `E2E_PORT + 3`, data in `e2e/platform-fixtures.ts`)
+  stands in for Organization Setup and Product & Services, and `POST /__down` makes them answer 503; W2 and W3 add their
+  routes to it.
+
+## Catalogue and the store API (part 2, session W2)
+- **Routes.** Anonymous `GET`s on a published site's own host: `/ycode/api/store/products` (`category`, `q`, `page`,
+  `page_size` 1 to 48, default 12), `/ycode/api/store/products/{id}`, `/ycode/api/store/categories`,
+  `/ycode/api/store/settings` (`selling`, `currency`, `delivery_fee`), in the proxy's map under `manage_orders` with an
+  anonymous `GET`; and `/store-media/{documentId}?item={productId}` (`app/store-media/[documentId]/route.ts`), the item
+  images. Each route file's comment gives its shape and statuses. The site comes from the host alone
+  (`lib/platform/store-api.ts`): `resolveSiteId` would read the builder's `ws_site` cookie first and serve a store on the
+  builder host, which must answer 404. A store that does not sell answers 404 (`store_not_found`) on every store route, the
+  images included. A service that cannot be asked answers 503 with `product_services_unavailable`,
+  `org_setup_unavailable` or `document_center_unavailable`.
+- **Eligibility** (`lib/platform/catalogue-rules.ts`, the file's header is the rule): ACTIVE, the item's own ECOMMERCE
+  channel on (`GET /items?channel=ecommerce&status=ACTIVE`), never a child row, in the site's categories or under them
+  (none chosen: every item), and a price that is not 0 or null. A product with variants is the parent; each child is an
+  option, `available: false` with `inactive`, `no_price` or `no_rate` when it cannot be bought; the card shows the lowest
+  available price as `from`; a parent none of whose variants can be bought is not on sale (404). A variant without an image
+  shows the product's.
+- **Money** (`lib/platform/store-money.ts`). Exact decimals, never floats. One rate both ways, Organization Setup's USD→IQD
+  spot rate of the day in Baghdad (`/api/internal/org-setup/exchange-rates/as-of`, service key and `x-entity-id`; it has no
+  IQD→USD rate on production and never inverts): USD × rate is IQD, IQD ÷ rate is USD, rounded half up to the currency's
+  precision (IQD whole, USD two decimals), Sales's rule P22. No rate for the day, or a currency other than the two, makes
+  the item or variant unavailable, never an error. Sales's service create (SL2) must charge by the same rule.
+- **Units.** `POST /api/internal/org-setup/uoms/lookup` with the service key, as Sales names a line's unit.
+- **Cache.** A site's whole catalogue is read at once (every page of items, each parent's variants workspace, the units, the
+  rate when needed), because the eligibility cannot be asked of Product & Services and a grid page is cut after it. Kept
+  60 s per site, one read at a time (`lib/platform/catalogue.ts`, `catalogue-cache.ts`), forgotten when the store settings
+  change; a failed read is not kept. A product's images (`GET /items/{id}/documents`, `product_image`) are read the first
+  time its page or image asks, with the catalogue they belong to.
+- **Images** (`lib/platform/store-media.ts`). An image is served only when it is the product's, a variant's or one of the
+  product's own, for a product the site sells now; no other document of the organization comes through a site. The bytes
+  are fetched once from Document Center (`GET /documents/{id}/download`, `DOCUMENT_CENTER_API_KEY` and the organization;
+  every download is logged there) and kept on disk in either storage mode, as the font mirror is:
+  `PLATFORM_STORAGE_DIR/_store-media/{organization}/{document}/{sha256}` with `current.json`. Once a day at most the copy is
+  checked against the document's current version (`GET /documents/{id}`, `currentVersion.fileHash`, which Document Center
+  records as "viewed") and fetched again when it changed; while Document Center cannot be asked the copy is served and the
+  check retried after ten minutes. Raster types only (JPEG, PNG, WebP, GIF, AVIF); a document of another type (Product &
+  Services can be set to take SVG) is refused, answered 404, and not downloaded again until a day later. Served with
+  `cache-control: public, max-age=86400`, the sha256 as ETag, `nosniff`.
+- **Test.** `e2e/catalogue.spec.ts`. The platform stub answers the items, the workspace, the documents, the rate (`POST
+  /__rate { found }`) and the units; the fake Document Center holds the item images from `e2e/platform-fixtures.ts` and
+  counts downloads (`GET /__hits?document=`).
+
+## Checkout (part 2, session W3)
+- **Routes.** `POST /ycode/api/store/checkout` and `GET /ycode/api/store/orders/{checkout_id}`, anonymous on a selling site's
+  own host only (`sellingSite`, as W2's routes; the builder host and a store that does not sell answer 404
+  `store_not_found`), in the proxy's map under `manage_orders` with an anonymous `POST` and `GET`. Each route file's comment
+  gives the body, the answers and their codes. The flow is `lib/platform/checkout.ts`; the body and its field rules
+  `checkout-input.ts`; the line checks, Sales's refusals and the confirmation's shape `checkout-rules.ts`; the cities
+  `iraq-governorates.ts` (19, Halabja included: OPEN_QUESTIONS 27).
+- **One order per checkout.** The page makes `checkout_id` once per cart and keeps it until success. A checkout already in
+  `platform_storefront_orders` is answered from it, with no call. Otherwise: the lines are checked against the site's
+  catalogue (W2's, up to 60 s old: `item_unavailable` names each line, `inactive`, `no_price`, `no_rate`, `parent` or
+  `not_on_sale`); a USD store asks the day's rate first (none: 503, OPEN_QUESTIONS 30); Contact Center finds or creates the
+  person by the canonical phone; Sales creates the draft order; its id and code are stored. Two requests with one checkout
+  in this process share one flight; across processes Sales's idempotency per checkout id and the table's unique (site,
+  checkout) keep it one order. A failure stores nothing; a person made before Sales failed stays and the retry finds it.
+- **What goes where.** Contact Center gets the name and the phone in its canonical form (`964` and the ten national digits).
+  Sales gets `source: storefront`, the site as `sourceReference`, the checkout id, the person as the customer, the store's
+  branch, currency and fee, the lines (item id and quantity, never a price), `cash_on_delivery`, the address with the city
+  in the buyer's language and the phone as typed, and the notes. Web Studio stores the order's id and code only; nothing of
+  the buyer is stored or logged here. The confirmation read asks Sales (`GET /internal/orders/{id}`) each time.
+- **Phone.** Iraqi mobiles only (OPEN_QUESTIONS 33): ten digits starting with 7 after `0`, `964`, `+964` or `00964`, with
+  spaces, dots, dashes or brackets, ASCII or Arabic-Indic digits; at most 32 characters as typed (Sales keeps that much).
+- **Sales's refusals.** An item code (`item_not_found`, `item_inactive`, `item_is_parent`, `item_no_price`,
+  `item_currency_mismatch`) or `no_rate_for_date` with `items` naming lines of the cart is `item_unavailable` for those
+  lines, and the site's catalogue is read again; any other refusal (customer, branch, the order's own rate) answers 503 and
+  is logged as the store's problem. A 400 from Sales is a contract mismatch (500, logged).
+- **Screening** is the form route's `screenFormSubmission` (same origin, size caps, honeypot, rate limit with the site's
+  Security settings), given a counter of its own (`lib/platform/checkout-limit.ts`, the one seam added to ycode's
+  `lib/form-spam-protection.ts`): per site and IP, the checkouts that reached Contact Center in the window, kept in memory
+  (OPEN_QUESTIONS 28). Each checkout counts once: the same checkout id with the same phone, tried again after Sales failed
+  or refused an item, is not counted again (W3 review fix). A filled honeypot answers 201 with `code: null`, calls nothing
+  and stores nothing (OPEN_QUESTIONS 31).
+- **Before production:** Contact Center's find-or-create is live (C1, 8 Nov 2026); Sales's service create (SL2) and SL1's
+  order fields must be deployed first, with `deliveryAddress.phone` and the `items` of a 422 (the session plan, amended
+  8 Nov 2026). They were released on 8 Nov 2026 (18:42 UTC) and session D1's server e2e placed real orders through them.
+- **Test.** `e2e/checkout.spec.ts`. The platform stub answers Contact Center and Sales (`e2e/order-services-stub.ts`),
+  records every call (`GET /__calls?service=`), and can refuse the next order (`POST /__sales/refuse`) or slow every create
+  (`POST /__sales/delay`). Next fills a missing `x-forwarded-for` with the socket's address, so the spec's requests share one
+  IP and the spec raises its site's limit.
+
+## Store elements (part 2, session W4)
+The Store category of the element library: **Product grid**, **Product card** and **Cart indicator**, and two ready sections,
+**Products grid** and **Featured products**, under a Store category of the Layouts tab. The cart, the product page and
+the checkout are W5 and W6. Platform code is `lib/platform/store-elements/`; the ycode files only name the elements
+(the seven places the research lists for `htmlEmbed`: `lib/templates/blocks.ts` with `lib/templates/store.ts`,
+`ElementLibrary.tsx`, `lib/layer-utils.ts` (tag, leaf, no collection, no link), `lib/layer-style-groups.ts`,
+`LayerRenderer.tsx`, `LayerRendererPublic.tsx`, `lib/page-fetcher.ts` `layerToHtml`, `RightSidebar.tsx`) and `types/index.ts`
+(`LayerSettings.store`).
+- **Three render paths.** The canvas draws sample data (the handoff's eight products, three categories, a cart of 4) and
+  never calls the store API or asks for an image; the published page (`PublishedStoreElement`) is a client component that
+  fetches `/ycode/api/store/products` (W2) with the element's settings and the page's `?category=` and `?q=`; the HTML
+  string (`layerToHtml`: static export, filter and load-more HTML) is the wrapper with the skeleton (`html.ts`), because
+  the data is live and there is no script to fetch it. The server render and the first browser render of the grid are
+  the skeleton, so the cached page and the hydrated one agree; the URL is read and the first page asked for in the
+  browser. The grid writes the chosen category (when it honours the URL) and `q` back with `history.replaceState`.
+- **Settings** (`layer.settings.store`, read by `settings.ts`, which always returns a complete valid value):
+  `productGrid`: `categories` (ids, empty lists everything the store sells), `pageSize` (12 default, 1 to 48),
+  `showSearch`, `showCategoryFilter` (both on), `honourUrlCategory` (on); `productCard`: `product` `{ id, name, name_ar }`
+  (the names are for the canvas label only). The panels are `ProductGridSettings.tsx` and `ProductCardSettings.tsx`, in
+  the builder's own controls (decision 4). They read the open site's catalogue from two builder routes,
+  `GET /ycode/api/platform/store-elements/categories` and `.../products?q=&page=` (`manage_content` `r`; they work before
+  the store sells, since a site is built first).
+- **Several categories.** The W2 products route also takes `categories={id},{id}` (up to 24; any of them and under them;
+  not together with `category`), which is what a grid that lists chosen categories sends.
+- **Store off.** A store that does not sell answers 404 `store_not_found` on the store routes and the elements render
+  nothing (grid, card and indicator; the indicator asks `/ycode/api/store/settings`). A catalogue that cannot be read
+  (503, or any other failure) shows the failure state with "Try again"; "Load more" adds the next page of the page size.
+- **Cart seam** (`cart-store.ts`). The grid's "Add to cart" (a card without variants) and the indicator's count go
+  through `CartStore`, kept on `globalThis.__wsCartStore` and set by `connectCartStore()`. Session W5 writes the real
+  cart and connects it (below); with none connected the count is 0 and a change throws `CartStoreNotConnectedError`
+  (loud, not silent).
+- **Links** (`links.ts`): session W5 replaced W4's fixed paths with the lookup of "the page with role X" (below).
+- **Colours.** The elements read `--ws-store-primary`, `--ws-store-primary-soft` and `--ws-store-dark`
+  (`colours.ts`): the site's ycode colour variables named **Primary**, **Primary soft** and **Dark** (the plain names,
+  case and spacing ignored, the first of a name used twice), set on the element's wrapper as `var(--{id})`. A site without
+  one gets the design system's value (`#0F766E`, `#E7F3F1`, `#17201E`). Task B's templates must create variables by
+  those names. The sections' own layers (headings, "View all") use the design system's values as plain classes.
+- **Font.** IBM Plex Sans Arabic from the platform's mirror: the elements link `/ycode/api/store/font`, an anonymous
+  route that serves the mirrored stylesheet for that one family with its files pointed at
+  `/ycode/api/store/font/files/ibmplexsansarabic/...`. The mirror's own routes stay for the signed-in builder; any other
+  family is a 404 on the anonymous file route. The first request fetches the family from Google into the mirror on the
+  server (as the builder's fonts are); no visitor's browser reaches Google.
+- **Language and direction.** The page's locale: Arabic locales read Arabic, right to left; any other reads English
+  (`strings.ts`). Names come from `name_ar` on an Arabic page when the item has one. Prices are `25,000 IQD` / `25,000 د.ع`
+  (`$` for USD in Arabic), Western digits.
+- **Motion.** The skeleton pulses in opacity and the cart badge settles once on a change (160 ms, from 85 %, never
+  from 0); both are off under `prefers-reduced-motion: reduce`, and colour changes on hover run only with hover and no
+  reduced-motion request.
+- **Test.** `e2e/store-elements.spec.ts` (the platform stub's catalogue organization gains an empty category, Toys) and the
+  unit tests beside the modules (`lib/platform/store-elements/*.test.ts`).
+
+## Orders API (part 2, session W8)
+- **Routes** (all in the proxy's map under `webstudio.manage_orders`; each route file's comment gives the answer's shape):
+  `GET /ycode/api/platform/orders` (r; `site_id`, `status`, `q`, `cursor`, `limit`), `GET .../orders/waiting-count` (r),
+  `GET .../orders/{id}` (r), `POST .../orders/{id}/confirm` and `POST .../orders/{id}/cancel { reason }` (x). They sit under
+  `platform/`, so they need a session and no open site. The logic is `lib/platform/orders.ts`, the shapes
+  `orders-view.ts`, Sales' calls `sales.ts`, the buyers `contact-center.ts`, Sales' refusals `orders-errors.ts`.
+- **Where a row comes from.** Sales `GET /internal/orders?source=storefront` (paged by Sales' cursor, `status` and
+  `sourceReference` = the site id as filters; its `total` counts the rows matching them across all pages), then
+  `platform_storefront_orders` joined with `platform_sites` for the site and its name and the checkout id (an order with no
+  record is placed by its `sourceReference`; a deleted site's orders stay, with its name), then Contact Center
+  `POST /api/v1/directory/lookup-ids` for the buyer's name and phone, in chunks of 100. `q` (the order's code or the buyer's
+  name) is matched on the page just fetched, so a page can have fewer rows than `limit` and still have a `next_cursor`.
+  Web Studio keeps no buyer or order data. Contact Center out of reach: the rows come back with no buyer name or phone and
+  `buyer_error: 'contact_center_unavailable'`; Sales out of reach: 503 `sales_unavailable`.
+- **Waiting count** is the `total` of Sales' list for `status=draft` with `limit=1`: one call, exact.
+- **Detail.** Sales `GET /internal/orders/{id}` plus the buyer and the site: the lines with their axes, the address (the phone
+  as typed), the fee, the payment method, the notes, and the status history with its actors. **The history is whatever
+  Sales sends**: the service read built in SL1 carries none (the user-token read does), so it is `[]` until Sales adds
+  `history` (`fromStatus`, `toStatus`, `reason`, `changedBy { id, kind, name }`, `changedAt`) to `OrderObjectDetailSchema`
+  (OPEN_QUESTIONS 38 and 39; still the case on production after SL1 to SL3 went live on 8 Nov 2026, D1). `links.open_in_sales` is `torch://app/<SALES_APP_ID>/orders/<id>`, the target Sales' own notification
+  uses; `links.open_in_web_studio` is the same with `WS_APP_ID`; each is null when its variable is unset (logged once).
+- **Confirm and cancel** call Sales' service status route (`POST /internal/orders/{id}/status`, SL3) with the session's user as
+  `actingUserId`; nothing else identifies the user (the session holds no access token). Sales checks that user's own x flag on
+  `sales.manage_orders`, names them in the history and publishes the event. Web Studio does not repeat the check from the
+  sign-in snapshot: Sales' `403 permission_missing` is `403 { code: 'sales_permission_missing', required: 'sales.manage_orders.x' }`
+  (Web Studio's own flag is the proxy's `403 { required: 'webstudio.manage_orders.x' }`); a rule of the order keeps Sales'
+  status and code (`422 invalid_transition`, `409 order_invoiced`); no such order is 404. The answer is `{ data: { id, status } }`:
+  the app reads the order again for its history. Delivered and finished are Sales-only.
+- **The Sales flag for the read-only view.** The sign-in callback also reads `GET /authz/my-permissions?namespace=sales` with
+  the user's token (with the two reads it already makes; the same auth-service, so it fails with them) and keeps x on
+  `sales.manage_orders` in the session cookie as `sales_manage_orders_x`; `GET /ycode/api/auth/session` returns it (null with
+  no session; false for a cookie from before). The app shows confirm and cancel only when it and `webstudio.manage_orders` x
+  are both true; the server checks anyway.
+- **Scope defaults.** `permission-scope.json` gives Member and Viewer r on `manage_orders` (Manager unchanged). The scope is
+  published again at every start, but a profile that already exists is not rewritten: the test organizations' Member and
+  Viewer profiles get the flag by hand in Organization Setup.
+- **Before production:** Sales' service status route (SL3) deployed, and SL1's order fields; the environment above gains
+  `SALES_APP_ID`. The e2e stands in for the status route as the session plan defines it. (All of it live on 8 Nov 2026,
+  checked by session D1's server e2e against the real Sales.)
+- **Test.** `e2e/orders-api.spec.ts`. The platform stub (`e2e/order-services-stub.ts`) answers Sales' list and status route
+  (the acting user's flag is read from `e2e/auth-fixtures.ts`, the people the auth stub answers for) and Contact Center's
+  `lookup-ids`.
+
+## Product page and the cart (part 2, session W5)
+The **Product page** element (`productDetail`, a leaf like W4's), a page **store role**, the buyer's **cart** in the browser
+and the links between them. Platform code is `lib/platform/store-elements/`; the ycode files only name the element (the
+same places as W4's), add the role to the page settings panel (`PageSettingsPanel.tsx` with `PageStoreRole.tsx`) and
+resolve the product page in `fetchPageByPath`.
+- **The role.** `PageSettings.store = { kind: 'product' }`, set in the page settings panel ("Store page"). Only an ordinary
+  page can have one (not a collection page, an index page or an error page), and a site has one page for each role (the
+  panel refuses a second). W6 adds `cart`, `checkout` and `confirmation` (`PANEL_PAGE_KINDS` in `pages.ts`); the lookup is
+  already written for all four.
+- **The address.** The page answers at its own path and one more segment, the item's id: `/products/{itemId}` for a page
+  with the slug `products` (the slug is not reserved; the role is what matters), under a language's code and with
+  translated slugs in another language. `fetchPageByPath` resolves it after the exact match and the collection pages
+  (`matchProductPage`), reads the item from the catalogue (W2's `getProduct`, through `readProductPage`) and injects it as
+  `PageData.storeProduct` (`found`, `gone`, or `unknown` when the catalogue cannot be asked). A store that does not sell
+  answers the site's own not-found page. The page's own address, with no item, is `gone`.
+- **404 with the page.** An item that is not on sale (unknown, inactive, no price, no rate, outside the site's
+  categories, a variant's own id, not an id) answers 404, and the 404 boundary renders the product page itself with the
+  element in its "This product is no longer available" state (`app/(site)/not-found.tsx`), through the same cached
+  entry the page route read. The same for the pagination route.
+- **Cached per item for 60 seconds** (owner, W5 grill-me): the data-cache entry of a product page request (its path, or
+  its path and an item) lives 60 s with the tenant's tags instead of until a publish (`pageRevalidate` in
+  `lib/published-page-cache.ts`), and the response is rendered live (`connection()`) rather than kept as a static page,
+  so a product put on sale, repriced or gone shows within a minute and a 404 does not stick. Whether a request is for the
+  product page comes from the `store_pages` setting, read through a cached lookup.
+- **Pages with roles, once per publish.** The publish writes the setting `store_pages` (role → path per language,
+  `{ product: { '*': '/products', ar: '/ar/products' } }`: `publishStorePages` in `product-page.ts`, called by the publish
+  route and the MCP publish tool). A publish that changes it renders every page again (a full invalidation, as a colour
+  variable change does), because every page with a store element carries the paths. `PageRenderer` hands the elements
+  `serverSettings.store = { site_id, pages, product? }`; the links are `createStoreLinks` in `links.ts`: a card to the
+  product page's path and the item (`/product/{id}` when no page has the role), the indicator and the "added" notice to the
+  cart page (`#` until W6 offers the cart role).
+- **The element.** `ProductDetail.tsx` (state: the picker, the quantity, the notice) over `ProductDetailView.tsx` (the
+  markup of `browse-product-*`): gallery with thumbnails (the variant's own image, else the product's), name, SKU of the
+  chosen variant, price with the unit (`/ pcs`), one row of chips per axis, a quantity stepper (1 to 999), Add to cart,
+  the notice, the description. The server and the first browser render are the injected product; the element then reads
+  the item again from `/ycode/api/store/products/{id}` (owner, W5 grill-me): an item that has gone shows "no longer
+  available" (status stays what was served), one that changed shows as it is. Three render paths as W4: the canvas draws a
+  sample T-shirt with no network call; the HTML shell is the element's skeleton (`html.ts`); the published element is
+  the client component. The element may be dropped on any page with a product chosen in its settings
+  (`ProductDetailSettings.tsx`), and then shows nothing when none is chosen.
+- **The picker** (`picker.ts`). The page opens on the cheapest variant that can be bought. An option is unavailable
+  ("unavailable", disabled, struck through) when no variant that can be bought has it. Picking an option that goes with the
+  other axes' choice changes that axis only; picking one that does not moves the others to the nearest variant that has
+  it. A variant that cannot be bought cannot be picked.
+- **The cart** (`cart-store.ts`). `localStorage["ws-cart:{siteId}"] = { version: 1, lines }`, a line being
+  `{ item_id (the variant's id when picked), product_id, quantity, snapshot: { name, name_ar, axes, price, image, unit } }`.
+  `add` merges the same item, `setQuantity` (1 to 999), `remove`, `clear`, `count`, `totals` (exact decimals; a cart
+  holding two currencies says so), `subscribe`; at most 50 different items (a checkout takes 50: the fifty-first is
+  refused with `CartFullError`, which the card and the page tell the buyer); other tabs of the site are followed through
+  the `storage` event; what storage holds that is not a cart is an empty cart; a browser that will not store keeps the
+  cart for the visit and says so once in the console. Every published store element connects it when it starts
+  (`connectBrowserCart(siteId)`, idempotent). The snapshot is for display only: prices are read again at checkout.
+- **Motion.** The "added" notice rises 4 px and fades in over 200 ms on the strong ease-out; chips and thumbnails change
+  colour, border and ring over 150 ms and press in to 97 % over 100 ms; under `prefers-reduced-motion: reduce` the notice
+  only fades and the chips change at once.
+- **Design values I had to choose** (the handoff does not draw them): the unit is a muted `/ pcs` after the price; the
+  loading and "no longer available" states use W4's skeleton and empty patterns; the cart-full message is a dark-bordered
+  alert on the page and a small note on a card.
+- **Test.** `e2e/product-page.spec.ts` and the unit tests beside the modules (`cart-store`, `picker`, `pages`, `links`,
+  `add-to-cart`, `settings`, `strings`, `html`, `card-data`, `store-money`).
+
+
+## Cart, checkout and confirmation (part 2, session W6)
+Three more store elements (`cart`, `checkout`, `orderConfirmation`; leaves like W4's and W5's), the page roles `cart`,
+`checkout` and `confirmation`, and the buyer's way through them. Platform code is `lib/platform/store-elements/`; the ycode
+files only name the elements (the same places as W4's), add the roles to the page settings panel text and answer the
+not-found page for a store that does not sell.
+- **The roles.** `PANEL_PAGE_KINDS` is now all four (`product`, `cart`, `checkout`, `confirmation`); a site has one page for
+  each. The cart indicator, the "added" notice and the product page lead to the cart page, the cart's Checkout button to the
+  checkout page, and a placed order to the confirmation page as `?order={checkout id}` (`createStoreLinks`: `cart()`,
+  `checkout()`, `confirmation(id)`; `#` until a page has the role). A site with no confirmation page shows the order
+  inside the checkout element instead of sending the buyer nowhere.
+- **A store that does not sell** answers the cart, checkout and confirmation pages with the site's own not-found page, as the
+  product page does (PRD V1.1 "Store settings"): `fetchPageByPath` asks `storeSells`. Those pages are live requests like the
+  product page's (`isStorePageRequest`, 60 s data cache, `connection()`), so the answer follows the setting within a minute.
+- **The cart store** gained the checkout id and a snapshot refresh. `checkoutId()` makes a UUID (random bytes, not
+  `crypto.randomUUID`, which a plain-http address does not have) the first time the checkout asks and keeps it in the
+  stored cart (`{ version: 1, lines, checkout_id }`); it goes with the cart when the cart is cleared or its last line is
+  removed, so one cart is one checkout whatever happens between the first try and the last. `refresh(itemId, snapshot)` replaces what a line shows and nothing else.
+- **The cart element** (`Cart.tsx`, state; `CartView.tsx`, the markup of `checkout-cart-*`). Lines from the cart store:
+  picture, name (a link to the product page), the variant's options, the unit price with the unit (`25,000 IQD / pcs`, or
+  `each`), a quantity stepper (1 to 999, typed or stepped), the line total, Remove. The summary beside them (under them on a
+  phone): subtotal, delivery fee and total from `GET /ycode/api/store/settings` (currency and fee), the exact arithmetic of
+  `store-money.ts` (`order-summary.ts`). Empty: the designed empty state with Browse products. **Prices are refreshed on
+  load** (`cart-refresh.ts`, `use-cart.ts`): each product in the cart is read once from `/ycode/api/store/products/{id}`;
+  a line still on sale takes the catalogue's name, options, price, picture and unit (and is marked "Price updated · was …"
+  when the price changed); a line the catalogue no longer sells (product gone, variant gone, no price, cannot be bought) is
+  marked "Unavailable" (the handoff's tag) and Checkout is off, with the reason, until it is removed; a catalogue that cannot be read
+  leaves the lines as they are and says so.
+- **The checkout element** (`Checkout.tsx`, state; `CheckoutView.tsx`, the markup of `checkout-form-*`). The order summary
+  (a collapsed bar on a phone that opens, a column on a desktop; both are in the page and CSS shows one), the form (name,
+  phone, city as a select of `iraq-governorates.ts` in the page's language, address, landmark and notes optional), the
+  cash-on-delivery note, Place order with the total. The form carries ycode's decoy field (`FormHoneypotField`) in a box of
+  no size that clips it (`ws-decoy`): the field sits 9999 px to the left, which would widen a right to left page by as much
+  (W6 review fix). The rules for the fields are the route's (`checkout-input.ts`): the
+  form sends what was typed with `locale` and shows the route's messages under their fields, with the designed alert listing
+  the fields (each a link to its field); typing in a refused field takes its message away. On submit: one request at a
+  time (a ref guard, and the button and the fields disabled with the spinner and "Placing your order…"),
+  `POST /ycode/api/store/checkout` with the cart's `checkout_id`; `item_unavailable` names the items (the route's name, else
+  the cart's) with a Remove that drops them, each line marked with its own Remove, Place order off until they are gone;
+  `service_unavailable` (and a lost connection, and any answer that is not ours, logged) is the designed alert with Try
+  again, the cart and the form kept; `rate_limited` its own alert; success clears the cart and goes to the confirmation
+  page. The page refreshes the cart on load like the cart does.
+- **The confirmation element** (`OrderConfirmation.tsx`, `ConfirmationView.tsx`, `checkout-confirmation-default`). Reads
+  `GET /ycode/api/store/orders/{checkout_id}` for the checkout in `?order=`: the thank-you with the number the buyer typed,
+  the order code, the lines with their options (Sales names a variant's line by the variant's own item, so the name reads
+  "Linen shirt - Small / White" beside "Size: Small · Colour: White"), the fee, the total, the cash-on-delivery note, Back to
+  shop. An address with no checkout, or one this site has no order for, is "We can't find this order"; Sales that cannot be
+  asked is an alert with Try again.
+- **Copy fixes (notebook decision 16g).** The phone message names both forms ("0770 123 4567 or +964 770 123 4567"; the
+  route's, W3, now shown); nothing says "out of stock" (the handoff's sentence is "… is no longer available"); the unit is
+  on the cart, checkout and confirmation lines. Strings are `STORE_STRINGS` in both languages (`strings.ts`); a test fails
+  if a word about stock comes back.
+- **Three render paths as W4.** The canvas draws the handoff's sample cart (three lines, 115,000 IQD) and order
+  (`SO-2026-0142`) with no network call; the HTML shell (`html.ts`) is each element's skeleton; the published elements are
+  the client components. The Store category of the library gains Cart, Checkout and Order confirmation, and the Layouts tab
+  the sections Cart page, Checkout page and Order confirmation (one element in a band each, as the Product page section is).
+- **Motion.** The Place order spinner turns (0.8 s linear) and the summary chevron turns (150 ms), the alerts and the
+  confirmation rise 4 px and fade in over 200 ms on the strong ease-out, Place order presses in to 97 % over 100 ms. Under
+  `prefers-reduced-motion: reduce` the spinner stops (a ring, with the words beside it), the chevron turns at once, and the
+  alerts and the confirmation only fade.
+- **Test.** `e2e/checkout-flow.spec.ts` (the flow and the error paths on a published site, Arabic, a phone, motion, a store
+  that does not sell, the canvas, the library, the static export) and the unit tests beside the modules (`cart-store`,
+  `cart-refresh`, `order-summary`, `checkout-form`, `store-client`, `format`, `strings`, `links`, `pages`, `html`). The
+  platform stub gained `POST /__item { id, status?, base_price? }` and `POST /__items/reset`.
+
+
+## Part 2 in production (session D1, 8 Nov 2026)
+Part 2 (the store) runs in the same container as part 1. What it added, in one place; the sessions above give each piece's rules.
+
+- **Keys.** Nine, in the compose service `web-studio` on the server (`/root/core-backend/docker-compose.yml`, which is not in
+  this repository), the keys taken from the root `.env` variable the receiving service reads as its own `SERVICE_API_KEY`
+  (as `DOMAIN_SERVICE_API_KEY` was, part 1 OPEN_QUESTIONS 14). Names only; never a value in a repository file:
+
+  | Key | Set to | Root `.env` variable | Used by |
+  |---|---|---|---|
+  | `ORG_SETUP_URL`, `ORG_SETUP_API_KEY` | `http://auth-service:6001` | `AUTH_INTERNAL_SERVICE_API_KEY` | branches (W1), the day's rate and unit names (W2) |
+  | `PRODUCT_SERVICES_URL`, `PRODUCT_SERVICES_API_KEY` | `http://product-services-service:6024` | `PS_SERVICE_API_KEY` | category tree (W1), items, variants, images (W2) |
+  | `CONTACT_CENTER_URL`, `CONTACT_CENTER_API_KEY` | `http://contact-center-service:6017` | `CC_SERVICE_API_KEY` | the checkout's buyer (W3), the orders' buyers (W8) |
+  | `SALES_URL`, `SALES_API_KEY` | `http://sales-service:6029` | `SALES_SERVICE_API_KEY` | the checkout's order (W3), the Orders API (W8) |
+  | `SALES_APP_ID` | the Sales catalogue id | `SALES_APP_ID` | the Orders API's deep link into Sales (W8) |
+
+  Every call carries `x-service-api-key` and the organization in `x-entity-id`. A key that is missing makes that service
+  "unavailable" (503 `*_unavailable`), never a guess. Each key was proven by a real call in the server e2e.
+- **Tables.** One migration, `20261108000001_torch_site_store.ts`, run at start (knex: "Batch 2 run: 1 migrations"):
+  `platform_site_store` (one row per site, made on its first read: `selling`, `currency` IQD or USD, `branch_id`,
+  `category_ids`, `delivery_fee`; the database refuses selling without a branch, a fee below 0, another currency) and
+  `platform_storefront_orders` (per checkout that became a Sales order: site, checkout id, Sales order id and code, the time;
+  unique per site and checkout). Neither is a tenant table, a template copy does not copy them, and neither holds a buyer or an item.
+- **Routes.** On the builder host, with a session, under `platform/`: `GET` and `PATCH sites/{id}/store` (`manage_sites` r / u),
+  `GET orders`, `GET orders/waiting-count`, `GET orders/{id}` (`manage_orders` r), `POST orders/{id}/confirm` and
+  `POST orders/{id}/cancel` (x), and the element settings' `store-elements/products` and `store-elements/categories`.
+  On a selling site's own host, anonymous: `GET /ycode/api/store/{settings,products,products/{id},categories}`, `GET
+  /store-media/{documentId}?item=`, `GET /ycode/api/store/font` (the IBM Plex Sans Arabic stylesheet from the platform's font
+  mirror, and its files), `POST /ycode/api/store/checkout`, `GET /ycode/api/store/orders/{checkout_id}`. All of them answer 404
+  `store_not_found` on the builder host and for a store that does not sell.
+- **The checkout, end to end.** The page makes a `checkout_id` once per cart and posts it with the buyer and the lines (item
+  ids and quantities, never prices) to its own host; the route screens it (same origin, size, honeypot, a rate limit per site
+  and IP); the lines are checked against the site's catalogue (at most 60 s old); a USD store asks for the day's rate; Contact
+  Center finds or creates the person by the phone in its canonical form (`964` and ten digits); Sales `POST /internal/orders`
+  makes the draft order (source `storefront`, the site as `sourceReference`, cash on delivery, the prices and the fee by Sales,
+  idempotent per checkout id); Web Studio stores the order's id and code and answers `{ checkout_id, code }`; the confirmation
+  page reads the order from Sales each time. Afterwards the app confirms or cancels through `POST /internal/orders/{id}/status`
+  with the signed-in user as `actingUserId` (Sales checks that user's own `sales.manage_orders` x). Nothing of the buyer is
+  stored here.
+- **The image cache.** A product's image is fetched once from Document Center (`GET /documents/{id}/download`, the service
+  key and the organization) and kept on the `web_studio_storage` volume at `PLATFORM_STORAGE_DIR/_store-media/{organization}/
+  {document}/{sha256}` with a `current.json`, in either storage mode; it is checked against the document's current version at
+  most once a day, and a failure to ask serves the copy. Served by the site as `/store-media/{documentId}?item={productId}`,
+  `cache-control: public, max-age=86400`, ETag the sha256, raster types only, and only the product's, a variant's or one of the
+  product's own images for a product the site sells. Proven on production: the bytes come back identical, with the same ETag
+  on the second read. The volume survives a container recreation; deleting `_store-media` only makes the next read fetch again.
+- **How it was deployed (8 Nov 2026), and how to roll back.**
+  1. *Preconditions, read only:* Sales's live `/documentation/json` lists `POST /internal/orders` and
+     `POST /internal/orders/{id}/status` (SL1 to SL3 released 18:42 UTC); Product & Services and Contact Center were on their
+     8 Nov images (P1, C1).
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261108-pre-part2.sql.gz`
+     (36 tables, 52 migrations, 18 sites; checked with `gunzip -t`).
+  3. *Rollback tag:* `docker tag web-studio:local web-studio:7ee115f-20261108`: part 1's image, built from `main` 7ee115f (a
+     checksum comparison of `/root/web-studio` with that tree showed only generated files differing).
+  4. *Migration rehearsal:* `pg_dump --schema-only` of the production database plus the `migrations` data restored into a scratch
+     database, `knex migrate:latest` run as the entrypoint does (52 to 53 migrations, both tables and their constraints), then dropped.
+  5. *Compose:* a copy kept as `docker-compose.yml.bak-20261108-part2`; the nine keys inserted after `WS_TEMPLATES_ORG`;
+     `docker compose config --quiet` valid.
+  6. *Sync and rebuild:* an `rsync -azcn --delete` by checksum listed exactly the files of `git diff origin/main..HEAD` (137
+     added, 42 modified, 5 deleted) and nothing else; then the real `rsync`, `docker compose build web-studio` (about two and a
+     half minutes) and `docker compose up -d --no-deps web-studio`. Healthy at once, 0 restarts, the permission scope registered
+     again for the one installed organization.
+  7. *Check:* `pnpm e2e:server`, 38 tests, all pass (the section "Server e2e").
+  *Roll back* with `docker tag web-studio:7ee115f-20261108 web-studio:local && cd /root/core-backend && docker compose up -d
+  --no-deps web-studio`. Part 1's code ignores the two new tables and the nine keys, so neither the migration nor the compose
+  lines need undoing. A restore of the dump is only for damaged data and was not rehearsed. The compose and the rollback tag
+  are on the server only. The `Found orphan containers (vault-service ...)` line `docker compose` prints is another service's
+  leftover; it was not pruned.
+- **Found while checking, not fixed here (outside D1's goal; each has an owner in OPEN_QUESTIONS).**
+  *The builder's page contacts one public host.* `web-studio.torchcorp.com` is proxied by Cloudflare, whose edge adds its Web
+  Analytics beacon (`https://static.cloudflareinsights.com/beacon.min.js`, `data-cf-beacon`) to every HTML answer: the same route
+  read from the origin (`127.0.0.1:6030`) has no such script, and the app and `docker/nginx` never name it. The published store
+  pages are not affected (`sites.torchcorp.com` is DNS only). `storefront-browser.spec.ts` records it as a known exception and
+  fails on any other host; turning it off is Cloudflare's Web Analytics setting or a `Cache-Control: no-transform` answer
+  (OPEN_QUESTIONS 53).
+  *The order history is empty in the Orders API on production* (OPEN_QUESTIONS 38 and 39): Sales's own read has it, its service
+  read does not yet. *A published page keeps Google URLs for a font a designer picks* (session 3, above): the store check ran on
+  a site with the default fonts, and the store elements' own font is the mirror's. *The server e2e leaves the test organization
+  with no ECOMMERCE item:* its one fixture item is switched off at the end, so Task B's templates need their own items there.
+- **Not rehearsed:** the rollback itself, and a restore from the dump.
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -270,6 +717,36 @@ pass (367); 52 migrations from empty.
 Session 5: `e2e/publish.spec.ts` (default address with no host given, two sites publishing with their
 own content, an unpublished edit invisible until publish, `/ar` rtl and 404 where absent, unknown host,
 each site's own 404 page, a second host after the next publish) passes with `pnpm test` (303).
+
+Part 2, session W1: `e2e/store-settings.spec.ts` (the defaults from the first read, the stub's branches and summed-up
+category tree, 401 / 404 across organizations / 403 for a Viewer, a branch with two categories and a fee saved, selling only
+with a branch, only the organization's active branches and live categories, a currency change only with its fee, values
+archived or deleted since they were chosen kept and marked, both services down, a template that never sells and whose store
+a copy does not inherit) passes with `pnpm test` (397) and `pnpm e2e` (92); the migration runs from empty and on a copy of
+the production schema (8 Nov 2026), and rolls back.
+
+Part 2, session W3: `e2e/checkout.spec.ts` (one person and one order per checkout with the bodies Contact Center and Sales
+receive, the repeat and the concurrent pair answered by one order, ineligible lines and a Sales refusal named, field errors in
+Arabic, Sales or Contact Center down storing nothing and the retry finding the person, the confirmation read and its 404s, a USD
+store without the day's rate, cross-origin, honeypot, the rate limit per site and IP, the builder host and a store that does not
+sell) passes with `pnpm test` (471) and `pnpm e2e` (125), against stand-ins of SL2's service create (8 Nov 2026).
+
+Part 2, session D1 (8 Nov 2026, on the production server, the test organization): `pnpm e2e:server` passes, 38 tests. Part 1's
+five; `store-settings.spec.ts` (the real branches and category tree, a branch, a category and a fee saved, selling only with a
+branch, an unknown or archived branch and an unknown category refused, a currency change only with its fee); `catalogue.spec.ts`
+(the item on the ECOMMERCE channel with its price and unit, its image through Document Center byte for byte with the same ETag
+on the second read, search, category, paging, one product, the shop home's categories, a fee change seen at once, a store that
+does not sell and the builder host answering 404); `checkout.spec.ts` (one real order with the code Sales gave, read back in
+Sales as a draft from the storefront for this site with cash on delivery, the fee and the buyer from Contact Center, the retry
+answered by the same order, the confirmation, bad bodies in Arabic and English, an unknown item 422, another origin, the
+honeypot, the builder host, a store that stops selling, the cancel with its reason and acting user in Sales's history);
+`orders-api.spec.ts` (list by site, status and code, the waiting count, one order with its buyer, lines, address and links,
+confirm and cancel as the signed-in user, a repeat refused, 404s); `storefront-browser.spec.ts` (a buyer in Chromium on
+`https://{slug}.sites.torchcorp.com/products` finds the real item with its real image, adds it, checks out and reads the code;
+the same pages in Arabic; the builder opens the site and its Store elements; the hosts contacted are recorded). Every order the
+runs made (9 in all, including those of the runs that failed on the way while the specs were written) is cancelled in
+Sales: none draft, none confirmed. `POST
+/ycode/api/auth/dev-login` answers 404 on the server.
 
 ## Session 3: platform assets and trimming
 - **No public host in the builder.** `public/vendor/` holds `@tailwindcss/browser`, GSAP
@@ -381,7 +858,29 @@ each site's own 404 page, a second host after the next publish) passes with `pnp
   posts to `/setup/migrate`, and the close aborted whatever query was in flight (another user's save, now the lock check).
 - `e2e/lock.spec.ts` is the done-when check (`pnpm test`: 348; `pnpm e2e`: 46).
 
+## Part 2, session 13: the update check, tanween in the canvas
+- **No update check.** ycode's "Update available" asked `/ycode/api/updates/check`, which
+  asked `api.github.com` for ycode's releases; Web Studio is updated only through this fork.
+  The header's check and button, both `updates` routes, `lib/updates/`, the unused
+  `components/UpdateNotification.tsx` and Settings > Updates (page and menu entry) are
+  deleted; the two routes are out of `lib/platform/permissions.ts`'s map. `e2e/offline.spec.ts`
+  fails if the builder calls `/ycode/api/updates`, shows the notice or the menu entry, or
+  one of the removed routes answers anything but 404 (its blocked-host guard could not see
+  this one: the browser only reached the app's own host, the server made the outside call).
+- **Tanween in the canvas is WebKitGTK's, not the canvas's.** In WebKitGTK (Tauri's webview
+  on Linux) a word that ends in an Arabic mark is drawn above the line, in the canvas and
+  on a published page alike; Chromium draws it right (WebView2 on Windows is Chromium and
+  WKWebView on macOS shapes with CoreText; neither was run). No CSS changes it. `lib/platform/arabic-marks.ts` has the cause and the measurements. The canvas
+  (`components/LayerRenderer.tsx` only; published pages use `LayerRendererPublic`) puts a
+  combining grapheme joiner (U+034F) after each run of Arabic marks, in the text it puts on
+  screen, when the user agent is WebKit on Linux. The layer's data and the in-place text
+  editor never see it, and the published page is untouched, so a visitor on WebKitGTK still
+  sees the defect. Drop `arabic-marks.ts` and its calls in `LayerRenderer.tsx` when WebKitGTK is fixed.
+  `e2e/canvas-marks.spec.ts` checks where the joiner is and is not.
+
 ## Not done (c1 and after)
+- Part 2's open findings are in "Part 2 in production": Cloudflare's beacon on the builder host, the Orders API's empty
+  history, the rollback not rehearsed.
 - **A published page renders an image layer as ycode's placeholder** (the data-URL SVG of
   `ASSET_PLACEHOLDERS`) while the preview renders the asset (`/a/<token>/file`). Seen in
   session 4 on a site copied from a template and reproduced on a plain site (upload a PNG,

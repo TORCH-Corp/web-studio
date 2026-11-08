@@ -1,5 +1,7 @@
 /**
- * Document Center client for Web Studio's file storage (part 1, session 8).
+ * Document Center client for Web Studio's file storage (part 1, session 8) and
+ * the store's item images (part 2, session W2: `downloadDocumentFile`,
+ * `currentFileHash`).
  *
  * Paths, headers, body keys and envelopes are from Document Center's live spec
  * (`/documentation/json`, checked 1 Nov 2026) and torch-core-backend's
@@ -26,7 +28,7 @@ function config(): { baseUrl: string; apiKey: string } {
   const baseUrl = (process.env.DOCUMENT_CENTER_URL || '').replace(/\/+$/, '');
   const apiKey = process.env.DOCUMENT_CENTER_API_KEY || '';
   if (!baseUrl || !apiKey) {
-    throw new Error('PLATFORM_STORAGE=document-center needs DOCUMENT_CENTER_URL and DOCUMENT_CENTER_API_KEY');
+    throw new Error('Document Center needs DOCUMENT_CENTER_URL and DOCUMENT_CENTER_API_KEY (PLATFORM_STORAGE=document-center, and the store\'s item images)');
   }
   return { baseUrl, apiKey };
 }
@@ -123,9 +125,39 @@ export async function uploadDocument(args: {
 
 /** GET /documents/{id}/download: the bytes, null when the document is gone. */
 export async function downloadDocument(organizationId: string, documentId: string): Promise<Buffer | null> {
+  return (await downloadDocumentFile(organizationId, documentId))?.data ?? null;
+}
+
+/**
+ * GET /documents/{id}/download: the current version's bytes and their media
+ * type (without parameters, lower case; null when the answer names none); null
+ * when the document is gone. Every download is logged in Document Center (a
+ * `recent_accesses` row), so a caller keeps what it reads.
+ */
+export async function downloadDocumentFile(organizationId: string, documentId: string): Promise<{ data: Buffer; contentType: string | null } | null> {
   try {
     const res = await call('download', organizationId, `/documents/${documentId}/download`, { method: 'GET' });
-    return Buffer.from(await res.arrayBuffer());
+    const contentType = res.headers.get('content-type')?.split(';')[0].trim().toLowerCase() || null;
+    return { data: Buffer.from(await res.arrayBuffer()), contentType };
+  } catch (e) {
+    if (e instanceof DocumentCenterError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+/**
+ * GET /documents/{id}: the sha256 (hex) of the document's current version,
+ * `currentVersion.fileHash`; null when the document is gone or has no version.
+ * Document Center records this read as a "viewed" access (an upsert per caller
+ * and document), not a download; the store asks it at most once a day per image.
+ */
+export async function currentFileHash(organizationId: string, documentId: string): Promise<string | null> {
+  try {
+    const res = await call('read', organizationId, `/documents/${documentId}`, { method: 'GET' });
+    const body = (await res.json().catch(() => undefined)) as { data?: { currentVersion?: { fileHash?: unknown } | null } } | undefined;
+    if (!body?.data) throw new DocumentCenterError('Document Center read answered with an unexpected body', 502);
+    const hash = body.data.currentVersion?.fileHash;
+    return typeof hash === 'string' && hash ? hash.toLowerCase() : null;
   } catch (e) {
     if (e instanceof DocumentCenterError && e.status === 404) return null;
     throw e;

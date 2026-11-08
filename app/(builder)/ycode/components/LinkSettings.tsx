@@ -630,7 +630,7 @@ export default function LinkSettings(props: LinkSettingsProps) {
         <Empty>
           <EmptyDescription>
             {linkNestingIssue.type === 'unsupported'
-              ? 'Links aren\u2019t supported on this layer, as it renders in an isolated iframe.'
+              ? 'Links aren\u2019t supported on this layer, as it renders its own content.'
               : linkNestingIssue.type === 'richText'
                 ? 'Cannot add a link to a layer that contains rich text links. Remove the rich text links first.'
                 : linkNestingIssue.type === 'ancestor'

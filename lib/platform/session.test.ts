@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { cookieAttributes, signSession, signSiteCookie, verifySession, verifySiteCookie } from './session';
+import { cookieAttributes, hasSalesOrdersExecute, signSession, signSiteCookie, verifySession, verifySiteCookie } from './session';
 
 process.env.BOS_SESSION_SECRET = 'unit-test-secret';
 
@@ -52,4 +52,17 @@ test('cookie attributes: Secure follows the scheme nginx reports, else the reque
 
 test('cookie attributes: a chain of proxies is judged by the first scheme', () => {
   assert.equal(cookieAttributes(new Headers({ 'x-forwarded-proto': 'https, http' }), new URL('http://127.0.0.1:6030/')).secure, true);
+});
+
+test('the session keeps the user\'s Sales flag; a cookie from before it was added has none', async () => {
+  const base = { sub: 'u1', email: 'u1@example.com', name: 'U1', org: ORG_A, perms: {} };
+  const with_ = await verifySession(await signSession({ ...base, sales_manage_orders_x: true }));
+  const without = await verifySession(await signSession({ ...base, sales_manage_orders_x: false }));
+  const old = await verifySession(await signSession(base));
+  assert.equal(with_?.sales_manage_orders_x, true);
+  assert.equal(without?.sales_manage_orders_x, false);
+  assert.equal(hasSalesOrdersExecute(with_), true);
+  assert.equal(hasSalesOrdersExecute(without), false);
+  assert.equal(hasSalesOrdersExecute(old), false);
+  assert.equal(hasSalesOrdersExecute(null), false);
 });

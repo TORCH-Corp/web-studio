@@ -10,8 +10,9 @@
  * (permissions.test.ts) fails on a route file without a rule. PRD V1.0
  * "Roles and permissions".
  *
- *   manage_sites     creating and deleting sites (c, d), site settings and the
- *                    domain (u), the list and opening a site (r)
+ *   manage_sites     creating and deleting sites (c, d), site settings, the
+ *                    domain and the store settings (u), the list, opening a
+ *                    site and reading its settings (r)
  *   manage_content   pages, layers, styles, components, assets, fonts, locales,
  *                    translations, versions (c r u d), publish and revert (u),
  *                    static export and project export (export), the AI agent
@@ -19,7 +20,12 @@
  *   manage_forms     the contact form and its submissions, collections,
  *                    webhooks, API keys and the integrations: part 3, hidden by
  *                    session 3
- *   manage_orders    the storefront: part 2, no route yet
+ *   manage_orders    the storefront (part 2): its buyer-facing reads are
+ *                    anonymous on GET (session W2), the checkout on POST and
+ *                    its confirmation read on GET (W3); the Orders API for the
+ *                    app (W8): the list, an order and the waiting count (r),
+ *                    confirm and cancel (x). Sales checks the user's own
+ *                    sales.manage_orders x on top of the x
  *
  * Public routes have their own credential (the setup wizard, the public API's
  * API keys, the revalidation secret, the OAuth flows) or are anonymous by
@@ -81,10 +87,12 @@ const leaf = (key: WebStudioLeaf) => (flags?: LeafRule['flags'], anonymous?: Ano
 const sites = leaf(WEB_STUDIO_LEAF.manageSites);
 const content = leaf(WEB_STUDIO_LEAF.manageContent);
 const forms = leaf(WEB_STUDIO_LEAF.manageForms);
+const orders = leaf(WEB_STUDIO_LEAF.manageOrders);
 const isPublic = (reason: string): PublicRule => ({ kind: 'public', reason });
 const sessionOnly = (reason: string): SessionRule => ({ kind: 'session', reason });
 
 const onPost: Anonymous = (method) => method === 'POST';
+const onGet: Anonymous = (method) => method === 'GET' || method === 'HEAD';
 const whenPublished: Anonymous = (method, searchParams) => method === 'GET' && searchParams.get('published') === 'true';
 
 /** Keyed by the route's path under /ycode/api, as Next names it (`[id]` for a dynamic segment, `[...path]` for the rest of the path). */
@@ -117,8 +125,11 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/sites/[id]': sites(), // GET one site with its editor lock (r, session 6); DELETE (d)
   'platform/sites/[id]/open': sites(), // GET (r)
   'platform/sites/[id]/settings': sites(), // GET (r), PATCH (u): name, languages, domain, SEO defaults, slug (session 7)
+  'platform/sites/[id]/store': sites(), // GET (r), PATCH (u): selling, currency, branch, categories, delivery fee (part 2, W1)
   'platform/sites/[id]/assets': sites(), // GET (r): the site's images a share image can be, for Site settings (session 10)
   'platform/sites/[id]/assets/[assetId]': sites(), // GET (r): one image of the site, served as /a/ serves it (session 10)
+  'platform/store-elements/categories': content(), // GET (r): the categories a product grid can list, for the open site (part 2, W4)
+  'platform/store-elements/products': content(), // GET (r): the products a product card can pick, for the open site (part 2, W4)
   'platform/templates': sites(), // GET (r): TORCH's templates, the same list for every organization (session 4)
   // The builder keeps the open site's editor lock (session 6): POST takes it or refreshes it, DELETE lets go. A
   // builder that may only read still holds the lock for the minutes it is open, so these are reads, never writes.
@@ -197,8 +208,6 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'project/export': content({ POST: 'export' }),
   'project/import': content({ POST: 'u' }),
   'maps/geocode': content(),
-  'updates/check': content(),
-  'updates/releases': content(),
   'apps': content(),
   'apps/[appId]/settings': content(),
   'apps/static-export/export': content({ POST: 'export' }),
@@ -209,6 +218,29 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'ai/chats/[id]': content({ GET: 'use_ai', PUT: 'use_ai', DELETE: 'use_ai' }),
   'mcp-tokens': content({ GET: 'use_ai', POST: 'use_ai' }),
   'mcp-tokens/[id]': content({ GET: 'use_ai', DELETE: 'use_ai' }),
+
+  // The storefront (part 2, session W2): a visitor of a published site reads its catalogue anonymously. The routes
+  // answer only on a site's own host, and only while its store sells (lib/platform/store-api.ts); the builder host 404s.
+  'store/products': orders(undefined, onGet),
+  'store/products/[id]': orders(undefined, onGet),
+  'store/categories': orders(undefined, onGet),
+  'store/settings': orders(undefined, onGet),
+  // A visitor checks out (session W3): screened like the form route (same origin, honeypot, rate limit, size caps).
+  'store/checkout': orders(undefined, onPost),
+  'store/orders/[checkout_id]': orders(undefined, onGet), // the confirmation page's read of its order
+  // The store elements (part 2, session W4): their font is one family from the platform's mirror, read by any visitor
+  // (the mirror's own routes stay for the builder).
+  'store/font': isPublic('the stylesheet of one font family (IBM Plex Sans Arabic) from the platform mirror, for the store pages'),
+  'store/font/files/[...path]': isPublic('the font files of that one family from the platform mirror; any other family is a 404'),
+
+  // The Orders module's API (part 2, session W8): the organization's storefront orders, from Sales. Reads need r,
+  // confirm and cancel x (the user's own Sales flag is checked by Sales). Orders are not the open site's content:
+  // no editor lock, and the siteless prefix (platform/) needs no site cookie.
+  'platform/orders': orders(), // GET the list (r)
+  'platform/orders/waiting-count': orders(), // GET (r): the drafts, for the Navigator's count
+  'platform/orders/[id]': orders(), // GET one order (r)
+  'platform/orders/[id]/confirm': orders({ POST: 'x' }),
+  'platform/orders/[id]/cancel': orders({ POST: 'x' }), // { reason }
 
   // Forms and collections (part 3; hidden by session 3).
   'form-submissions': forms(undefined, onPost), // a visitor submits a form anonymously

@@ -15,6 +15,13 @@ const LAYER_NAME_TO_GROUP: Record<string, string> = {
   slider: 'block',
   lightbox: 'block',
   htmlEmbed: 'block',
+  productGrid: 'block',
+  productCard: 'block',
+  productDetail: 'block',
+  cartIndicator: 'block',
+  cart: 'block',
+  checkout: 'block',
+  orderConfirmation: 'block',
   filter: 'block',
   localeSelector: 'block',
 
