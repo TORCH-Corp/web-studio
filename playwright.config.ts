@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test';
 import { TEMPLATES_ORG } from './e2e/helpers';
 import { ensureTestKeys } from './e2e/test-keys';
 import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
-import { CONTACT_CENTER_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_KEY } from './e2e/platform-fixtures';
+import { CONTACT_CENTER_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_APP_ID, SALES_KEY, WS_APP_ID } from './e2e/platform-fixtures';
 
 /**
  * End-to-end suite for the TORCH fork (part 1, session 1).
@@ -26,6 +26,9 @@ import { CONTACT_CENTER_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_KEY } fr
  * with a service key (e2e/platform-stub.ts: Organization Setup and Product &
  * Services; W2 and W3 add theirs), on the app's port + 3. Session W3: the same
  * server stands in for Contact Center and Sales (e2e/order-services-stub.ts).
+ * Session W8: the same stubs answer the Orders API (Sales' list and status
+ * route, Contact Center's lookup-ids), and SALES_APP_ID and WS_APP_ID name the
+ * apps its deep links open.
  */
 const PORT = Number(process.env.E2E_PORT || 3102);
 const AUTH_PORT = Number(process.env.E2E_AUTH_PORT || PORT + 1);
@@ -107,6 +110,8 @@ export default defineConfig({
         CONTACT_CENTER_API_KEY: CONTACT_CENTER_KEY,
         SALES_URL: PLATFORM_URL,
         SALES_API_KEY: SALES_KEY,
+        SALES_APP_ID, // the Orders API's deep links (session W8)
+        WS_APP_ID,
       },
     },
   ],

@@ -18,6 +18,10 @@ export const PRODUCT_SERVICES_KEY = 'e2e-product-services-key';
 export const CONTACT_CENTER_KEY = 'e2e-contact-center-key';
 export const SALES_KEY = 'e2e-sales-key';
 
+/** Session W8: the catalogue ids of Sales and of Web Studio, which the Orders API's deep links name (SALES_APP_ID, WS_APP_ID). */
+export const SALES_APP_ID = '6c6c6c6c-6c6c-4c6c-8c6c-6c6c6c6c6c6c';
+export const WS_APP_ID = '7d7d7d7d-7d7d-4d7d-8d7d-7d7d7d7d7d7d';
+
 /** store-settings.spec.ts's organization and a second one, whose branches and categories must never show. */
 export const STORE_ORG = '05050505-0505-4505-8505-050505050505';
 export const OTHER_STORE_ORG = '06060606-0606-4606-8606-060606060606';

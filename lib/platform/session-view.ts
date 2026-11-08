@@ -8,7 +8,7 @@
  */
 
 import type { Session, User } from '@/lib/platform/types';
-import { roleFromPermissions, type BosSession } from './session';
+import { hasSalesOrdersExecute, roleFromPermissions, type BosSession } from './session';
 import type { Site } from './site';
 import { userFromSession } from '@/lib/supabase-auth';
 
@@ -18,6 +18,8 @@ export interface SessionView {
   organization: string;
   site: { id: string; name: string; slug: string } | null;
   permissions: BosSession['perms'];
+  /** The user's x flag on Sales's sales.manage_orders, read at sign-in (part 2, session W8). */
+  sales_manage_orders_x: boolean;
   role: ReturnType<typeof roleFromPermissions>;
   /** Unix seconds: when the bos_session cookie expires (the access token's expiry). */
   expiresAt: number;
@@ -38,6 +40,7 @@ export function sessionView(session: BosSession, site: Site | null): SessionView
     organization: session.org,
     site: site ? { id: site.id, name: site.name, slug: site.slug } : null,
     permissions: session.perms,
+    sales_manage_orders_x: hasSalesOrdersExecute(session),
     role: roleFromPermissions(session.perms),
     expiresAt: session.exp,
   };

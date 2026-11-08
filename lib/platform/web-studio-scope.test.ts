@@ -27,7 +27,7 @@ test('every default names exactly the seven valid flags for the three profiles',
   }
 });
 
-test('the defaults are the PRD\'s: Manager all, Member content c r u and sites r, Viewer r on both, nothing on forms and orders', () => {
+test('the defaults are the PRD\'s: Manager all, Member content c r u and sites r, Viewer r on both, r on orders for Member and Viewer, nothing on forms', () => {
   const all = (flags: Record<string, boolean>) => Object.values(flags).every(Boolean);
   const only = (flags: Record<string, boolean>, granted: string[]) =>
     Object.entries(flags).every(([flag, on]) => on === granted.includes(flag));
@@ -38,8 +38,9 @@ test('the defaults are the PRD\'s: Manager all, Member content c r u and sites r
   assert.ok(only(byKey['webstudio.manage_sites'].system_role_defaults.member, ['r']));
   assert.ok(only(byKey['webstudio.manage_content'].system_role_defaults.viewer, ['r']));
   assert.ok(only(byKey['webstudio.manage_sites'].system_role_defaults.viewer, ['r']));
-  for (const key of ['webstudio.manage_forms', 'webstudio.manage_orders']) {
-    assert.ok(only(byKey[key].system_role_defaults.member, []), `${key} member`);
-    assert.ok(only(byKey[key].system_role_defaults.viewer, []), `${key} viewer`);
-  }
+  // Part 2 (PRD V1.1 "Roles and permissions"): Member and Viewer see the Orders module; x stays with the Manager.
+  assert.ok(only(byKey['webstudio.manage_orders'].system_role_defaults.member, ['r']));
+  assert.ok(only(byKey['webstudio.manage_orders'].system_role_defaults.viewer, ['r']));
+  assert.ok(only(byKey['webstudio.manage_forms'].system_role_defaults.member, []));
+  assert.ok(only(byKey['webstudio.manage_forms'].system_role_defaults.viewer, []));
 });

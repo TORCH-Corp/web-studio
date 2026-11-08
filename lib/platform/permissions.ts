@@ -22,7 +22,10 @@
  *                    session 3
  *   manage_orders    the storefront (part 2): its buyer-facing reads are
  *                    anonymous on GET (session W2), the checkout on POST and
- *                    its confirmation read on GET (W3); the Orders API comes in W8
+ *                    its confirmation read on GET (W3); the Orders API for the
+ *                    app (W8): the list, an order and the waiting count (r),
+ *                    confirm and cancel (x). Sales checks the user's own
+ *                    sales.manage_orders x on top of the x
  *
  * Public routes have their own credential (the setup wizard, the public API's
  * API keys, the revalidation secret, the OAuth flows) or are anonymous by
@@ -229,6 +232,15 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   // (the mirror's own routes stay for the builder).
   'store/font': isPublic('the stylesheet of one font family (IBM Plex Sans Arabic) from the platform mirror, for the store pages'),
   'store/font/files/[...path]': isPublic('the font files of that one family from the platform mirror; any other family is a 404'),
+
+  // The Orders module's API (part 2, session W8): the organization's storefront orders, from Sales. Reads need r,
+  // confirm and cancel x (the user's own Sales flag is checked by Sales). Orders are not the open site's content:
+  // no editor lock, and the siteless prefix (platform/) needs no site cookie.
+  'platform/orders': orders(), // GET the list (r)
+  'platform/orders/waiting-count': orders(), // GET (r): the drafts, for the Navigator's count
+  'platform/orders/[id]': orders(), // GET one order (r)
+  'platform/orders/[id]/confirm': orders({ POST: 'x' }),
+  'platform/orders/[id]/cancel': orders({ POST: 'x' }), // { reason }
 
   // Forms and collections (part 3; hidden by session 3).
   'form-submissions': forms(undefined, onPost), // a visitor submits a form anonymously
