@@ -354,7 +354,9 @@ description changes: `pnpm templates:seed`.
 - **Screening** is the form route's `screenFormSubmission` (same origin, size caps, honeypot, rate limit with the site's
   Security settings), given a counter of its own (`lib/platform/checkout-limit.ts`, the one seam added to ycode's
   `lib/form-spam-protection.ts`): per site and IP, the checkouts that reached Contact Center in the window, kept in memory
-  (OPEN_QUESTIONS 28). A filled honeypot answers 201 with `code: null`, calls nothing and stores nothing (OPEN_QUESTIONS 31).
+  (OPEN_QUESTIONS 28). Each checkout counts once: the same checkout id with the same phone, tried again after Sales failed
+  or refused an item, is not counted again (W3 review fix). A filled honeypot answers 201 with `code: null`, calls nothing
+  and stores nothing (OPEN_QUESTIONS 31).
 - **Before production:** Contact Center's find-or-create is live (C1, 8 Nov 2026); Sales's service create (SL2) and SL1's
   order fields must be deployed first, with `deliveryAddress.phone` and the `items` of a 422 (the session plan, amended
   8 Nov 2026).
