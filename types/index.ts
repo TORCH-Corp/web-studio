@@ -4,6 +4,8 @@
  * Core types for pages, layers, and editor functionality
  */
 
+import type { StoreElementSettings } from '@/lib/platform/store-elements/settings';
+
 // UI State Types (for state-specific styling: hover, focus, etc.)
 export type UIState = 'neutral' | 'hover' | 'focus' | 'active' | 'disabled' | 'current';
 export type Breakpoint = 'mobile' | 'tablet' | 'desktop';
@@ -296,6 +298,7 @@ export interface LayerSettings {
   sortByFieldIds?: string[]; // Which field IDs are enabled as sort-by options
   isPlaceholder?: boolean; // Marks an <option> child as a placeholder (disabled, hidden, selected)
   map?: MapSettings; // Map-specific settings (only for map layers)
+  store?: StoreElementSettings; // Store element settings (only for productGrid and productCard layers; lib/platform/store-elements)
 }
 
 export type MapProvider = 'mapbox' | 'google';

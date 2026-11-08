@@ -125,6 +125,8 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/sites/[id]/store': sites(), // GET (r), PATCH (u): selling, currency, branch, categories, delivery fee (part 2, W1)
   'platform/sites/[id]/assets': sites(), // GET (r): the site's images a share image can be, for Site settings (session 10)
   'platform/sites/[id]/assets/[assetId]': sites(), // GET (r): one image of the site, served as /a/ serves it (session 10)
+  'platform/store-elements/categories': content(), // GET (r): the categories a product grid can list, for the open site (part 2, W4)
+  'platform/store-elements/products': content(), // GET (r): the products a product card can pick, for the open site (part 2, W4)
   'platform/templates': sites(), // GET (r): TORCH's templates, the same list for every organization (session 4)
   // The builder keeps the open site's editor lock (session 6): POST takes it or refreshes it, DELETE lets go. A
   // builder that may only read still holds the lock for the minutes it is open, so these are reads, never writes.
@@ -223,6 +225,10 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   // A visitor checks out (session W3): screened like the form route (same origin, honeypot, rate limit, size caps).
   'store/checkout': orders(undefined, onPost),
   'store/orders/[checkout_id]': orders(undefined, onGet), // the confirmation page's read of its order
+  // The store elements (part 2, session W4): their font is one family from the platform's mirror, read by any visitor
+  // (the mirror's own routes stay for the builder).
+  'store/font': isPublic('the stylesheet of one font family (IBM Plex Sans Arabic) from the platform mirror, for the store pages'),
+  'store/font/files/[...path]': isPublic('the font files of that one family from the platform mirror; any other family is a 404'),
 
   // Forms and collections (part 3; hidden by session 3).
   'form-submissions': forms(undefined, onPost), // a visitor submits a form anonymously

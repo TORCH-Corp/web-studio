@@ -31,6 +31,8 @@ import { toast } from 'sonner';
 import { resolveInlineVariablesFromData } from '@/lib/inline-variables';
 import { hasPaginationVariables, paginationTextVariableToTemplate, resolvePaginationTextVariable } from '@/lib/pagination-text-utils';
 import { renderRichText, hasBlockElementsWithInlineVariables, getTextStyleClasses, flattenTiptapParagraphs, type RichTextLinkContext, type RenderComponentBlockFn } from '@/lib/text-format-utils';
+import { CanvasStoreElement } from '@/lib/platform/store-elements/StoreElement';
+import { isStoreElement } from '@/lib/platform/store-elements/settings';
 import { joinMarks } from '@/lib/platform/arabic-marks';
 import { hasComponentOrVariable, extractPlainTextFromTiptap } from '@/lib/tiptap-utils';
 import LayerContextMenu from '@/app/(builder)/ycode/components/LayerContextMenu';
@@ -2936,6 +2938,19 @@ const LayerItemImpl: React.FC<{
           data-icon="true"
           style={iconAspectRatio ? { aspectRatio: iconAspectRatio, ...iconElementStyle } : iconElementStyle}
           dangerouslySetInnerHTML={{ __html: iconHtml }}
+        />
+      );
+    }
+
+    // Store elements (part 2): sample data on the canvas, never a call to the store API
+    if (isStoreElement(layer.name)) {
+      return (
+        <CanvasStoreElement
+          layer={layer}
+          elementProps={elementProps}
+          colorVariables={colorVariables}
+          locale={currentLocale}
+          inert={isEditMode}
         />
       );
     }

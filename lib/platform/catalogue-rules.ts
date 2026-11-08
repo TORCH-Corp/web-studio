@@ -300,6 +300,8 @@ const normalise = (text: string) => text.trim().toLocaleLowerCase();
 export interface PageQuery {
   /** Products in this category or under it. */
   category?: string | null;
+  /** Products in any of these categories or under them (a grid that lists chosen categories); not together with `category`. */
+  categories?: string[] | null;
   /** Part of the name, in either language, any case. */
   search?: string | null;
   /** From 1. */
@@ -310,8 +312,9 @@ export interface PageQuery {
 /** One page of the grid. A page past the end is empty. */
 export function pageOf(catalogue: Catalogue, query: PageQuery): { products: StoreProduct[]; total: number } {
   let products = catalogue.products;
-  if (query.category) {
-    const ids = subtreeIds(catalogue.tree, [query.category]);
+  const roots = query.category ? [query.category] : query.categories ?? [];
+  if (roots.length) {
+    const ids = subtreeIds(catalogue.tree, roots);
     products = products.filter((product) => product.category !== null && ids.has(product.category.id));
   }
   const term = query.search ? normalise(query.search) : '';
