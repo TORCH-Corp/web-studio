@@ -167,6 +167,10 @@ The production values are in the compose service `web-studio` (secrets from the 
     ALLOW_DEV_LOGIN=false   # absent in production; true only on a dev box: POST /ycode/api/auth/dev-login
     WS_PARTS=1   # absent in production: shows Collections and Forms (parts 2 and 3)
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4); on the server "TORCH corp"
+    ORG_SETUP_URL=http://auth-service:6001   # Organization Setup (served by auth-service): the organization's branches (part 2, W1)
+    ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # POST /api/internal/branches/ takes the service key alone; Sales holds the same key
+    PRODUCT_SERVICES_URL=http://product-services-service:6024   # Product & Services: the category tree (W1), the items (W2)
+    PRODUCT_SERVICES_API_KEY=<product-services' SERVICE_API_KEY>   # with x-entity-id = the organization
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -242,6 +246,40 @@ description changes: `pnpm templates:seed`.
   ycode's `/a/` handler inside `runWithSite`, with `width`, `height` and `quality` passed on. Uploads are
   stored as WebP (`lib/file-upload.ts`), named without their extension. Test: `e2e/site-assets.spec.ts`.
 
+## Store settings (part 2, session W1)
+- **API.** `GET` and `PATCH /ycode/api/platform/sites/{id}/store` (`manage_sites` r / u, the same session and
+  organization checks as the settings route), in `app/(builder)/ycode/api/platform/sites/[id]/store/route.ts`; the logic is
+  `lib/platform/store-settings.ts`, the body and its rules `store-settings-input.ts`. The route's own comment lists the
+  fields and the statuses. Store settings are not page content: they apply to the published site at once, with no publish.
+- **Where they live.** `platform_site_store` (migration `20261108000001_torch_site_store.ts`), one row per site made on the
+  site's first read: `selling`, `currency` (IQD or USD), `branch_id` (Organization Setup's), `category_ids` (Product &
+  Services'), `delivery_fee` numeric(14,2), `updated_at`, `updated_by`. The table refuses selling without a branch. Names,
+  the branches to choose from and the category tree are read live on every `GET`; nothing of theirs is stored.
+- **Checkouts.** `platform_storefront_orders` (same migration): per checkout that became a Sales order, the site, the
+  checkout id, the Sales order's id and code, the time; unique per site and checkout. Written by session W3. No buyer or
+  item data.
+- **Not copied by a template**: neither table is in `COPIED_TABLES`; a copy starts with the defaults, and a template's
+  store cannot be changed (403): a template never sells.
+- **Services.** `lib/platform/org-setup.ts`: `POST /api/internal/branches/` (the organization's active branches, every
+  type, warehouses included) and `/by-ids` (an archived branch's name) on auth-service, with the service key alone, as
+  Sales and queue-service call them; the user-facing `/org-setup/branches` needs Organization Setup access a Web Studio
+  user may lack. Checked on production on 8 Nov 2026, read only: 200 with the key, 401 without.
+  `lib/platform/product-services.ts`: `GET /categories/tree` and `GET /categories/{id}` with the service key and
+  `x-entity-id`. Product & Services counts the items of a category itself, every status; items sit on leaf categories.
+- **Rules** (owner, 8 Nov 2026). A chosen category covers every category under it, and its count is summed up the tree.
+  Selling needs a branch (422 `branch_required`); a currency change needs the fee in the same request (422
+  `fee_required`). A change is checked only for what it changes: a new branch must be an active branch of the
+  organization and the stored one is checked again when selling is switched on (422 `branch_unavailable`); new categories
+  must be live ones of the organization (422 `categories_unavailable`). A branch or category archived or deleted since it
+  was chosen stays stored and is shown with `available: false`. A service that cannot be asked leaves `branches` or
+  `category_tree` null with the reason in `branches_error` / `category_tree_error` and `available: null` on the chosen
+  values; a change that needs its check answers 503 (`org_setup_unavailable`, `product_services_unavailable`).
+- **The published site** reads a site's store through `storeOf(siteId)`, kept 30 s per site and forgotten when a change is
+  saved (another process keeps it for at most 30 s). Sessions W2 and W3 use it.
+- **Test.** `e2e/store-settings.spec.ts`. `e2e/platform-stub.ts` (port `E2E_PORT + 3`, data in `e2e/platform-fixtures.ts`)
+  stands in for Organization Setup and Product & Services, and `POST /__down` makes them answer 503; W2 and W3 add their
+  routes to it.
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -270,6 +308,13 @@ pass (367); 52 migrations from empty.
 Session 5: `e2e/publish.spec.ts` (default address with no host given, two sites publishing with their
 own content, an unpublished edit invisible until publish, `/ar` rtl and 404 where absent, unknown host,
 each site's own 404 page, a second host after the next publish) passes with `pnpm test` (303).
+
+Part 2, session W1: `e2e/store-settings.spec.ts` (the defaults from the first read, the stub's branches and summed-up
+category tree, 401 / 404 across organizations / 403 for a Viewer, a branch with two categories and a fee saved, selling only
+with a branch, only the organization's active branches and live categories, a currency change only with its fee, values
+archived or deleted since they were chosen kept and marked, both services down, a template that never sells and whose store
+a copy does not inherit) passes with `pnpm test` (397) and `pnpm e2e` (92); the migration runs from empty and on a copy of
+the production schema (8 Nov 2026), and rolls back.
 
 ## Session 3: platform assets and trimming
 - **No public host in the builder.** `public/vendor/` holds `@tailwindcss/browser`, GSAP
