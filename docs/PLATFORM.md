@@ -1,7 +1,9 @@
 # Web Studio on the TORCH platform (ycode fork)
 
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
-the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below).
+the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below), then part 2 (storefront and cart,
+on `feature/web-studio-storefront-and-cart`: sessions W1 to W8 and D1 below; **"Part 2 in production (session D1)"** is
+the one place that lists its keys, tables, routes, checkout flow, image cache and how it was deployed).
 
 ## How the service runs (session 11)
 One container, `web-studio`, in the platform's compose project on the production server
@@ -31,7 +33,9 @@ server from this repository's `Dockerfile` and is not pulled from a registry:
   site's files as well. Secrets in the root `.env`:
   `WEBSTUDIO_DB_PASSWORD`, `WEBSTUDIO_SESSION_SECRET`, `WEBSTUDIO_PAGE_AUTH_SECRET`, plus `WEBSTUDIO_APP_ID` (the
   catalogue id of Web Studio) and `WEBSTUDIO_TEMPLATES_ORG`. The service reuses `AUTH_SERVICE_API_KEY`,
-  `DOCUMENT_CENTER_API_KEY` and `DOMAIN_SERVICE_API_KEY` from the same `.env`.
+  `DOCUMENT_CENTER_API_KEY` and `DOMAIN_SERVICE_API_KEY` from the same `.env`, and since part 2 the keys of the services
+  the store calls (`AUTH_INTERNAL_SERVICE_API_KEY`, `PS_SERVICE_API_KEY`, `CC_SERVICE_API_KEY`, `SALES_SERVICE_API_KEY`) and
+  `SALES_APP_ID`: see "Part 2 in production".
 - **nginx.** `docker/nginx/` holds what is installed on the server: `web-studio.torchcorp.com` (Cloudflare-proxied,
   origin certificate), `sites.torchcorp.com` (`server_name sites.torchcorp.com *.sites.torchcorp.com`, DNS only, the
   Let's Encrypt wildcard certificate at `/etc/letsencrypt/live/sites.torchcorp.com/`, renewed by certbot's timer, whose
@@ -68,12 +72,30 @@ site answers on its hosts (the default language at `/`, the others at `/{locale}
 an unused host is 404. Details of each step are in the sections below.
 
 ## Server e2e
-`pnpm e2e:server` (`playwright.server.config.ts`, `e2e/server/deployment.spec.ts`) runs against the deployed service over
-HTTPS: health, the dev login refused (404), 401 without a session, an unused address 404, a real access token from
-auth-service through the callback, the three templates, a site created, published and served on
-`https://{slug}.sites.torchcorp.com` in both languages, then deleted. It needs `E2E_BOS_EMAIL` and `E2E_BOS_PASSWORD` (a test
-account; its organization is the test organization) and starts nothing. The local `pnpm e2e` leaves `e2e/server` out
-(`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it drops the schema.
+`pnpm e2e:server` (`playwright.server.config.ts`, `e2e/server/*.spec.ts`) runs against the deployed service over HTTPS. It
+needs `E2E_BOS_EMAIL` and `E2E_BOS_PASSWORD` (a test account; its organization is the test organization) and starts nothing.
+`deployment.spec.ts` (part 1) is: health, the dev login refused (404), 401 without a session, an unused address 404, a real
+access token from auth-service through the callback, the three templates, a site created, published and served on
+`https://{slug}.sites.torchcorp.com` in both languages, then deleted. Part 2 (session D1) adds five, against the real
+Organization Setup, Product & Services, Contact Center, Sales and Document Center, no stub: `store-settings.spec.ts`,
+`catalogue.spec.ts` (with the item's real image), `checkout.spec.ts`, `orders-api.spec.ts` and `storefront-browser.spec.ts` (a
+buyer in a real browser on a published site, and every host the store pages and the builder contact). The local `pnpm e2e`
+leaves `e2e/server` out (`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it
+drops the schema.
+- **What a run uses and leaves** (`e2e/server/real-services.ts`). One login for the whole run (`global-setup.ts` keeps the
+  token in `E2E_ACCESS_TOKEN`, in memory; auth-service answers 429 after 20 logins in 15 minutes). One fixed test item,
+  SKU `E2E-WS-STORE-01` ("E2E Web Studio test item", 25,000 IQD, the "All - General" leaf category, with one 8 x 8 PNG as its
+  `product_image` uploaded through Document Center), found by its SKU or made, put active and on the ECOMMERCE channel at the
+  start, and switched off (channel off, INACTIVE) by `global-teardown.ts`, because Product & Services only deletes drafts. One
+  fixed test buyer, `0770 000 0099` (Contact Center holds the person as `9647700000099`, found by phone on every run). Each
+  spec makes its own site on the test organization (selling, IQD, the headquarters branch, a 2,500 fee) and deletes it. Every
+  Sales order a run makes is **cancelled** by the run through the Orders API's status route, even when a spec fails (each
+  spec's `afterAll`), so the order stays in Sales as cancelled with the reason and the acting user; a run leaves no draft or
+  confirmed order. `platform_storefront_orders` keeps one row per checkout, for the soft-deleted site.
+- **The check that nothing goes to a public host** is `storefront-browser.spec.ts`: it records the host of every request,
+  websockets included, of a published store page in English and in Arabic, and of the builder opening the site and its Store
+  elements. The store pages contact only the site's own host. The builder contacts its own host and one more, Cloudflare's Web
+  Analytics beacon, which Cloudflare's edge injects into the HTML of the proxied builder host (see "Part 2 in production").
 
 ## What it does
 - **No Supabase.** `lib/platform/pg-client.ts` is a knex-backed drop-in for the Supabase
@@ -169,14 +191,14 @@ The production values are in the compose service `web-studio` (secrets from the 
     WS_PARTS=1   # absent in production: shows Collections and Forms (parts 2 and 3)
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4); on the server "TORCH corp"
     ORG_SETUP_URL=http://auth-service:6001   # Organization Setup (served by auth-service): the branches (W1), the day's rate and unit names (W2)
-    ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # the internal routes take the service key (and x-entity-id for the rate and units); Sales holds the same key
+    ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # ${AUTH_INTERNAL_SERVICE_API_KEY} in the root .env; the internal routes take the service key (and x-entity-id for the rate and units); Sales holds the same key
     PRODUCT_SERVICES_URL=http://product-services-service:6024   # Product & Services: the category tree (W1), the items, variants and images (W2)
-    PRODUCT_SERVICES_API_KEY=<product-services' SERVICE_API_KEY>   # with x-entity-id = the organization
+    PRODUCT_SERVICES_API_KEY=<product-services' SERVICE_API_KEY>   # ${PS_SERVICE_API_KEY} in the root .env; with x-entity-id = the organization
     CONTACT_CENTER_URL=http://contact-center-service:6017   # the checkout's buyer: find or create a person by phone (W3)
     CONTACT_CENTER_API_KEY=<contact-center's SERVICE_API_KEY>   # ${CC_SERVICE_API_KEY} in the root .env; with x-entity-id
     SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
     SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
-    SALES_APP_ID=<Sales's catalogue app id>   # the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
+    SALES_APP_ID=<Sales's catalogue app id>   # ${SALES_APP_ID} in the root .env; the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -360,7 +382,7 @@ description changes: `pnpm templates:seed`.
   and stores nothing (OPEN_QUESTIONS 31).
 - **Before production:** Contact Center's find-or-create is live (C1, 8 Nov 2026); Sales's service create (SL2) and SL1's
   order fields must be deployed first, with `deliveryAddress.phone` and the `items` of a 422 (the session plan, amended
-  8 Nov 2026).
+  8 Nov 2026). They were released on 8 Nov 2026 (18:42 UTC) and session D1's server e2e placed real orders through them.
 - **Test.** `e2e/checkout.spec.ts`. The platform stub answers Contact Center and Sales (`e2e/order-services-stub.ts`),
   records every call (`GET /__calls?service=`), and can refuse the next order (`POST /__sales/refuse`) or slow every create
   (`POST /__sales/delay`). Next fills a missing `x-forwarded-for` with the socket's address, so the spec's requests share one
@@ -436,7 +458,7 @@ the checkout are W5 and W6. Platform code is `lib/platform/store-elements/`; the
   as typed), the fee, the payment method, the notes, and the status history with its actors. **The history is whatever
   Sales sends**: the service read built in SL1 carries none (the user-token read does), so it is `[]` until Sales adds
   `history` (`fromStatus`, `toStatus`, `reason`, `changedBy { id, kind, name }`, `changedAt`) to `OrderObjectDetailSchema`
-  (OPEN_QUESTIONS 36). `links.open_in_sales` is `torch://app/<SALES_APP_ID>/orders/<id>`, the target Sales' own notification
+  (OPEN_QUESTIONS 38 and 39; still the case on production after SL1 to SL3 went live on 8 Nov 2026, D1). `links.open_in_sales` is `torch://app/<SALES_APP_ID>/orders/<id>`, the target Sales' own notification
   uses; `links.open_in_web_studio` is the same with `WS_APP_ID`; each is null when its variable is unset (logged once).
 - **Confirm and cancel** call Sales' service status route (`POST /internal/orders/{id}/status`, SL3) with the session's user as
   `actingUserId`; nothing else identifies the user (the session holds no access token). Sales checks that user's own x flag on
@@ -454,7 +476,8 @@ the checkout are W5 and W6. Platform code is `lib/platform/store-elements/`; the
   published again at every start, but a profile that already exists is not rewritten: the test organizations' Member and
   Viewer profiles get the flag by hand in Organization Setup.
 - **Before production:** Sales' service status route (SL3) deployed, and SL1's order fields; the environment above gains
-  `SALES_APP_ID`. The e2e stands in for the status route as the session plan defines it.
+  `SALES_APP_ID`. The e2e stands in for the status route as the session plan defines it. (All of it live on 8 Nov 2026,
+  checked by session D1's server e2e against the real Sales.)
 - **Test.** `e2e/orders-api.spec.ts`. The platform stub (`e2e/order-services-stub.ts`) answers Sales' list and status route
   (the acting user's flag is read from `e2e/auth-fixtures.ts`, the people the auth stub answers for) and Contact Center's
   `lookup-ids`.
@@ -586,6 +609,86 @@ not-found page for a store that does not sell.
   platform stub gained `POST /__item { id, status?, base_price? }` and `POST /__items/reset`.
 
 
+## Part 2 in production (session D1, 8 Nov 2026)
+Part 2 (the store) runs in the same container as part 1. What it added, in one place; the sessions above give each piece's rules.
+
+- **Keys.** Nine, in the compose service `web-studio` on the server (`/root/core-backend/docker-compose.yml`, which is not in
+  this repository), the keys taken from the root `.env` variable the receiving service reads as its own `SERVICE_API_KEY`
+  (as `DOMAIN_SERVICE_API_KEY` was, part 1 OPEN_QUESTIONS 14). Names only; never a value in a repository file:
+
+  | Key | Set to | Root `.env` variable | Used by |
+  |---|---|---|---|
+  | `ORG_SETUP_URL`, `ORG_SETUP_API_KEY` | `http://auth-service:6001` | `AUTH_INTERNAL_SERVICE_API_KEY` | branches (W1), the day's rate and unit names (W2) |
+  | `PRODUCT_SERVICES_URL`, `PRODUCT_SERVICES_API_KEY` | `http://product-services-service:6024` | `PS_SERVICE_API_KEY` | category tree (W1), items, variants, images (W2) |
+  | `CONTACT_CENTER_URL`, `CONTACT_CENTER_API_KEY` | `http://contact-center-service:6017` | `CC_SERVICE_API_KEY` | the checkout's buyer (W3), the orders' buyers (W8) |
+  | `SALES_URL`, `SALES_API_KEY` | `http://sales-service:6029` | `SALES_SERVICE_API_KEY` | the checkout's order (W3), the Orders API (W8) |
+  | `SALES_APP_ID` | the Sales catalogue id | `SALES_APP_ID` | the Orders API's deep link into Sales (W8) |
+
+  Every call carries `x-service-api-key` and the organization in `x-entity-id`. A key that is missing makes that service
+  "unavailable" (503 `*_unavailable`), never a guess. Each key was proven by a real call in the server e2e.
+- **Tables.** One migration, `20261108000001_torch_site_store.ts`, run at start (knex: "Batch 2 run: 1 migrations"):
+  `platform_site_store` (one row per site, made on its first read: `selling`, `currency` IQD or USD, `branch_id`,
+  `category_ids`, `delivery_fee`; the database refuses selling without a branch, a fee below 0, another currency) and
+  `platform_storefront_orders` (per checkout that became a Sales order: site, checkout id, Sales order id and code, the time;
+  unique per site and checkout). Neither is a tenant table, a template copy does not copy them, and neither holds a buyer or an item.
+- **Routes.** On the builder host, with a session, under `platform/`: `GET` and `PATCH sites/{id}/store` (`manage_sites` r / u),
+  `GET orders`, `GET orders/waiting-count`, `GET orders/{id}` (`manage_orders` r), `POST orders/{id}/confirm` and
+  `POST orders/{id}/cancel` (x), and the element settings' `store-elements/products` and `store-elements/categories`.
+  On a selling site's own host, anonymous: `GET /ycode/api/store/{settings,products,products/{id},categories}`, `GET
+  /store-media/{documentId}?item=`, `GET /ycode/api/store/font` (the IBM Plex Sans Arabic stylesheet from the platform's font
+  mirror, and its files), `POST /ycode/api/store/checkout`, `GET /ycode/api/store/orders/{checkout_id}`. All of them answer 404
+  `store_not_found` on the builder host and for a store that does not sell.
+- **The checkout, end to end.** The page makes a `checkout_id` once per cart and posts it with the buyer and the lines (item
+  ids and quantities, never prices) to its own host; the route screens it (same origin, size, honeypot, a rate limit per site
+  and IP); the lines are checked against the site's catalogue (at most 60 s old); a USD store asks for the day's rate; Contact
+  Center finds or creates the person by the phone in its canonical form (`964` and ten digits); Sales `POST /internal/orders`
+  makes the draft order (source `storefront`, the site as `sourceReference`, cash on delivery, the prices and the fee by Sales,
+  idempotent per checkout id); Web Studio stores the order's id and code and answers `{ checkout_id, code }`; the confirmation
+  page reads the order from Sales each time. Afterwards the app confirms or cancels through `POST /internal/orders/{id}/status`
+  with the signed-in user as `actingUserId` (Sales checks that user's own `sales.manage_orders` x). Nothing of the buyer is
+  stored here.
+- **The image cache.** A product's image is fetched once from Document Center (`GET /documents/{id}/download`, the service
+  key and the organization) and kept on the `web_studio_storage` volume at `PLATFORM_STORAGE_DIR/_store-media/{organization}/
+  {document}/{sha256}` with a `current.json`, in either storage mode; it is checked against the document's current version at
+  most once a day, and a failure to ask serves the copy. Served by the site as `/store-media/{documentId}?item={productId}`,
+  `cache-control: public, max-age=86400`, ETag the sha256, raster types only, and only the product's, a variant's or one of the
+  product's own images for a product the site sells. Proven on production: the bytes come back identical, with the same ETag
+  on the second read. The volume survives a container recreation; deleting `_store-media` only makes the next read fetch again.
+- **How it was deployed (8 Nov 2026), and how to roll back.**
+  1. *Preconditions, read only:* Sales's live `/documentation/json` lists `POST /internal/orders` and
+     `POST /internal/orders/{id}/status` (SL1 to SL3 released 18:42 UTC); Product & Services and Contact Center were on their
+     8 Nov images (P1, C1).
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261108-pre-part2.sql.gz`
+     (36 tables, 52 migrations, 18 sites; checked with `gunzip -t`).
+  3. *Rollback tag:* `docker tag web-studio:local web-studio:7ee115f-20261108`: part 1's image, built from `main` 7ee115f (a
+     checksum comparison of `/root/web-studio` with that tree showed only generated files differing).
+  4. *Migration rehearsal:* `pg_dump --schema-only` of the production database plus the `migrations` data restored into a scratch
+     database, `knex migrate:latest` run as the entrypoint does (52 to 53 migrations, both tables and their constraints), then dropped.
+  5. *Compose:* a copy kept as `docker-compose.yml.bak-20261108-part2`; the nine keys inserted after `WS_TEMPLATES_ORG`;
+     `docker compose config --quiet` valid.
+  6. *Sync and rebuild:* an `rsync -azcn --delete` by checksum listed exactly the files of `git diff origin/main..HEAD` (137
+     added, 42 modified, 5 deleted) and nothing else; then the real `rsync`, `docker compose build web-studio` (about two and a
+     half minutes) and `docker compose up -d --no-deps web-studio`. Healthy at once, 0 restarts, the permission scope registered
+     again for the one installed organization.
+  7. *Check:* `pnpm e2e:server`, 38 tests, all pass (the section "Server e2e").
+  *Roll back* with `docker tag web-studio:7ee115f-20261108 web-studio:local && cd /root/core-backend && docker compose up -d
+  --no-deps web-studio`. Part 1's code ignores the two new tables and the nine keys, so neither the migration nor the compose
+  lines need undoing. A restore of the dump is only for damaged data and was not rehearsed. The compose and the rollback tag
+  are on the server only. The `Found orphan containers (vault-service ...)` line `docker compose` prints is another service's
+  leftover; it was not pruned.
+- **Found while checking, not fixed here (outside D1's goal; each has an owner in OPEN_QUESTIONS).**
+  *The builder's page contacts one public host.* `web-studio.torchcorp.com` is proxied by Cloudflare, whose edge adds its Web
+  Analytics beacon (`https://static.cloudflareinsights.com/beacon.min.js`, `data-cf-beacon`) to every HTML answer: the same route
+  read from the origin (`127.0.0.1:6030`) has no such script, and the app and `docker/nginx` never name it. The published store
+  pages are not affected (`sites.torchcorp.com` is DNS only). `storefront-browser.spec.ts` records it as a known exception and
+  fails on any other host; turning it off is Cloudflare's Web Analytics setting or a `Cache-Control: no-transform` answer
+  (OPEN_QUESTIONS 53).
+  *The order history is empty in the Orders API on production* (OPEN_QUESTIONS 38 and 39): Sales's own read has it, its service
+  read does not yet. *A published page keeps Google URLs for a font a designer picks* (session 3, above): the store check ran on
+  a site with the default fonts, and the store elements' own font is the mirror's. *The server e2e leaves the test organization
+  with no ECOMMERCE item:* its one fixture item is switched off at the end, so Task B's templates need their own items there.
+- **Not rehearsed:** the rollback itself, and a restore from the dump.
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -627,6 +730,23 @@ receive, the repeat and the concurrent pair answered by one order, ineligible li
 Arabic, Sales or Contact Center down storing nothing and the retry finding the person, the confirmation read and its 404s, a USD
 store without the day's rate, cross-origin, honeypot, the rate limit per site and IP, the builder host and a store that does not
 sell) passes with `pnpm test` (471) and `pnpm e2e` (125), against stand-ins of SL2's service create (8 Nov 2026).
+
+Part 2, session D1 (8 Nov 2026, on the production server, the test organization): `pnpm e2e:server` passes, 38 tests. Part 1's
+five; `store-settings.spec.ts` (the real branches and category tree, a branch, a category and a fee saved, selling only with a
+branch, an unknown or archived branch and an unknown category refused, a currency change only with its fee); `catalogue.spec.ts`
+(the item on the ECOMMERCE channel with its price and unit, its image through Document Center byte for byte with the same ETag
+on the second read, search, category, paging, one product, the shop home's categories, a fee change seen at once, a store that
+does not sell and the builder host answering 404); `checkout.spec.ts` (one real order with the code Sales gave, read back in
+Sales as a draft from the storefront for this site with cash on delivery, the fee and the buyer from Contact Center, the retry
+answered by the same order, the confirmation, bad bodies in Arabic and English, an unknown item 422, another origin, the
+honeypot, the builder host, a store that stops selling, the cancel with its reason and acting user in Sales's history);
+`orders-api.spec.ts` (list by site, status and code, the waiting count, one order with its buyer, lines, address and links,
+confirm and cancel as the signed-in user, a repeat refused, 404s); `storefront-browser.spec.ts` (a buyer in Chromium on
+`https://{slug}.sites.torchcorp.com/products` finds the real item with its real image, adds it, checks out and reads the code;
+the same pages in Arabic; the builder opens the site and its Store elements; the hosts contacted are recorded). Every order the
+runs made (9 in all, including those of the runs that failed on the way while the specs were written) is cancelled in
+Sales: none draft, none confirmed. `POST
+/ycode/api/auth/dev-login` answers 404 on the server.
 
 ## Session 3: platform assets and trimming
 - **No public host in the builder.** `public/vendor/` holds `@tailwindcss/browser`, GSAP
@@ -759,6 +879,8 @@ sell) passes with `pnpm test` (471) and `pnpm e2e` (125), against stand-ins of S
   `e2e/canvas-marks.spec.ts` checks where the joiner is and is not.
 
 ## Not done (c1 and after)
+- Part 2's open findings are in "Part 2 in production": Cloudflare's beacon on the builder host, the Orders API's empty
+  history, the rollback not rehearsed.
 - **A published page renders an image layer as ycode's placeholder** (the data-URL SVG of
   `ASSET_PLACEHOLDERS`) while the preview renders the asset (`/a/<token>/file`). Seen in
   session 4 on a site copied from a template and reproduced on a plain site (upload a PNG,

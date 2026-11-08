@@ -9,29 +9,17 @@
 
 import { expect, request, test, type APIRequestContext } from '@playwright/test';
 import { callback, createSite, draftPages, openSite, publish, setHeading, signInWithToken, type SiteRecord } from '../helpers';
+import { accessToken, SITES_DOMAIN } from './real-services';
 
 test.describe.configure({ mode: 'serial' });
 
 const RUN = Date.now().toString(36);
-const AUTH_URL = process.env.E2E_AUTH_URL || 'https://auth.torchcorp.com';
-const SITES_DOMAIN = process.env.E2E_SITES_DOMAIN || 'sites.torchcorp.com';
 const SLUG = `e2e-${RUN}`;
 const HOST = `${SLUG}.${SITES_DOMAIN}`;
 
 let baseURL: string;
 let api: APIRequestContext;
 let site: SiteRecord | undefined;
-
-async function accessToken(): Promise<string> {
-  const auth = await request.newContext({ baseURL: AUTH_URL });
-  try {
-    const response = await auth.post('/auth/login', { data: { email: process.env.E2E_BOS_EMAIL, password: process.env.E2E_BOS_PASSWORD } });
-    expect(response.status(), 'auth-service login').toBe(200);
-    return (await response.json()).accessToken as string;
-  } finally {
-    await auth.dispose();
-  }
-}
 
 /** A published page, fetched over the public internet by its own host name, with no cookies. */
 async function visit(host: string, path: string) {

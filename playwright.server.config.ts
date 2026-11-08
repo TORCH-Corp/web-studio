@@ -11,7 +11,13 @@ import { defineConfig } from '@playwright/test';
  * Optional: E2E_SERVER_URL (default https://web-studio.torchcorp.com),
  * E2E_AUTH_URL (default https://auth.torchcorp.com), E2E_SITES_DOMAIN
  * (default sites.torchcorp.com). The account's organization is the test
- * organization: the run creates one site there, publishes it, and deletes it.
+ * organization: the run creates its sites there, publishes them, and deletes them.
+ *
+ * Part 2 (session D1) adds the store specs (store-settings, catalogue, checkout,
+ * orders-api, storefront-browser): real Organization Setup, Product & Services, Contact Center and
+ * Sales, one fixed test item on the ECOMMERCE channel (switched off again by the
+ * global teardown), one fixed test buyer phone, and every Sales order the run
+ * makes cancelled by the run (e2e/server/real-services.ts).
  */
 if (!process.env.E2E_BOS_EMAIL || !process.env.E2E_BOS_PASSWORD) {
   throw new Error('E2E_BOS_EMAIL and E2E_BOS_PASSWORD are not set. The server e2e signs in to Business OS with a test account.');
@@ -19,6 +25,8 @@ if (!process.env.E2E_BOS_EMAIL || !process.env.E2E_BOS_PASSWORD) {
 
 export default defineConfig({
   testDir: './e2e/server',
+  globalSetup: './e2e/server/global-setup.ts',
+  globalTeardown: './e2e/server/global-teardown.ts',
   workers: 1,
   retries: 0,
   timeout: 120_000,
