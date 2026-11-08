@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { noCache } from '@/lib/api-response';
 import { PublicKeyNotConfiguredError, verifyAccessToken } from '@/lib/platform/access-token';
-import { AuthServiceError, displayName, fetchCurrentUser, fetchWebStudioPermissions, hasAnyPermission } from '@/lib/platform/auth-service';
+import { AuthServiceError, displayName, fetchCurrentUser, fetchSalesOrdersExecute, fetchWebStudioPermissions, hasAnyPermission } from '@/lib/platform/auth-service';
 import { SESSION_COOKIE, SITE_COOKIE, cookieAttributes, signSession, signSiteCookie, verifySession, verifySiteCookie } from '@/lib/platform/session';
 import { sessionView } from '@/lib/platform/session-view';
 import { getSiteForOrganization, type Site } from '@/lib/platform/site';
@@ -16,6 +16,12 @@ import { getSiteForOrganization, type Site } from '@/lib/platform/site';
  * with the same token; and the `bos_session` cookie is minted for the user,
  * the organization the token names (`entityId`) and the flags, living as long
  * as the token. A user with no Web Studio flag at all gets no cookie (403).
+ *
+ * The same token reads the user's Sales flag (GET /authz/my-permissions?namespace=sales,
+ * part 2 session W8): x on sales.manage_orders is kept in the cookie as
+ * `sales_manage_orders_x`, so the Orders screen can show confirm and cancel
+ * only to a user Sales will accept. It is the same auth-service as the other
+ * two reads, so it fails with them (502); it grants nothing by itself.
  *
  * With `site`, the site is checked to be a live site of that organization and
  * the `ws_site` cookie is set too, as GET /ycode/api/platform/sites/{id}/open
@@ -47,8 +53,9 @@ export async function GET(request: NextRequest) {
 
   let perms;
   let me;
+  let salesOrdersX;
   try {
-    [perms, me] = await Promise.all([fetchWebStudioPermissions(token), fetchCurrentUser(token)]);
+    [perms, me, salesOrdersX] = await Promise.all([fetchWebStudioPermissions(token), fetchCurrentUser(token), fetchSalesOrdersExecute(token)]);
   } catch (error) {
     if (error instanceof AuthServiceError) {
       if (error.status === 401) return noCache({ error: 'Business OS did not accept the access token' }, 401);
@@ -71,7 +78,7 @@ export async function GET(request: NextRequest) {
   }
 
   const ttl = Math.max(1, claims.exp - Math.floor(Date.now() / 1000));
-  const sessionToken = await signSession({ sub: claims.sub, email: me.email, name: displayName(me), org: organization, perms }, ttl);
+  const sessionToken = await signSession({ sub: claims.sub, email: me.email, name: displayName(me), org: organization, perms, sales_manage_orders_x: salesOrdersX }, ttl);
   const session = (await verifySession(sessionToken))!;
 
   const wantsJson = request.headers.get('accept')?.includes('application/json') ?? false;

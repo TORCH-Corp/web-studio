@@ -30,6 +30,21 @@
  *        axes `[{ specification: { en, ar }, option: { en, ar } }]`; 404 when
  *        the organization has no such order.
  *
+ *   GET  /internal/orders?source=storefront[&status=…][&sourceReference=<site id>][&cursor][&limit]
+ *        → { success, data: { items: [order object], nextCursor, total } }: total counts the rows matching the
+ *          filters across all pages (the Navigator's waiting count is `status=draft&limit=1`'s total).
+ *          No date filter and no text search.
+ *   POST /internal/orders/{id}/status   (session SL3; part 2 session W8)
+ *        { status: 'confirmed' } or { status: 'cancelled', reason }, plus actingUserId (the Web Studio user): Sales
+ *        checks that user's x flag on sales.manage_orders and names them in the history. Only storefront orders.
+ *        → 200 the order changed · 403 { code: 'permission_missing' } the user lacks the flag, or another code for
+ *          a refusal (a non-storefront order) · 404 · 409 { code: 'order_invoiced' } · 422 { code: 'invalid_transition' }.
+ *        The answer's body is not read: the Orders API answers with the id and the status it asked for.
+ *
+ * The order object has a status `history` (fromStatus, toStatus, reason, changedBy { id, kind, name }, changedAt)
+ * only if Sales sends one: the service read built in SL1 carries none, the user-token read does. This client takes
+ * it when it is there and leaves it empty when it is not (owner, 8 Nov 2026).
+ *
  * A 400 means this client sent what Sales does not take: a contract mismatch,
  * thrown as a plain error (the route answers 500 and logs it). Any other
  * failure is SalesUnavailableError (the route answers 503).
@@ -60,11 +75,41 @@ export class SalesRefusedError extends Error {
   }
 }
 
+/** Sales refused the cursor a list was asked to continue from. */
+export class InvalidCursorError extends Error {
+  constructor() {
+    super('Sales did not accept the cursor');
+    this.name = 'InvalidCursorError';
+  }
+}
+
+/** The acting user does not hold the x flag on sales.manage_orders: Sales answered 403 permission_missing. */
+export class SalesPermissionMissingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SalesPermissionMissingError';
+  }
+}
+
+/** Sales refused the status change by a rule of the order: a 403 for another reason, a 409 or a 422, each with its code. */
+export class SalesStatusRefusedError extends Error {
+  constructor(
+    readonly httpStatus: 403 | 409 | 422,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SalesStatusRefusedError';
+  }
+}
+
 type Env = Record<string, string | undefined>;
 
 /** The create calls Contact Center, Product & Services and Organization Setup in turn; a retry of a slow create is answered by the order it made. */
 const CREATE_TIMEOUT_MS = 20_000;
 const READ_TIMEOUT_MS = 5_000;
+/** The status change asks auth-service and writes the history, the change log and the audit log. */
+const STATUS_TIMEOUT_MS = 15_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function config(env: Env): { baseUrl: string; apiKey: string } {
@@ -249,4 +294,211 @@ export async function getOrder(organizationId: string, orderId: string, env: Env
   const order = body?.success === true ? toSalesOrder(body.data) : null;
   if (!order) throw new SalesUnavailableError(`Sales answered ${op} with an unexpected body`);
   return order;
+}
+
+// ---------------------------------------------------------------------------
+// The Orders API (part 2, session W8; PRD V1.1 "Orders")
+// ---------------------------------------------------------------------------
+
+export const ORDER_STATUSES = ['draft', 'confirmed', 'delivered', 'finished', 'cancelled'] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+const isStatus = (value: unknown): value is OrderStatus => typeof value === 'string' && (ORDER_STATUSES as readonly string[]).includes(value);
+const isCurrency = (value: unknown): value is StoreCurrency => value === 'IQD' || value === 'USD';
+
+/** What a row of the Orders list needs of a Sales order. */
+export interface OrderSummary {
+  id: string;
+  code: string;
+  status: OrderStatus;
+  /** The Contact Center person (or organization) the order is for. */
+  customerId: string;
+  currency: StoreCurrency;
+  total: string;
+  /** The Web Studio site of a storefront order. */
+  sourceReference: string | null;
+  createdAt: string;
+}
+
+export interface OrderListQuery {
+  status?: OrderStatus[];
+  /** Only the orders of this site (Sales' exact-match sourceReference). */
+  siteId?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface OrderPage {
+  orders: OrderSummary[];
+  nextCursor: string | null;
+  /** The orders matching the filters across all pages. */
+  total: number;
+}
+
+function toOrderSummary(value: unknown): OrderSummary | null {
+  if (!isObject(value)) return null;
+  const { id, code, status, customer, currency, total, sourceReference, createdAt } = value;
+  if (!isText(id) || !isText(code) || !isStatus(status) || !isObject(customer) || !isText(customer.id)) return null;
+  const reference = sourceReference ?? null;
+  if (!isCurrency(currency) || !isText(total) || !isTextOrNull(reference) || !isText(createdAt)) return null;
+  return { id, code, status, customerId: customer.id, currency, total, sourceReference: reference, createdAt };
+}
+
+/** One page of the organization's storefront orders, newest first as Sales orders them. */
+export async function listStorefrontOrders(
+  organizationId: string,
+  query: OrderListQuery,
+  env: Env = process.env,
+  fetchImpl: typeof fetch = fetch,
+): Promise<OrderPage> {
+  const op = 'GET /internal/orders';
+  const params = new URLSearchParams({ source: 'storefront' });
+  for (const status of query.status ?? []) params.append('status', status);
+  if (query.siteId) params.set('sourceReference', query.siteId);
+  if (query.cursor) params.set('cursor', query.cursor);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  const response = await call(op, `/internal/orders?${params}`, { method: 'GET', organizationId, timeoutMs: READ_TIMEOUT_MS }, env, fetchImpl);
+  if (response.status === 400 && query.cursor) throw new InvalidCursorError();
+  if (!response.ok) throw await failure(op, response);
+  const body = (await response.json().catch(() => undefined)) as { success?: unknown; data?: { items?: unknown; nextCursor?: unknown; total?: unknown } } | undefined;
+  const data = body?.success === true ? body.data : undefined;
+  const orders = Array.isArray(data?.items) ? data.items.map(toOrderSummary) : null;
+  const nextCursor = data?.nextCursor;
+  const total = data?.total;
+  if (!orders || orders.some((order) => order === null) || !isTextOrNull(nextCursor) || typeof total !== 'number' || !Number.isInteger(total) || total < 0) {
+    throw new SalesUnavailableError(`Sales answered ${op} with an unexpected body`);
+  }
+  return { orders: orders as OrderSummary[], nextCursor, total };
+}
+
+/** The user a status change names: a user of the organization, or the storefront itself. */
+export interface OrderActor {
+  id: string;
+  kind: 'user' | 'storefront';
+  /** Null when the user is no longer a member of the organization. */
+  name: string | null;
+}
+
+/** One status change of an order. */
+export interface OrderHistoryEntry {
+  /** Null on the entry that records the creation. */
+  fromStatus: OrderStatus | null;
+  toStatus: OrderStatus;
+  reason: string | null;
+  /** Null when another app made the change through the service API. */
+  changedBy: OrderActor | null;
+  changedAt: string;
+}
+
+/** A storefront order as the Orders detail shows it. */
+export interface StorefrontOrder extends SalesOrder {
+  status: OrderStatus;
+  customerId: string;
+  branchId: string;
+  sourceReference: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  history: OrderHistoryEntry[];
+}
+
+function toActor(value: unknown): OrderActor | null | undefined {
+  if (value === null) return null;
+  if (!isObject(value) || !isText(value.id) || (value.kind !== 'user' && value.kind !== 'storefront')) return undefined;
+  const name = value.name ?? null;
+  if (!isTextOrNull(name)) return undefined;
+  return { id: value.id, kind: value.kind, name };
+}
+
+function toHistoryEntry(value: unknown): OrderHistoryEntry | null {
+  if (!isObject(value)) return null;
+  const { fromStatus, toStatus, reason, changedBy, changedAt } = value;
+  const why = reason ?? null;
+  if ((fromStatus !== null && !isStatus(fromStatus)) || !isStatus(toStatus) || !isTextOrNull(why) || !isText(changedAt)) return null;
+  const actor = toActor(changedBy);
+  if (actor === undefined) return null;
+  return { fromStatus: fromStatus as OrderStatus | null, toStatus, reason: why, changedBy: actor, changedAt };
+}
+
+/** The order as the internal read answers it, with the status history when Sales sends one; null when a field is missing or of another type. */
+export function toStorefrontOrder(data: unknown): StorefrontOrder | null {
+  const base = toSalesOrder(data);
+  if (!base || !isObject(data)) return null;
+  const { status, customer, branchId, sourceReference, notes, createdAt, updatedAt, history } = data;
+  const reference = sourceReference ?? null;
+  const note = notes ?? null;
+  if (!isStatus(status) || !isObject(customer) || !isText(customer.id) || !isText(branchId) || !isTextOrNull(reference)) return null;
+  if (!isTextOrNull(note) || !isText(createdAt) || !isText(updatedAt)) return null;
+  let entries: Array<OrderHistoryEntry | null> = [];
+  if (history !== undefined) {
+    if (!Array.isArray(history)) return null;
+    entries = history.map(toHistoryEntry);
+    if (entries.some((entry) => entry === null)) return null;
+  }
+  return {
+    ...base,
+    status,
+    customerId: customer.id,
+    branchId,
+    sourceReference: reference,
+    notes: note,
+    createdAt,
+    updatedAt,
+    history: entries as OrderHistoryEntry[],
+  };
+}
+
+/** One storefront order of the organization; null when Sales has none with this id, or it is not a storefront order. */
+export async function getStorefrontOrder(organizationId: string, orderId: string, env: Env = process.env, fetchImpl: typeof fetch = fetch): Promise<StorefrontOrder | null> {
+  const op = 'GET /internal/orders/{id}';
+  const response = await call(op, `/internal/orders/${encodeURIComponent(orderId)}`, { method: 'GET', organizationId, timeoutMs: READ_TIMEOUT_MS }, env, fetchImpl);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await failure(op, response);
+  const body = (await response.json().catch(() => undefined)) as { success?: unknown; data?: unknown } | undefined;
+  const source = body?.success === true && isObject(body.data) ? body.data.source : undefined;
+  if (typeof source === 'string' && source !== 'storefront') return null;
+  const order = typeof source === 'string' ? toStorefrontOrder(body?.data) : null;
+  if (!order) throw new SalesUnavailableError(`Sales answered ${op} with an unexpected body`);
+  return order;
+}
+
+/** Confirm, or cancel with the reason the user typed. Delivered and finished are set in Sales only. */
+export type StatusChange = { status: 'confirmed' } | { status: 'cancelled'; reason: string };
+
+/**
+ * Confirm or cancel a storefront order on behalf of one of the organization's users. 'changed' when Sales did it,
+ * 'not_found' when it has no such order. Throws SalesPermissionMissingError when the user lacks the x flag on
+ * sales.manage_orders, SalesStatusRefusedError for a rule of the order, SalesUnavailableError for anything else.
+ */
+export async function changeOrderStatus(
+  organizationId: string,
+  orderId: string,
+  actingUserId: string,
+  change: StatusChange,
+  env: Env = process.env,
+  fetchImpl: typeof fetch = fetch,
+): Promise<'changed' | 'not_found'> {
+  const op = 'POST /internal/orders/{id}/status';
+  const response = await call(
+    op,
+    `/internal/orders/${encodeURIComponent(orderId)}/status`,
+    { method: 'POST', organizationId, body: { ...change, actingUserId }, timeoutMs: STATUS_TIMEOUT_MS },
+    env,
+    fetchImpl,
+  );
+  if (response.ok) return 'changed';
+  if (response.status === 404) {
+    // Fastify's own "Route POST:… not found" is a Sales that has no status route yet (SL3 not deployed), not an order that is missing.
+    const body = (await response.json().catch(() => undefined)) as { message?: unknown } | undefined;
+    if (typeof body?.message === 'string' && body.message.startsWith('Route ')) throw new SalesUnavailableError(`Sales has no status route yet: ${op} answered 404 "${body.message}"`);
+    return 'not_found';
+  }
+  if (response.status === 403 || response.status === 409 || response.status === 422) {
+    const body = (await response.json().catch(() => undefined)) as { code?: unknown; message?: unknown } | undefined;
+    if (!body || typeof body.code !== 'string') throw new SalesUnavailableError(`Sales answered ${response.status} to ${op} with no code`);
+    const message = `Sales refused the status change: ${body.code}${typeof body.message === 'string' ? ` (${body.message})` : ''}`;
+    if (response.status === 403 && body.code === 'permission_missing') throw new SalesPermissionMissingError(message);
+    throw new SalesStatusRefusedError(response.status, body.code, message);
+  }
+  throw await failure(op, response);
 }

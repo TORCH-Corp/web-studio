@@ -6,12 +6,13 @@ import { getSessionFromCookies, getSiteCookie, getSiteForOrganization } from '@/
  * GET /ycode/api/auth/session: the Business OS user of this browser, if any,
  * with the organization, the site the builder is on, the Web Studio flags and
  * the role derived from them (part 1, session 2), so the builder can gate its
- * own controls and know when to renew. Public: without a session it says so.
+ * own controls and know when to renew. `sales_manage_orders_x` is the user's x
+ * flag on Sales's sales.manage_orders, read at sign-in (part 2, session W8). Public: without a session it says so.
  */
 export async function GET() {
   const session = await getSessionFromCookies();
   if (!session) {
-    return noCache({ data: { session: null, user: null, organization: null, site: null, permissions: null, role: null, expiresAt: null } });
+    return noCache({ data: { session: null, user: null, organization: null, site: null, permissions: null, sales_manage_orders_x: null, role: null, expiresAt: null } });
   }
   const siteCookie = await getSiteCookie();
   const site = siteCookie && siteCookie.org === session.org ? await getSiteForOrganization(siteCookie.site, session.org) : null;

@@ -22,7 +22,7 @@ export interface TestPerson {
   permissions: Record<string, Flags>;
 }
 
-export const PEOPLE: Record<'owner' | 'member' | 'viewer' | 'nobody', TestPerson> = {
+export const PEOPLE: Record<'owner' | 'salesless' | 'member' | 'viewer' | 'nobody', TestPerson> = {
   /** The Manager profile's defaults: every flag on all four leaves (plus another app's, which must not leak into the session). */
   owner: {
     sub: '2a2a2a2a-2a2a-4a2a-8a2a-2a2a2a2a2a2a',
@@ -36,9 +36,26 @@ export const PEOPLE: Record<'owner' | 'member' | 'viewer' | 'nobody', TestPerson
       'webstudio.manage_forms': ALL,
       'webstudio.manage_orders': ALL,
       'sales.manage_leads': ALL,
+      // Part 2, W8: a Manager of Web Studio who is also a Sales salesman, so Sales accepts their confirm and cancel.
+      'sales.manage_orders': ALL,
     },
   },
-  /** The Member profile's defaults: manage_content c r u, manage_sites r. No profile name: the builder shows first and last name. */
+  /** Part 2, W8: manages Web Studio's orders (x) but holds only r on Sales's: Sales refuses their confirm and cancel. */
+  salesless: {
+    sub: '2e2e2e2e-2e2e-4e2e-8e2e-2e2e2e2e2e2e',
+    email: 'salesless@example.com',
+    name: 'Web Only',
+    firstName: 'Web',
+    lastName: 'Only',
+    permissions: {
+      'webstudio.manage_sites': ALL,
+      'webstudio.manage_content': ALL,
+      'webstudio.manage_forms': NONE,
+      'webstudio.manage_orders': ALL,
+      'sales.manage_orders': READ,
+    },
+  },
+  /** The Member profile's defaults: manage_content c r u, manage_sites r, manage_orders r. No profile name: the builder shows first and last name. */
   member: {
     sub: '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b',
     email: 'member@example.com',
@@ -49,10 +66,10 @@ export const PEOPLE: Record<'owner' | 'member' | 'viewer' | 'nobody', TestPerson
       'webstudio.manage_sites': READ,
       'webstudio.manage_content': EDIT,
       'webstudio.manage_forms': NONE,
-      'webstudio.manage_orders': NONE,
+      'webstudio.manage_orders': READ,
     },
   },
-  /** The Viewer profile's defaults: r on manage_sites and manage_content. */
+  /** The Viewer profile's defaults: r on manage_sites, manage_content and manage_orders. */
   viewer: {
     sub: '2c2c2c2c-2c2c-4c2c-8c2c-2c2c2c2c2c2c',
     email: 'viewer@example.com',
@@ -63,7 +80,7 @@ export const PEOPLE: Record<'owner' | 'member' | 'viewer' | 'nobody', TestPerson
       'webstudio.manage_sites': READ,
       'webstudio.manage_content': READ,
       'webstudio.manage_forms': NONE,
-      'webstudio.manage_orders': NONE,
+      'webstudio.manage_orders': READ,
     },
   },
   /** A member of the organization with no Web Studio leaf at all. */

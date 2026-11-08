@@ -176,6 +176,7 @@ The production values are in the compose service `web-studio` (secrets from the 
     CONTACT_CENTER_API_KEY=<contact-center's SERVICE_API_KEY>   # ${CC_SERVICE_API_KEY} in the root .env; with x-entity-id
     SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
     SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
+    SALES_APP_ID=<Sales's catalogue app id>   # the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -417,6 +418,47 @@ the checkout are W5 and W6. Platform code is `lib/platform/store-elements/`; the
 - **Test.** `e2e/store-elements.spec.ts` (the platform stub's catalogue organization gains an empty category, Toys) and the
   unit tests beside the modules (`lib/platform/store-elements/*.test.ts`).
 
+## Orders API (part 2, session W8)
+- **Routes** (all in the proxy's map under `webstudio.manage_orders`; each route file's comment gives the answer's shape):
+  `GET /ycode/api/platform/orders` (r; `site_id`, `status`, `q`, `cursor`, `limit`), `GET .../orders/waiting-count` (r),
+  `GET .../orders/{id}` (r), `POST .../orders/{id}/confirm` and `POST .../orders/{id}/cancel { reason }` (x). They sit under
+  `platform/`, so they need a session and no open site. The logic is `lib/platform/orders.ts`, the shapes
+  `orders-view.ts`, Sales' calls `sales.ts`, the buyers `contact-center.ts`, Sales' refusals `orders-errors.ts`.
+- **Where a row comes from.** Sales `GET /internal/orders?source=storefront` (paged by Sales' cursor, `status` and
+  `sourceReference` = the site id as filters; its `total` counts the rows matching them across all pages), then
+  `platform_storefront_orders` joined with `platform_sites` for the site and its name and the checkout id (an order with no
+  record is placed by its `sourceReference`; a deleted site's orders stay, with its name), then Contact Center
+  `POST /api/v1/directory/lookup-ids` for the buyer's name and phone, in chunks of 100. `q` (the order's code or the buyer's
+  name) is matched on the page just fetched, so a page can have fewer rows than `limit` and still have a `next_cursor`.
+  Web Studio keeps no buyer or order data. Contact Center out of reach: the rows come back with no buyer name or phone and
+  `buyer_error: 'contact_center_unavailable'`; Sales out of reach: 503 `sales_unavailable`.
+- **Waiting count** is the `total` of Sales' list for `status=draft` with `limit=1`: one call, exact.
+- **Detail.** Sales `GET /internal/orders/{id}` plus the buyer and the site: the lines with their axes, the address (the phone
+  as typed), the fee, the payment method, the notes, and the status history with its actors. **The history is whatever
+  Sales sends**: the service read built in SL1 carries none (the user-token read does), so it is `[]` until Sales adds
+  `history` (`fromStatus`, `toStatus`, `reason`, `changedBy { id, kind, name }`, `changedAt`) to `OrderObjectDetailSchema`
+  (OPEN_QUESTIONS 36). `links.open_in_sales` is `torch://app/<SALES_APP_ID>/orders/<id>`, the target Sales' own notification
+  uses; `links.open_in_web_studio` is the same with `WS_APP_ID`; each is null when its variable is unset (logged once).
+- **Confirm and cancel** call Sales' service status route (`POST /internal/orders/{id}/status`, SL3) with the session's user as
+  `actingUserId`; nothing else identifies the user (the session holds no access token). Sales checks that user's own x flag on
+  `sales.manage_orders`, names them in the history and publishes the event. Web Studio does not repeat the check from the
+  sign-in snapshot: Sales' `403 permission_missing` is `403 { code: 'sales_permission_missing', required: 'sales.manage_orders.x' }`
+  (Web Studio's own flag is the proxy's `403 { required: 'webstudio.manage_orders.x' }`); a rule of the order keeps Sales'
+  status and code (`422 invalid_transition`, `409 order_invoiced`); no such order is 404. The answer is `{ data: { id, status } }`:
+  the app reads the order again for its history. Delivered and finished are Sales-only.
+- **The Sales flag for the read-only view.** The sign-in callback also reads `GET /authz/my-permissions?namespace=sales` with
+  the user's token (with the two reads it already makes; the same auth-service, so it fails with them) and keeps x on
+  `sales.manage_orders` in the session cookie as `sales_manage_orders_x`; `GET /ycode/api/auth/session` returns it (null with
+  no session; false for a cookie from before). The app shows confirm and cancel only when it and `webstudio.manage_orders` x
+  are both true; the server checks anyway.
+- **Scope defaults.** `permission-scope.json` gives Member and Viewer r on `manage_orders` (Manager unchanged). The scope is
+  published again at every start, but a profile that already exists is not rewritten: the test organizations' Member and
+  Viewer profiles get the flag by hand in Organization Setup.
+- **Before production:** Sales' service status route (SL3) deployed, and SL1's order fields; the environment above gains
+  `SALES_APP_ID`. The e2e stands in for the status route as the session plan defines it.
+- **Test.** `e2e/orders-api.spec.ts`. The platform stub (`e2e/order-services-stub.ts`) answers Sales' list and status route
+  (the acting user's flag is read from `e2e/auth-fixtures.ts`, the people the auth stub answers for) and Contact Center's
+  `lookup-ids`.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream

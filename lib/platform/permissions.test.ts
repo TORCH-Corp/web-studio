@@ -104,6 +104,23 @@ test('public and session-only routes, and the anonymous exceptions for visitors'
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/i1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'c' });
 });
 
+test('the Orders API (part 2, W8): r to list and read, x to confirm and cancel, on the orders leaf', () => {
+  const ORDER = '3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b';
+  const leaf = (flag: string) => ({ kind: 'leaf', leaf: 'webstudio.manage_orders', flag });
+  assert.deepEqual(accessFor('/ycode/api/platform/orders', 'GET', q('site_id=x&status=draft')), leaf('r'));
+  assert.deepEqual(accessFor('/ycode/api/platform/orders/waiting-count', 'GET', q()), leaf('r'));
+  assert.deepEqual(accessFor(`/ycode/api/platform/orders/${ORDER}`, 'GET', q()), leaf('r'));
+  assert.deepEqual(accessFor(`/ycode/api/platform/orders/${ORDER}/confirm`, 'POST', q()), leaf('x'));
+  assert.deepEqual(accessFor(`/ycode/api/platform/orders/${ORDER}/cancel`, 'POST', q()), leaf('x'));
+  // The waiting count is its own route, not an order called "waiting-count".
+  assert.equal(matchApiRoute('/ycode/api/platform/orders/waiting-count'), 'platform/orders/waiting-count');
+  assert.equal(matchApiRoute(`/ycode/api/platform/orders/${ORDER}`), 'platform/orders/[id]');
+  // Nothing else is served: an order cannot be edited or deleted here, and the other statuses are Sales's.
+  assert.equal(matchApiRoute(`/ycode/api/platform/orders/${ORDER}/deliver`), null);
+  // Orders are not the open site's content: no editor lock.
+  assert.equal(isEditingWrite(accessFor(`/ycode/api/platform/orders/${ORDER}/confirm`, 'POST', q())!, 'POST'), false);
+});
+
 test('a path under /ycode/api that no route names is unmapped; the preview and templates bridge are gated; other paths are not this map\'s', () => {
   assert.deepEqual(accessFor('/ycode/api/nothing/here', 'GET', q()), { kind: 'unmapped' });
   assert.deepEqual(accessFor('/ycode/api', 'GET', q()), { kind: 'unmapped' });

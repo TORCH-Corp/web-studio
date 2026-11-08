@@ -5,6 +5,9 @@
  *   GET /authz/my-permissions?namespace=webstudio
  *       a bare object, leaf key -> { c, r, u, d, x, export?, use_ai?, execute? }
  *       (booleans; no envelope). `namespace` keeps only `webstudio.*`.
+ *   GET /authz/my-permissions?namespace=sales   (part 2, session W8)
+ *       the same map for the Sales leaves. The callback keeps one flag of it, x on sales.manage_orders, so the
+ *       app can show confirm and cancel only to a user Sales will accept (the Orders API; Sales checks it again).
  *   GET /users/me
  *       the user's profile: id, email, name, firstName, lastName, ... (bare object).
  *       The access token carries no name claim, so this is where the name is.
@@ -78,6 +81,20 @@ export function hasAnyPermission(perms: BosSession['perms']): boolean {
 
 export async function fetchWebStudioPermissions(token: string, env: Env = process.env): Promise<BosSession['perms']> {
   return permissionsFromLeafMap(await authGet<unknown>('/authz/my-permissions?namespace=webstudio', token, env));
+}
+
+/** The Sales leaf whose x flag lets a user confirm or cancel an order in Sales. */
+export const SALES_ORDERS_LEAF = 'sales.manage_orders';
+
+/** Does a my-permissions map give the user x on sales.manage_orders? Only that flag of only that leaf. */
+export function canExecuteSalesOrders(map: unknown): boolean {
+  if (!map || typeof map !== 'object') return false;
+  const flags = (map as Record<string, unknown>)[SALES_ORDERS_LEAF];
+  return !!flags && typeof flags === 'object' && (flags as Record<string, unknown>).x === true;
+}
+
+export async function fetchSalesOrdersExecute(token: string, env: Env = process.env): Promise<boolean> {
+  return canExecuteSalesOrders(await authGet<unknown>('/authz/my-permissions?namespace=sales', token, env));
 }
 
 export interface CurrentUser {
