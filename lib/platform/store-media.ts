@@ -20,7 +20,10 @@
  * served and the check is tried again after ten minutes; the failure is logged.
  *
  * Only raster image types are kept and served: an SVG or HTML document under
- * the site's host could run script in the site's origin.
+ * the site's host could run script in the site's origin. A document refused for
+ * its type is remembered until its daily check, so it is not downloaded (and
+ * logged) again on every view: Product & Services can be set to take SVG
+ * product images.
  *
  * Who may see which image is not decided here: lib/platform/catalogue.ts only
  * asks for an image of a product the site sells. Kept free of Next imports so
@@ -92,6 +95,8 @@ export function createStoreMediaCache(options: {
   const log = options.log ?? ((message: string) => console.error(message));
   const inflight = new Map<string, Promise<MediaFile | null>>();
   const retryAfter = new Map<string, number>();
+  /** Documents whose current version is not an image the store serves, until when (ms since the epoch). */
+  const refusedUntil = new Map<string, number>();
 
   const folderOf = (organizationId: string, documentId: string) => path.join(dir, organizationId.toLowerCase(), documentId.toLowerCase());
 
@@ -126,7 +131,7 @@ export function createStoreMediaCache(options: {
     return { data, meta };
   }
 
-  async function fetchAndKeep(organizationId: string, documentId: string, folder: string): Promise<MediaFile | null> {
+  async function fetchAndKeep(organizationId: string, documentId: string, folder: string, key: string): Promise<MediaFile | null> {
     let file: { data: Buffer; contentType: string | null } | null;
     try {
       file = await source.download(organizationId, documentId);
@@ -138,16 +143,21 @@ export function createStoreMediaCache(options: {
       return null;
     }
     if (!file.contentType || !MEDIA_TYPES.has(file.contentType)) {
-      log(`[store-media] document ${documentId} of organization ${organizationId} is ${file.contentType ?? 'of no stated type'}, not an image the store serves`);
+      log(`[store-media] document ${documentId} of organization ${organizationId} is ${file.contentType ?? 'of no stated type'}, not an image the store serves; asked again in a day`);
+      refusedUntil.set(key, now() + RECHECK_MS);
+      // A copy of an earlier version is not the document any more.
+      await fs.rm(folder, { recursive: true, force: true });
       return null;
     }
     return keep(folder, file.data, file.contentType);
   }
 
   async function load(organizationId: string, documentId: string, key: string): Promise<MediaFile | null> {
+    if ((refusedUntil.get(key) ?? 0) > now()) return null;
+    refusedUntil.delete(key);
     const folder = folderOf(organizationId, documentId);
     const stored = await readStored(folder);
-    if (!stored) return fetchAndKeep(organizationId, documentId, folder);
+    if (!stored) return fetchAndKeep(organizationId, documentId, folder, key);
     if (now() - stored.meta.checkedAt < RECHECK_MS || (retryAfter.get(key) ?? 0) > now()) return stored;
 
     let hash: string | null;
@@ -169,7 +179,7 @@ export function createStoreMediaCache(options: {
       return { data: stored.data, meta };
     }
     try {
-      return await fetchAndKeep(organizationId, documentId, folder);
+      return await fetchAndKeep(organizationId, documentId, folder, key);
     } catch (error) {
       if (!(error instanceof StoreMediaUnavailableError)) throw error;
       retryAfter.set(key, now() + RETRY_MS);

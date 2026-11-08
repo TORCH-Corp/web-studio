@@ -315,7 +315,8 @@ description changes: `pnpm templates:seed`.
   `PLATFORM_STORAGE_DIR/_store-media/{organization}/{document}/{sha256}` with `current.json`. Once a day at most the copy is
   checked against the document's current version (`GET /documents/{id}`, `currentVersion.fileHash`, which Document Center
   records as "viewed") and fetched again when it changed; while Document Center cannot be asked the copy is served and the
-  check retried after ten minutes. Raster types only (JPEG, PNG, WebP, GIF, AVIF). Served with
+  check retried after ten minutes. Raster types only (JPEG, PNG, WebP, GIF, AVIF); a document of another type (Product &
+  Services can be set to take SVG) is refused, answered 404, and not downloaded again until a day later. Served with
   `cache-control: public, max-age=86400`, the sha256 as ETag, `nosniff`.
 - **Test.** `e2e/catalogue.spec.ts`. The platform stub answers the items, the workspace, the documents, the rate (`POST
   /__rate { found }`) and the units; the fake Document Center holds the item images from `e2e/platform-fixtures.ts` and
