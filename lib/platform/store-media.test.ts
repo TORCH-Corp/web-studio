@@ -120,16 +120,44 @@ test('an image not kept yet while Document Center cannot be reached is an error,
   assert.deepEqual((await cache.get(ORG, DOC))?.data, PNG);
 });
 
-test('only raster images are kept: an SVG or a PDF is refused and logged', async () => {
-  const { logs, state, cache } = await setup();
-  state.contentType = 'image/svg+xml';
-  assert.equal(await cache.get(ORG, DOC), null);
-  state.contentType = 'application/pdf';
-  assert.equal(await cache.get(ORG, DOC), null);
-  state.contentType = null;
-  assert.equal(await cache.get(ORG, DOC), null);
+test('only raster images are kept: an SVG, a PDF or an unstated type is refused and logged', async () => {
+  const { clock, logs, state, cache } = await setup();
+  for (const contentType of ['image/svg+xml', 'application/pdf', null]) {
+    state.contentType = contentType;
+    assert.equal(await cache.get(ORG, DOC), null, String(contentType));
+    clock.now += RECHECK_MS;
+  }
+  assert.equal(state.downloads, 3);
   assert.equal(logs.length, 3);
   assert.match(logs[0], /image\/svg\+xml, not an image the store serves/);
+});
+
+test('a refused document is not downloaded again on every view, only after its daily check', async () => {
+  const { clock, logs, state, cache } = await setup();
+  state.contentType = 'image/svg+xml';
+  assert.equal(await cache.get(ORG, DOC), null);
+  clock.now += RECHECK_MS - 1;
+  assert.equal(await cache.get(ORG, DOC), null);
+  assert.equal(await cache.get(ORG, DOC), null);
+  assert.deepEqual([state.downloads, state.reads, logs.length], [1, 0, 1]);
+  // A day on, it is asked again; it has become a PNG and is served from then on.
+  state.contentType = 'image/png';
+  clock.now += 1;
+  assert.deepEqual((await cache.get(ORG, DOC))?.data, PNG);
+  assert.deepEqual((await cache.get(ORG, DOC))?.data, PNG);
+  assert.equal(state.downloads, 2);
+});
+
+test('a kept image whose new version is not an image is dropped and refused until its next check', async () => {
+  const { dir, clock, state, cache } = await setup();
+  await cache.get(ORG, DOC);
+  state.data = PNG_V2;
+  state.contentType = 'image/svg+xml';
+  clock.now += RECHECK_MS;
+  assert.equal(await cache.get(ORG, DOC), null);
+  await assert.rejects(fs.stat(path.join(dir, ORG, DOC)), /ENOENT/, 'the copy of the earlier version is removed');
+  assert.equal(await cache.get(ORG, DOC), null);
+  assert.deepEqual([state.downloads, state.reads], [2, 1]);
 });
 
 test('ids that are not uuids never reach the disk', async () => {
