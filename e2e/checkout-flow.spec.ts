@@ -24,6 +24,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium, expect, request, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { HONEYPOT_FIELD_NAME } from '../lib/form-spam-settings';
 import { createSite, draftPages, openSite, publish, signIn, TEST_SITES_DOMAIN, type SiteRecord } from './helpers';
 import { BRANCH, CATALOGUE_ORG, CATEGORY, ITEM } from './platform-fixtures';
 
@@ -745,6 +746,54 @@ test('on a phone the order summary is a collapsed bar that opens, and the page h
     await page.goto('/cart');
     await expect(lineOf(page, 'Desk lamp')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    await context.close();
+  }
+});
+
+/** How far the page reaches past the window's width, in pixels: 0 when it has no sideways scroll. */
+const sidewaysScroll = (page: Page) => page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - window.innerWidth));
+
+test('in Arabic the cart and the checkout have no sideways scroll either, on a phone and on a desktop', async () => {
+  // A right to left page scrolls towards the left: anything placed far off to the left (the form's decoy field) widens it.
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+    const context = await visitor({ viewport });
+    try {
+      const page = await context.newPage();
+      await page.goto('/ar/products');
+      await expect(page.locator('[data-ws-store="productGrid"] article.ws-card').first()).toBeVisible();
+      await addFromGrid(page, 'مصباح مكتب');
+      await expect(cartBadge(page)).toHaveText('1');
+
+      await page.goto('/ar/cart');
+      await expect(lineOf(page, 'مصباح مكتب')).toBeVisible();
+      expect(await sidewaysScroll(page), `the cart at ${viewport.width} px`).toBe(0);
+
+      await page.goto('/ar/checkout');
+      await expect(placeOrder(page)).toContainText('د.ع');
+      expect(await sidewaysScroll(page), `the checkout at ${viewport.width} px`).toBe(0);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('the checkout form still carries the decoy field in its box: a bot that fills it is sent, and no order is made', async () => {
+  const salesBefore = await calls('sales');
+  const context = await visitor();
+  try {
+    const page = await context.newPage();
+    const posted = watchCheckouts(page);
+    await addPlainItems(page, 'Desk lamp');
+    await openCheckout(page);
+    const decoy = checkoutEl(page).locator(`form .ws-decoy input[name="${HONEYPOT_FIELD_NAME}"]`);
+    await expect(decoy).toHaveCount(1);
+    await decoy.fill('a bot was here', { force: true });
+    await fillForm(page);
+    await placeOrder(page).click();
+    await expect(alertOf(page, 'service')).toBeVisible();
+    expect(posted.at(-1)).toMatchObject({ [HONEYPOT_FIELD_NAME]: 'a bot was here' });
+    expect(await attemptsSince(salesBefore)).toHaveLength(0);
   } finally {
     await context.close();
   }

@@ -546,12 +546,14 @@ not-found page for a store that does not sell.
   load** (`cart-refresh.ts`, `use-cart.ts`): each product in the cart is read once from `/ycode/api/store/products/{id}`;
   a line still on sale takes the catalogue's name, options, price, picture and unit (and is marked "Price updated · was …"
   when the price changed); a line the catalogue no longer sells (product gone, variant gone, no price, cannot be bought) is
-  marked "No longer available" and Checkout is off, with the reason, until it is removed; a catalogue that cannot be read
+  marked "Unavailable" (the handoff's tag) and Checkout is off, with the reason, until it is removed; a catalogue that cannot be read
   leaves the lines as they are and says so.
 - **The checkout element** (`Checkout.tsx`, state; `CheckoutView.tsx`, the markup of `checkout-form-*`). The order summary
   (a collapsed bar on a phone that opens, a column on a desktop; both are in the page and CSS shows one), the form (name,
   phone, city as a select of `iraq-governorates.ts` in the page's language, address, landmark and notes optional), the
-  cash-on-delivery note, Place order with the total. The rules for the fields are the route's (`checkout-input.ts`): the
+  cash-on-delivery note, Place order with the total. The form carries ycode's decoy field (`FormHoneypotField`) in a box of
+  no size that clips it (`ws-decoy`): the field sits 9999 px to the left, which would widen a right to left page by as much
+  (W6 review fix). The rules for the fields are the route's (`checkout-input.ts`): the
   form sends what was typed with `locale` and shows the route's messages under their fields, with the designed alert listing
   the fields (each a link to its field); typing in a refused field takes its message away. On submit: one request at a
   time (a ref guard, and the button and the fields disabled with the spinner and "Placing your order…"),
