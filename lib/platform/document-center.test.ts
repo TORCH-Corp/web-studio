@@ -14,11 +14,17 @@ before(async () => {
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString();
     seen.push({ method: req.method, url: req.url, key: req.headers['x-service-api-key'] as string, entity: req.headers['x-entity-id'] as string, body: raw ? JSON.parse(raw) : {} });
+    if (status === 200 && req.url === '/documents/img-1/download') {
+      res.writeHead(200, { 'content-type': 'Image/PNG; charset=binary' });
+      return res.end(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    }
     res.writeHead(status, { 'content-type': 'application/json' });
     if (status !== 200 && status !== 201) return res.end('{"message":"no"}');
     if (req.url === '/folders' && req.method === 'GET') return res.end('{"data":[]}');
     if (req.url === '/folders') return res.end('{"data":{"id":"folder-1"}}');
     if (req.url === '/documents/service-upload') return res.end('{"data":{"id":"doc-1"}}');
+    if (req.url === '/documents/img-1') return res.end('{"data":{"id":"img-1","currentVersion":{"versionNumber":2,"fileHash":"AB12"}}}');
+    if (req.url === '/documents/blank') return res.end('{"data":{"id":"blank","currentVersion":null}}');
     res.end('{}');
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -56,4 +62,20 @@ test('a refusal from Document Center is an error carrying its status; delete tre
   await assert.rejects(deleteDocument('org-1', 'doc-1'), (e: unknown) => e instanceof DocumentCenterError && e.status === 401);
   status = 404;
   await deleteDocument('org-1', 'doc-1');
+});
+
+test('an item image is downloaded with its media type; a document read gives its current version\'s hash', async () => {
+  const { currentFileHash, downloadDocumentFile } = await import('./document-center');
+  status = 200;
+  const file = await downloadDocumentFile('org-1', 'img-1');
+  assert.deepEqual(file, { data: Buffer.from([0x89, 0x50, 0x4e, 0x47]), contentType: 'image/png' });
+  const download = seen.find((s) => s.url === '/documents/img-1/download')!;
+  assert.deepEqual([download.method, download.key, download.entity], ['GET', 'k', 'org-1']);
+  assert.equal(await currentFileHash('org-1', 'img-1'), 'ab12');
+  assert.equal(await currentFileHash('org-1', 'blank'), null);
+  status = 404;
+  assert.equal(await downloadDocumentFile('org-1', 'img-1'), null);
+  assert.equal(await currentFileHash('org-1', 'img-1'), null);
+  status = 503;
+  await assert.rejects(currentFileHash('org-1', 'img-1'), /503/);
 });

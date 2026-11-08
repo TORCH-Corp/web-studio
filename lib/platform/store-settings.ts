@@ -24,7 +24,8 @@
  * once, with no publish (PRD). The published site reads them through
  * `storeOf`, which keeps each site's row for 30 seconds and forgets it when a
  * change is saved here (another process keeps it for at most 30 seconds, as
- * the host lookups of lib/platform/site.ts do).
+ * the host lookups of lib/platform/site.ts do). A change also forgets the
+ * site's catalogue (lib/platform/catalogue-cache.ts, session W2).
  *
  * A template never sells: its store cannot be changed (session 4 keeps a
  * template off every host anyway).
@@ -51,6 +52,7 @@ import {
   type StoreRow,
 } from '@/lib/platform/store-settings-input';
 import { TtlCache } from '@/lib/platform/ttl-cache';
+import { forgetCatalogue } from '@/lib/platform/catalogue-cache';
 
 /** The site's branch. `available` is false when it is not an active branch any more, null when Organization Setup could not be asked. */
 export interface StoreBranch {
@@ -308,6 +310,8 @@ export async function applyStoreSettings(site: Site, patch: StorePatch, user: { 
       throw error;
     } finally {
       stores().forget(site.id);
+      // The published site's catalogue depends on the store's currency and categories: read it again (session W2).
+      forgetCatalogue(site.id);
     }
   }
   return readStoreSettings(site);

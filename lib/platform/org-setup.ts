@@ -1,5 +1,6 @@
 /**
- * Organization Setup client (part 2, session W1): the organization's branches.
+ * Organization Setup client: the organization's branches (part 2, session W1),
+ * the day's exchange rate and the names of units (session W2).
  *
  * Organization Setup is served by auth-service. Its live spec
  * (`https://auth.torchcorp.com/documentation/json`, checked 8 Nov 2026) has two
@@ -20,9 +21,25 @@
  * and 401 without one, so this client uses the service key and never the
  * user's token.
  *
+ * Session W2 adds two service-to-service reads, from the same live spec (8 Nov
+ * 2026), guarded by `x-service-api-key` and `x-entity-id` (the organization),
+ * the calls Sales makes for a document line:
+ *
+ *   GET  /api/internal/org-setup/exchange-rates/as-of?from&to&date&rate_type
+ *        → { success, data: { found, rate?, effective_date?, … } }: the latest
+ *        rate of the type on or before the date, or a cross-rate through the
+ *        primary base currency; `found: false` when none resolves, never an
+ *        error. It never inverts a pair: on production (8 Nov 2026, read only)
+ *        USD→IQD answered 1520 and IQD→USD `found: false`.
+ *   POST /api/internal/org-setup/uoms/lookup  { ids } (1 to 200)
+ *        → { success, data: [{ id, code, symbol, name, status }] }, archived
+ *        units included, an unknown id left out.
+ *
  * ORG_SETUP_URL and ORG_SETUP_API_KEY come from the environment. Kept free of
  * Next imports so it runs under `node --test`.
  */
+
+import { decimalFromNumber } from '@/lib/platform/store-money';
 
 export interface Branch {
   id: string;
@@ -54,14 +71,24 @@ function config(env: Env): { baseUrl: string; apiKey: string } {
   return { baseUrl, apiKey };
 }
 
-async function post(op: string, path: string, body: unknown, env: Env, fetchImpl: typeof fetch): Promise<unknown> {
+interface Call {
+  method: 'GET' | 'POST';
+  body?: unknown;
+  /** Sent as x-entity-id: the routes of session W2 act in an organization; the branch routes take it in the body. */
+  organizationId?: string;
+}
+
+async function call(op: string, path: string, init: Call, env: Env, fetchImpl: typeof fetch): Promise<unknown> {
   const { baseUrl, apiKey } = config(env);
+  const headers: Record<string, string> = { 'x-service-api-key': apiKey };
+  if (init.body !== undefined) headers['content-type'] = 'application/json';
+  if (init.organizationId) headers['x-entity-id'] = init.organizationId;
   let response: Response;
   try {
     response = await fetchImpl(`${baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'x-service-api-key': apiKey, 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      method: init.method,
+      headers,
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (error) {
@@ -99,7 +126,7 @@ function branchesFrom(op: string, rows: unknown): Branch[] {
 /** The organization's active branches, in Organization Setup's order (type, then name). */
 export async function listBranches(organizationId: string, env: Env = process.env, fetchImpl: typeof fetch = fetch): Promise<Branch[]> {
   const op = 'POST /api/internal/branches/';
-  const rows = branchesFrom(op, await post(op, '/api/internal/branches/', { entityId: organizationId }, env, fetchImpl));
+  const rows = branchesFrom(op, await call(op, '/api/internal/branches/', { method: 'POST', body: { entityId: organizationId } }, env, fetchImpl));
   // The route filters by organization and status already; a row of another one would be a bug there, never shown here.
   return rows.filter((branch) => branch.entityId === organizationId && branch.status === 'active');
 }
@@ -113,6 +140,56 @@ export async function findBranches(organizationId: string, ids: string[], env: E
   if (!unique.length) return [];
   if (unique.length > BY_IDS_MAX) throw new Error(`At most ${BY_IDS_MAX} branch ids per lookup`);
   const op = 'POST /api/internal/branches/by-ids';
-  const body = (await post(op, '/api/internal/branches/by-ids', { branchIds: unique }, env, fetchImpl)) as { branches?: unknown } | null;
+  const body = (await call(op, '/api/internal/branches/by-ids', { method: 'POST', body: { branchIds: unique } }, env, fetchImpl)) as { branches?: unknown } | null;
   return branchesFrom(op, body?.branches).filter((branch) => branch.entityId === organizationId);
+}
+
+/** auth-service's limit for one unit lookup. */
+const UNIT_IDS_MAX = 200;
+
+/** A unit of measure as a storefront line names it. */
+export interface Unit {
+  id: string;
+  /** The unit as people write it (pcs, L). */
+  symbol: string;
+  /** The unit's name (Piece, Litre). */
+  name: string;
+}
+
+/**
+ * The USD→IQD spot rate in force on `day` (YYYY-MM-DD) in the organization, as
+ * an exact decimal string (IQD per USD); null when Organization Setup has none
+ * for the day, which is an answer, not an error. The one rate the storefront
+ * converts with, both ways (lib/platform/store-money.ts).
+ */
+export async function usdIqdRate(organizationId: string, day: string, env: Env = process.env, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  const op = 'GET /api/internal/org-setup/exchange-rates/as-of';
+  const query = new URLSearchParams({ from: 'USD', to: 'IQD', date: day, rate_type: 'spot' });
+  const body = (await call(op, `/api/internal/org-setup/exchange-rates/as-of?${query}`, { method: 'GET', organizationId }, env, fetchImpl)) as { success?: unknown; data?: { found?: unknown; rate?: unknown } } | null;
+  const data = body?.data;
+  if (body?.success !== true || !data || typeof data.found !== 'boolean') throw new OrgSetupUnavailableError(`Organization Setup answered ${op} with an unexpected body`);
+  if (!data.found) return null;
+  const rate = decimalFromNumber(data.rate, 8);
+  if (rate === null) throw new OrgSetupUnavailableError(`Organization Setup answered ${op} with a rate that is not a number`);
+  // A rate of zero would price everything at nothing: it is no rate. (decimalFromNumber writes zero as "0".)
+  return rate === '0' ? null : rate;
+}
+
+/** The organization's units with these ids, archived ones included; an id it has no unit for is absent. Calls of 200 ids, one after another. */
+export async function findUnits(organizationId: string, ids: string[], env: Env = process.env, fetchImpl: typeof fetch = fetch): Promise<Map<string, Unit>> {
+  const op = 'POST /api/internal/org-setup/uoms/lookup';
+  const unique = Array.from(new Set(ids));
+  const units = new Map<string, Unit>();
+  for (let start = 0; start < unique.length; start += UNIT_IDS_MAX) {
+    const body = (await call(op, '/api/internal/org-setup/uoms/lookup', { method: 'POST', body: { ids: unique.slice(start, start + UNIT_IDS_MAX) }, organizationId }, env, fetchImpl)) as { success?: unknown; data?: unknown } | null;
+    if (body?.success !== true || !Array.isArray(body.data)) throw new OrgSetupUnavailableError(`Organization Setup answered ${op} with an unexpected body`);
+    for (const row of body.data) {
+      const value = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
+      if (typeof value.id !== 'string' || typeof value.symbol !== 'string' || typeof value.name !== 'string') {
+        throw new OrgSetupUnavailableError(`Organization Setup answered ${op} with a unit that has no id, symbol or name`);
+      }
+      units.set(value.id, { id: value.id, symbol: value.symbol, name: value.name });
+    }
+  }
+  return units;
 }
