@@ -14,7 +14,7 @@ import { computeStorePagePaths, type ProductPageState, type StorePageContext } f
 import { readStorePagePaths } from '@/lib/platform/store-elements/product-page';
 import { resolveCustomCodePlaceholders } from '@/lib/resolve-cms-variables';
 import { generateInitialAnimationCSS, type HiddenLayerInfo } from '@/lib/animation-utils';
-import { buildCustomFontsCss, buildFontClassesCss, fetchGoogleFontsCss, getCustomFontPreloads, getGoogleFontLinks } from '@/lib/font-utils';
+import { buildCustomFontsCss, buildFontClassesCss, getCustomFontPreloads, getGoogleFontLinks } from '@/lib/font-utils';
 import type { FontPreload } from '@/lib/font-utils';
 import { findLcpTextFont, getLcpFontPreloads } from '@/lib/font-preload';
 import { buildImageSizes, collectLayerAssetIds, findLcpCandidate, generateImageSrcset, getAssetProxyUrl, getOptimizedImageUrl } from '@/lib/asset-utils';
@@ -628,17 +628,24 @@ export default async function PageRenderer({
     googleFontLinkUrls = getGoogleFontLinks(fonts);
     fontPreloads = getCustomFontPreloads(fonts);
 
-    // Inline the resolved @font-face CSS so the browser skips the blocking
-    // round-trip to fonts.googleapis.com and goes straight to gstatic for
-    // the woff2 binaries. Cached per font config across requests.
+    // Inline the @font-face rules of the site's Google fonts from the platform's
+    // font mirror, their files on the site's own host: a visitor's browser never
+    // reaches Google (lib/platform/published-fonts.ts; part 2, session 26).
+    // Cached per font config until the next publish.
     if (googleFontLinkUrls.length > 0) {
-      googleFontsInlinedCss = await unstable_cache(
-        async () => fetchGoogleFontsCss(googleFontLinkUrls),
-        [`google-fonts-css-${googleFontLinkUrls.join('|')}`],
-        { tags: [buildAllPagesTag(await getTenantIdFromHeaders())], revalidate: false },
-      )();
+      const { publishedGoogleFontsCss } = await import('@/lib/platform/published-fonts');
+      try {
+        googleFontsInlinedCss = await unstable_cache(
+          async () => publishedGoogleFontsCss(googleFontLinkUrls),
+          [`mirrored-fonts-css-${googleFontLinkUrls.join('|')}`],
+          { tags: [buildAllPagesTag(await getTenantIdFromHeaders())], revalidate: false },
+        )();
+      } catch (error) {
+        // No stylesheet link to Google instead: the page is served in its fallback font until the mirror answers.
+        console.error('[PageRenderer] The font mirror could not give the site\'s fonts; the page is served without them:', error);
+      }
 
-      // Preload the one Google Font file the likely LCP text (first heading)
+      // Preload the one font file the likely LCP text (first heading)
       // renders in. Inlining the CSS above removes the stylesheet round-trip,
       // but the browser still discovers the woff2 only after layout — on a
       // text-hero page that discovery gap is the LCP.
@@ -827,42 +834,19 @@ export default async function PageRenderer({
         />
       )}
 
-      {/* Warm up the Google Fonts origins. When CSS is inlined below we only
-          need gstatic (the binary origin); when we fall back to <link
-          rel=stylesheet> we also need googleapis. `crossOrigin` on gstatic
-          is required because font files are fetched in CORS mode. */}
-      {googleFontLinkUrls.length > 0 && (
-        <>
-          {!googleFontsInlinedCss && (
-            <link rel="preconnect" href="https://fonts.googleapis.com" />
-          )}
-          <link
-            rel="preconnect" href="https://fonts.gstatic.com"
-            crossOrigin="anonymous"
-          />
-        </>
-      )}
-
-      {/* Inline resolved @font-face rules when available — skips the blocking
-          CSS request to fonts.googleapis.com. Falls back to <link
-          rel=stylesheet> if the publish-time fetch failed. */}
-      {googleFontsInlinedCss ? (
+      {/* The site's Google fonts, from the platform's font mirror (session 26):
+          the rules are inlined with their files on the site's own host, so there
+          is no origin to warm up and no stylesheet to link. When the mirror could
+          not be asked there are no rules, and the page shows in its fallback font. */}
+      {googleFontsInlinedCss && (
         <style
           id="ycode-google-fonts"
           dangerouslySetInnerHTML={{ __html: googleFontsInlinedCss }}
         />
-      ) : (
-        googleFontLinkUrls.map((url, i) => (
-          <link
-            key={`gfont-${i}`}
-            rel="stylesheet"
-            href={url}
-          />
-        ))
       )}
 
-      {/* Preload uploaded custom font binaries plus the LCP heading's Google
-          Font file so the browser fetches them from <head> instead of after
+      {/* Preload uploaded custom font binaries plus the LCP heading's
+          font file so the browser fetches them from <head> instead of after
           CSS parsing, shrinking the font swap window. `crossOrigin` is
           required — fonts are always fetched in CORS mode. */}
       {fontPreloads.map((font) => (

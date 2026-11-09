@@ -798,6 +798,41 @@ code is `lib/platform/store-elements/`; the ycode files only name the new elemen
   `links`, `strings`, `html`).
 
 
+## The published pages' font (part 2, session 26)
+A published page loads its site's Google fonts from the platform's font mirror on the site's own host, never from
+`fonts.googleapis.com` or `fonts.gstatic.com` (OPEN_QUESTIONS 60 of `features/storefront-and-cart`: Task B found the
+templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstatic.com`; the fork's rule and PRD V1.1
+"Platform").
+- **The rules.** `PageRenderer` inlines `publishedGoogleFontsCss(urls)` (`lib/platform/published-fonts.ts`) where it
+  inlined ycode's `fetchGoogleFontsCss`: each font's stylesheet read through the mirror on the server
+  (`getMirroredCss`: fetched from Google once, then kept in the platform storage), its files pointed at
+  `/ycode/api/fonts/published/{family}/{version}/{file}`. The file it preloads for the first heading is read from those
+  rules, so it is on the site's host too. The rules are cached as before, per font configuration until the next
+  publish (the cache key is new, so nothing cached before is served).
+- **The files.** `GET /ycode/api/fonts/published/[...path]`: anonymous (a visitor has no session; `isPublic` in the
+  proxy's map), read through the mirror, `immutable`. It serves only a file that a published page's rules name: when
+  the rules are made, each file they name gets an empty marker in `PLATFORM_STORAGE_DIR/_mirror/fonts/published/`
+  (named by the sha256 of its mirror path), and a file with no marker is a 404. So a visitor cannot make the server
+  fetch whatever Google serves: only fonts that someone who may edit a site installed on it. The mirror's own routes
+  (`/ycode/api/fonts/mirror/`) stay the signed-in builder's, and the store elements keep their two routes
+  (`/ycode/api/store/font`).
+- **Nothing names Google any more.** `PageRenderer` writes no `preconnect` to Google's hosts and no stylesheet link to
+  them, and `next.config.ts` no longer sends `Link: <https://fonts.gstatic.com>; rel=preconnect` with every public
+  page (the one header of that block; a platform seam in ycode's file).
+- **When the mirror cannot be asked** (Google out of reach and no copy kept): the page is served without the font's
+  rules, in its fallback family, the failure is logged (`[PageRenderer] The font mirror could not give the site's
+  fonts`), and nothing is cached, so the next request asks again. ycode fell back to a stylesheet link to Google;
+  there is none now.
+- **A site already published** gets it on its next publish, or as soon as its cached pages are made again (a deploy
+  starts with an empty cache).
+- **Not changed:** the static export (`lib/apps/static-export/engine.ts`) still writes Google's URLs into the files
+  it exports: an exported site has no platform behind it. Uploaded custom fonts were always the site's own files.
+- **Test.** `e2e/published-fonts.spec.ts` (a site with the font: no Google host in the HTML or the headers, the rules
+  and the preload on the site's host, the route's refusals, a real browser that contacts one host),
+  `lib/platform/published-fonts-url.test.ts`, and on the server `e2e/server/storefront-browser.spec.ts`, whose store
+  site now carries the font, so its "only the site's own host" check covers it on production.
+
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -867,9 +902,9 @@ Sales: none draft, none confirmed. `POST
   from the `remixicon` package, Remix Icon License v1.0, copy beside it). Google Fonts in the
   builder (font picker, installed-font links, `@import`) go through `/ycode/api/fonts/mirror/`:
   `lib/platform/font-mirror.ts` fetches a stylesheet or font file from Google on the server
-  the first time and keeps it in `PLATFORM_STORAGE_DIR/_mirror/fonts`. **Published pages keep
-  Google URLs** for the fonts a designer picks (`PageRenderer`, static export, the
-  `Link: preconnect` header in `next.config.ts`). ycode's template service has no default
+  the first time and keeps it in `PLATFORM_STORAGE_DIR/_mirror/fonts`. Published pages kept
+  Google URLs until part 2, session 26 ("The published pages' font", below); the static
+  export still does. ycode's template service has no default
   host any more (`TEMPLATE_API_URL` unset: the gallery is empty, apply and export refuse);
   its hard-coded upload key is gone.
 - **No Supabase package.** `@supabase/supabase-js` and `@supabase/ssr` are out of
