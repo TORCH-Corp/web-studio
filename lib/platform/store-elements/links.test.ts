@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { PANEL_PAGE_KINDS } from './pages';
-import { createStoreLinks, localePrefix, productsHref } from './links';
+import { createStoreLinks, localePrefix, pageLocaleOf, productsHref } from './links';
 
 const PATHS = { product: { '*': '/shop/product', ar: '/ar/متجر/منتج' }, cart: { '*': '/cart', ar: '/ar/السلة' } };
 
@@ -65,4 +65,16 @@ test('a category links to the products page with ?category={id}, with the langua
   assert.equal(createStoreLinks({ code: 'ar', is_default: true }, PATHS).category(id), `/products?category=${id}`);
   assert.equal(createStoreLinks({ code: 'en', is_default: false }, PATHS).category(id), `/en/products?category=${id}`);
   assert.equal(createStoreLinks(null, {}).category('a b&c'), '/products?category=a%20b%26c');
+});
+
+test('a page with no locale of its own is in the site\'s default language: an Arabic-first site\'s root is Arabic, and links carry no prefix', () => {
+  const ar = { code: 'ar', is_default: true };
+  const en = { code: 'en', is_default: false };
+  assert.equal(pageLocaleOf(null, [en, ar]), ar);
+  assert.equal(pageLocaleOf(undefined, [en, ar]), ar);
+  assert.equal(pageLocaleOf(en, [en, ar]), en, 'a page under a language\'s prefix keeps its own');
+  assert.equal(pageLocaleOf(null, []), null);
+  assert.equal(pageLocaleOf(null, undefined), null);
+  assert.equal(createStoreLinks(pageLocaleOf(null, [en, ar]), PATHS).product('abc'), '/shop/product/abc');
+  assert.equal(createStoreLinks(pageLocaleOf(en, [en, ar]), {}).category('c1'), '/en/products?category=c1');
 });

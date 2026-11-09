@@ -11,6 +11,8 @@
  *     products, by its place among the page's unpicked cards; a picked card
  *     still shows its pick.
  *   - The product page's breadcrumb: Products, the item's category, the product.
+ *   - Review fix: on a site whose default language is Arabic, the store elements
+ *     of the root pages are Arabic (they read English before).
  *
  * The catalogue organization of e2e/platform-fixtures.ts, selling from Clothing,
  * Home, Garden and Toys: the desk lamp (Home, with a picture), the garden hose
@@ -389,6 +391,60 @@ test('the breadcrumb is in the page\'s language, its chevrons turned round on a 
     expect(await crumbs.locator('svg').first().evaluate((svg) => getComputedStyle(svg).transform)).toBe('matrix(-1, 0, 0, 1, 0, 0)');
   } finally {
     await context.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A site whose default language is Arabic (review fix, 9 Nov 2026)
+// ---------------------------------------------------------------------------
+
+test('on an Arabic-first site the store elements of the root pages are Arabic, right to left, with no prefix in their links; under /en they are English', async ({ browser }) => {
+  const slug = `ar1-${RUN}`;
+  const arabicFirst = await createSite(owner, { name: 'Arabic first', slug, languages: ['ar', 'en'], default_language: 'ar' });
+  try {
+    expect((await openSite(owner, arabicFirst.id)).status()).toBe(303);
+    const saved = await owner.patch(`/ycode/api/platform/sites/${arabicFirst.id}/store`, { data: { branch_id: BRANCH.catalogue, category_ids: [CATEGORY.clothing, CATEGORY.home], delivery_fee: 5000, selling: true } });
+    expect(saved.status(), await saved.text()).toBe(200);
+    const home = (await draftPages(owner)).find((page) => page.is_index)!;
+    await putLayers(home.id, body({ id: 'cart', name: 'cartIndicator', classes: 'w-fit', settings: { tag: 'div' }, children: [] }, element('cats', 'categoryCards'), grid('grid', { showCount: true }), card('c1', null)));
+    await putLayers(await createPage('product', { store: { kind: 'product' } }), body(element('detail', 'productDetail', { store: { productDetail: { product: null } } })));
+    await publish(owner);
+
+    const context = await browser.newContext({ baseURL, extraHTTPHeaders: { 'x-forwarded-host': `${slug}.${TEST_SITES_DOMAIN}` } });
+    try {
+      const page = await context.newPage();
+      // The root is the default language's page: the renderer gives it no locale of its own, and it is Arabic.
+      await page.goto('/');
+      await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+      for (const name of ['cartIndicator', 'categoryCards', 'productGrid', 'productCard']) {
+        await expect(page.locator(`[data-ws-store="${name}"]`).first()).toHaveAttribute('lang', 'ar');
+        await expect(page.locator(`[data-ws-store="${name}"]`).first()).toHaveAttribute('dir', 'rtl');
+      }
+      await expect(gridCards(page).locator('.ws-card-name')).toHaveText(['مصباح مكتب', 'قميص كتان']);
+      await expect(countOf(page)).toHaveText('2 منتج');
+      await expect(gridCards(page).nth(0).getByRole('button', { name: 'أضف إلى السلة' })).toBeVisible();
+      await expect(categoryLinks(page).locator('.ws-cat-name')).toHaveText(['ملابس', 'المنزل']);
+      await expect(page.locator('[data-ws-store="cartIndicator"] a.ws-cart')).toHaveAttribute('aria-label', 'السلة فارغة');
+      // The default language has no prefix, so the links of the root's elements carry none.
+      await expect(gridCards(page).nth(1).getByRole('link', { name: 'اختر الخيارات' })).toHaveAttribute('href', `/product/${ITEM.shirt}`);
+      await expect(categoryLinks(page).nth(0)).toHaveAttribute('href', `/products?category=${CATEGORY.clothing}`);
+
+      await page.goto(`/product/${ITEM.lamp}`);
+      await expect(page.locator('[data-ws-store="productDetail"]').getByRole('navigation', { name: 'مسار التصفح' }).getByRole('link')).toHaveText(['المنتجات', 'المنزل']);
+
+      // The other language keeps its own: English under /en, with the prefix in its links.
+      await page.goto('/en');
+      await expect(gridOf(page)).toHaveAttribute('lang', 'en');
+      await expect(gridCards(page).locator('.ws-card-name')).toHaveText(['Desk lamp', 'Linen shirt']);
+      await expect(countOf(page)).toHaveText('2 products');
+      await expect(gridCards(page).nth(1).getByRole('link', { name: 'Choose options' })).toHaveAttribute('href', `/en/product/${ITEM.shirt}`);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    await owner.delete(`/ycode/api/platform/sites/${arabicFirst.id}`);
+    // The tests below work in the spec's own site again.
+    expect((await openSite(owner, site.id)).status()).toBe(303);
   }
 });
 

@@ -25,6 +25,15 @@ export interface LinkLocale {
   is_default?: boolean;
 }
 
+/**
+ * The language a published page is in, for its store elements. The renderer names a page's locale only when the
+ * page is under a language's prefix: a page in the site's default language has none, and is in the default one
+ * (an Arabic-first site's root is Arabic). Null when the site has no locales to tell.
+ */
+export function pageLocaleOf<L extends LinkLocale>(current: L | null | undefined, available: readonly L[] | null | undefined): L | null {
+  return current ?? available?.find((locale) => locale.is_default) ?? null;
+}
+
 /** `/ar` for a non-default locale, `` for the default one or none. */
 export function localePrefix(locale: LinkLocale | null | undefined): string {
   return locale && !locale.is_default && locale.code ? `/${locale.code}` : '';
