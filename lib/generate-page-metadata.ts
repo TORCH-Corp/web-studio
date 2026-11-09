@@ -23,6 +23,7 @@ import { buildPageHreflangAlternates, type HreflangAlternate } from '@/lib/hrefl
 import { getTranslatableKey, getTranslatedAssetId, getTranslatedText } from '@/lib/locale-runtime';
 import { buildAbsolutePageUrl, getSiteBaseUrl } from '@/lib/url-utils';
 import { SEO_DEFAULT_KEYS, storedText } from '@/lib/platform/site-seo';
+import type { ProductSeo } from '@/lib/platform/store-elements/product-seo';
 
 /**
  * Global page render settings fetched once per page render
@@ -46,6 +47,8 @@ export interface GlobalPageSettings {
   defaultSeoDescription?: string | null;
   /** URL of the default share image, resolved with the favicon (page metadata is built outside the request) */
   defaultSeoImageUrl?: string | null;
+  /** The site's name (Site settings, ycode's `site_name`): a product page's title ends with it (part 2 release fixes, OPEN_QUESTIONS 45) */
+  siteName?: string | null;
 }
 
 /** @deprecated Use GlobalPageSettings instead */
@@ -79,6 +82,12 @@ export interface GenerateMetadataOptions {
   primaryDomainUrl?: string;
   /** Per-locale translations, keyed `{source}:{id}:{content_key}`, for localized SEO */
   translations?: Record<string, Translation> | null;
+  /**
+   * TORCH part 2 release fixes (OPEN_QUESTIONS 45): what the product a store
+   * page shows says about itself. It fills the title and the description the
+   * page leaves empty, ahead of the site's defaults.
+   */
+  productSeo?: ProductSeo | null;
 }
 
 /**
@@ -111,6 +120,7 @@ async function fetchGlobalPageSettingsImpl(isPreview = false): Promise<GlobalPag
     SEO_DEFAULT_KEYS.title,
     SEO_DEFAULT_KEYS.description,
     SEO_DEFAULT_KEYS.image,
+    'site_name',
   ]);
 
   // Fetch favicon and web clip asset URLs if IDs are set
@@ -177,6 +187,7 @@ async function fetchGlobalPageSettingsImpl(isPreview = false): Promise<GlobalPag
     defaultSeoTitle: storedText(settings[SEO_DEFAULT_KEYS.title]),
     defaultSeoDescription: storedText(settings[SEO_DEFAULT_KEYS.description]),
     defaultSeoImageUrl,
+    siteName: storedText(settings.site_name),
   };
 }
 
@@ -310,9 +321,12 @@ export async function generatePageMetadata(
   // Resolve locale-translated SEO values (falls back to originals when no
   // completed translation exists for the current locale). A page with no value
   // of its own takes the site's default (Site settings); error pages do not.
+  // TORCH: a product page's own fields come first, then the product it shows, then the site's defaults.
   const seoTitle = getTranslatedText(seo?.title, 'seo:title', translations, page.id)
+    || options.productSeo?.title
     || (isErrorPage ? undefined : seoSettings.defaultSeoTitle || undefined);
   const seoDescription = getTranslatedText(seo?.description, 'seo:description', translations, page.id)
+    || options.productSeo?.description
     || (isErrorPage ? undefined : seoSettings.defaultSeoDescription || undefined);
 
   // Build title - resolve field variables if collection item is available

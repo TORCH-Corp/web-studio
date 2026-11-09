@@ -34,7 +34,7 @@ export type SitemapAlternate = HreflangAlternate;
  * reciprocal hreflang cluster, matching Google's recommended per-URL format.
  * Single-locale sites (no alternates) yield a single default entry.
  */
-function expandToPerLocaleSitemapUrls(
+export function expandToPerLocaleSitemapUrls(
   defaultLoc: string,
   lastmod: string | undefined,
   changefreq: SitemapChangeFrequency | undefined,

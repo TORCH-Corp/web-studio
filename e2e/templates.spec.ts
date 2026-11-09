@@ -36,7 +36,14 @@ interface PageRow { id: string; name: string; slug: string; error_page: number |
 interface IdRow { id: string; name?: string }
 interface LocaleRow { id: string; code: string; is_default: boolean }
 interface AssetRow { id: string; filename: string; storage_path: string | null; public_url: string | null }
-interface TemplateRow { id: string; slug: string; name: { ar: string; en: string }; description: { ar: string; en: string } }
+interface TemplateRow {
+  id: string;
+  slug: string;
+  name: { ar: string; en: string };
+  description: { ar: string; en: string };
+  page_count: number;
+  languages: string[];
+}
 interface LayersRow { id: string; page_id: string; layers: unknown[] }
 
 let baseURL: string;
@@ -105,6 +112,12 @@ test('Templates lists TORCH\'s three templates for any organization, and needs m
   }
   expect(list[2].id).toBe(BLANK_TEMPLATE_ID);
   expect(list[0].name).toEqual({ ar: 'موقع شركة', en: 'Company site' });
+  // The meta line of the picker's cards (OPEN_QUESTIONS 22 and 34): a seeded template is a blank site, one homepage, the error pages not counted;
+  // the seed makes English the default language, so it comes first.
+  for (const t of list) {
+    expect(t.page_count).toBe(1);
+    expect(t.languages).toEqual(['en', 'ar']);
+  }
 
   const contentOnly = await request.newContext({ baseURL });
   const anonymous = await request.newContext({ baseURL });
@@ -177,6 +190,9 @@ test('the template gets three pages, a component, an asset, a style, a colour an
   templatePages = await pagesOf(templates);
   expect(templatePages.filter((p) => p.error_page === null).map((p) => p.name).sort()).toEqual(['About', 'Contact', 'Homepage']);
   templateHomepage = templatePages.find((p) => p.is_index)!;
+  // The list counts the three pages and not the three error pages beside them.
+  const listed = (await json<TemplateRow[]>(orgA.get('/ycode/api/platform/templates'))).find((t) => t.id === template.id);
+  expect(listed).toMatchObject({ page_count: 3, languages: ['en', 'ar'] });
 
   const uploaded = await templates.post('/ycode/api/assets', { multipart: { file: { name: 'pixel.png', mimeType: 'image/png', buffer: PNG }, source: 'file-manager' } });
   expect(uploaded.ok(), await uploaded.text()).toBe(true);

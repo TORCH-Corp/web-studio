@@ -166,6 +166,9 @@ export function sampleOrder(): Confirmation {
       sku: line.item_id.toUpperCase(),
       name: line.snapshot.name,
       name_ar: line.snapshot.name_ar,
+      // The cart's snapshot already names the product, not the variant: nothing to separate.
+      product_name: null,
+      product_name_ar: null,
       axes: line.snapshot.axes,
       unit: { code: 'UOM-000001', name: 'Piece' },
       quantity: String(line.quantity),

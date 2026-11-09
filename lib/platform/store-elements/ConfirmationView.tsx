@@ -6,7 +6,7 @@ import { moneyText, optionsText, quantityText } from '@/lib/platform/store-eleme
 import { AlertIcon, BoxIcon, CashIcon, CheckIcon, RetryIcon } from '@/lib/platform/store-elements/icons';
 import type { StoreLinks } from '@/lib/platform/store-elements/links';
 import { MiniLine, SumRows, timesText } from '@/lib/platform/store-elements/OrderLines';
-import { nameFor } from '@/lib/platform/store-elements/card-data';
+import { confirmationLineName } from '@/lib/platform/store-elements/card-data';
 import { STORE_STRINGS, type StoreLang } from '@/lib/platform/store-elements/strings';
 
 export type ConfirmationPhase =
@@ -120,7 +120,7 @@ export function ConfirmationView({ lang, links, phase, onRetry }: ConfirmationVi
               lang={lang}
               itemId={line.item_id}
               imageUrl={null}
-              name={nameFor(line, lang)}
+              name={confirmationLineName(line, lang)}
               options={optionsText(line.axes, lang)}
               times={timesText(quantityText(line.quantity), money(line.unit_price), line.unit, lang)}
               total={moneyText(money(line.line_total), lang)}

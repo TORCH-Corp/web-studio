@@ -138,6 +138,7 @@ test('the confirmation shows the order\'s lines with their axes, the fee, the to
     lines: [
       {
         item_id: 'shirt-s-white', sku: 'SHT-001-S-WHT', name: 'Linen shirt - Small / White', name_ar: null,
+        product_name: null, product_name_ar: null,
         axes: [{ name: 'Size', name_ar: 'المقاس', option: 'Small', option_ar: 'صغير' }],
         unit: { code: 'UOM-000001', name: 'Piece' }, quantity: '2', unit_price: '35000', line_total: '70000',
       },
@@ -149,4 +150,31 @@ test('the confirmation shows the order\'s lines with their axes, the fee, the to
     phone: '0770 123 4567',
   });
   assert.equal(confirmationOf('c1', { ...order, deliveryAddress: null }).phone, null);
+});
+
+test('a variant line also carries its product\'s name apart from the options, and Sales\'s own line name stays as Sales wrote it (OPEN_QUESTIONS 47)', () => {
+  const line = (itemId: string, name: string, axes: SalesOrder['lines'][number]['axes']): SalesOrder['lines'][number] => ({
+    itemId, sku: itemId.toUpperCase(), name: { en: name, ar: null }, axes,
+    unit: { code: 'UOM-000001', name: 'Piece' }, quantity: '1', unitPrice: '1000', lineTotal: '1000',
+  });
+  const size = [{ specification: { en: 'Size', ar: 'المقاس' }, option: { en: 'Small', ar: 'صغير' } }];
+  const order: SalesOrder = {
+    id: 'o1', code: 'SO-2026-0143', currency: 'IQD',
+    lines: [line('lamp', 'Desk lamp', []), line('shirt-s', 'Linen shirt - Small', size), line('gone-s', 'Old shirt - Small', size)],
+    subtotal: '3000', deliveryFee: '0', total: '3000', paymentMethod: 'cash_on_delivery', deliveryAddress: null,
+  };
+  const products = new Map([['shirt-s', { name: 'Linen shirt', name_ar: 'قميص كتان' }]]);
+  const lines = confirmationOf('c1', order, (itemId) => products.get(itemId) ?? null).lines;
+  assert.deepEqual(lines.map((l) => [l.item_id, l.name, l.name_ar, l.product_name, l.product_name_ar]), [
+    ['lamp', 'Desk lamp', null, null, null], // a plain item is named by its own line, as before
+    ['shirt-s', 'Linen shirt - Small', null, 'Linen shirt', 'قميص كتان'], // Sales's name is Sales's; the product's name is apart
+    ['gone-s', 'Old shirt - Small', null, null, null], // a product the catalogue no longer has: Sales's name is all there is
+  ]);
+  assert.deepEqual(lines[1].axes, [{ name: 'Size', name_ar: 'المقاس', option: 'Small', option_ar: 'صغير' }]);
+  // Without a lookup (the product names were not read) no line has one.
+  assert.deepEqual(confirmationOf('c1', order).lines.map((l) => l.product_name), [null, null, null]);
+  // The lookup is asked only about variant lines: a plain line never needs the catalogue.
+  const asked: string[] = [];
+  confirmationOf('c1', order, (itemId) => { asked.push(itemId); return null; });
+  assert.deepEqual(asked, ['shirt-s', 'gone-s']);
 });

@@ -3,7 +3,8 @@
 Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publishing`:
 the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below), then part 2 (storefront and cart,
 on `feature/web-studio-storefront-and-cart`: sessions W1 to W8 and D1 below; **"Part 2 in production (session D1)"** is
-the one place that lists its keys, tables, routes, checkout flow, image cache and how it was deployed).
+the one place that lists its keys, tables, routes, checkout flow, image cache and how it was deployed; "Part 2 release fixes
+(session 22)" lists the fixes made to it and to ycode's own files after the build).
 
 ## How the service runs (session 11)
 One container, `web-studio`, in the platform's compose project on the production server
@@ -135,7 +136,8 @@ drops the schema.
   hosts on one, provisioning gives it no default address, and the settings API keeps it so: a
   slug change moves no address and a custom host is refused with 400). Migration
   `20261101000004_torch_template_meta.ts` adds `platform_sites.template`
-  (`{name: {ar, en}, description: {ar, en}}`). `GET /ycode/api/platform/templates` lists them
+  (`{name: {ar, en}, description: {ar, en}}`). `GET /ycode/api/platform/templates` lists them, each with its
+  `page_count` and `languages` since the part 2 release fixes (below),
   for any organization (`manage_sites` r, in the proxy's route map). `POST /ycode/api/platform/sites`
   with `template_id` copies the template's draft rows into the new site inside the
   provisioning transaction (`lib/platform/template-copy.ts`: pages, page folders, page
@@ -385,8 +387,9 @@ description changes: `pnpm templates:seed`.
   8 Nov 2026). They were released on 8 Nov 2026 (18:42 UTC) and session D1's server e2e placed real orders through them.
 - **Test.** `e2e/checkout.spec.ts`. The platform stub answers Contact Center and Sales (`e2e/order-services-stub.ts`),
   records every call (`GET /__calls?service=`), and can refuse the next order (`POST /__sales/refuse`) or slow every create
-  (`POST /__sales/delay`). Next fills a missing `x-forwarded-for` with the socket's address, so the spec's requests share one
-  IP and the spec raises its site's limit.
+  (`POST /__sales/delay`). Next fills a missing `x-forwarded-for` with the socket's address, so a request that sends neither
+  `x-real-ip` nor `x-forwarded-for` counts as 127.0.0.1: the spec raises its site's limit, and the tests of the limit send
+  their own addresses, as nginx would (`x-real-ip`, and `x-forwarded-for` with the visitor's own entry first).
 
 ## Store elements (part 2, session W4)
 The Store category of the element library: **Product grid**, **Product card** and **Cart indicator**, and two ready sections,
@@ -575,8 +578,8 @@ not-found page for a store that does not sell.
   (a collapsed bar on a phone that opens, a column on a desktop; both are in the page and CSS shows one), the form (name,
   phone, city as a select of `iraq-governorates.ts` in the page's language, address, landmark and notes optional), the
   cash-on-delivery note, Place order with the total. The form carries ycode's decoy field (`FormHoneypotField`) in a box of
-  no size that clips it (`ws-decoy`): the field sits 9999 px to the left, which would widen a right to left page by as much
-  (W6 review fix). The rules for the fields are the route's (`checkout-input.ts`): the
+  no size that clips it (`ws-decoy`): the field sat 9999 px to the left, which widened a right to left page by as much
+  (W6 review fix; the component itself is direction-aware since session 22, and the box stays as a second guard). The rules for the fields are the route's (`checkout-input.ts`): the
   form sends what was typed with `locale` and shows the route's messages under their fields, with the designed alert listing
   the fields (each a link to its field); typing in a refused field takes its message away. On submit: one request at a
   time (a ref guard, and the button and the fields disabled with the spinner and "Placing your order…"),
@@ -682,12 +685,68 @@ Part 2 (the store) runs in the same container as part 1. What it added, in one p
   read from the origin (`127.0.0.1:6030`) has no such script, and the app and `docker/nginx` never name it. The published store
   pages are not affected (`sites.torchcorp.com` is DNS only). `storefront-browser.spec.ts` records it as a known exception and
   fails on any other host; turning it off is Cloudflare's Web Analytics setting or a `Cache-Control: no-transform` answer
-  (OPEN_QUESTIONS 53).
+  (OPEN_QUESTIONS 53). *Checked again on 9 Nov 2026 (session 22):* the owner's answer was to turn Web Analytics off for the zone;
+  a real browser on production still requested the beacon (`GET /ycode` with a browser User-Agent still carries the
+  `data-cf-beacon` script at the edge, and the origin's HTML has none), so the exception stays in the spec until it does not.
   *The order history is empty in the Orders API on production* (OPEN_QUESTIONS 38 and 39): Sales's own read has it, its service
   read does not yet. *A published page keeps Google URLs for a font a designer picks* (session 3, above): the store check ran on
   a site with the default fonts, and the store elements' own font is the mirror's. *The server e2e leaves the test organization
   with no ECOMMERCE item:* its one fixture item is switched off at the end, so Task B's templates need their own items there.
 - **Not rehearsed:** the rollback itself, and a restore from the dump.
+
+## Part 2 release fixes (session 22, 9 Nov 2026)
+Seven fixes the owner decided on 9 Nov 2026 (notebook decision 17; OPEN_QUESTIONS 22, 34, 35, 37, 45, 47, 51, 52), one light
+path, `fix/web-studio-part2-release-fixes`, each with a unit test and an e2e case. The ones that touch ycode's own files are
+the platform seams of this section: `lib/request-utils.ts`, `components/FormHoneypotField.tsx`, `lib/generate-page-metadata.ts`,
+`app/(published)/[[...slug]]/page.tsx` (`generateMetadata` only), `app/(site)/sitemap.xml/route.ts` and `lib/sitemap-utils.ts`
+(one `export`).
+- **Client IP (35).** `getClientIp` reads `X-Real-IP` first (nginx sets it to `$remote_addr`, which a visitor cannot choose), then
+  the **last** `X-Forwarded-For` entry, never the first, which is the one the visitor wrote: nginx appends the address it saw
+  (`$proxy_add_x_forwarded_for`), so a script that sent its own header used to get a fresh count on every request. Seam in
+  ycode's `lib/request-utils.ts`; its three callers, the form route's and the checkout's rate limit (`screenFormSubmission`)
+  and the page-password route's, all gain it. `lib/request-utils.test.ts` and an e2e case (`checkout.spec.ts`) send a different
+  `X-Forwarded-For` each time behind one `X-Real-IP` and are counted as one.
+- **Name parts (37).** The checkout checks the buyer's name as Contact Center's find-or-create does (`splitFullName`): the first
+  word and the rest (the other words joined by single spaces) each at most 100 characters, counted in UTF-16 units as it counts
+  them, so a name it would refuse is refused here, with a field error under the name in the page's language
+  (`namePartTooLong`, `checkout-input.ts`) instead of a 503 the buyer cannot correct. The whole name stays 2 to 120 characters.
+  Contact Center is unchanged.
+- **Arabic counts (51).** `STORE_STRINGS.ar` `cartCount`, `itemCount` and `summaryCount` use the invariant singular after the
+  number ("4 قطعة"), as `context/rules/rtl-and-i18n.md` asks; the handoff's "4 قطع" is right for 3 to 10 only.
+- **Honeypot on a right to left page (52).** `FormHoneypotField` offsets the decoy with `inset-inline-start: -9999px` instead of
+  `left`: on an Arabic page (`<html dir="rtl">`) a negative `left` is the scrollable side, and every published form made the page
+  as much wider (measured 11,279 px on a 1,280 px window before). It is still absolutely positioned, 1 px and clipped, not
+  `display: none`, so a bot still sees and fills it. Seam in ycode's component; `e2e/form-rtl.spec.ts` checks an Arabic and an
+  English published page with a contact form, on a desktop and a phone.
+- **Confirmation line names (47).** The confirmation read (`GET /ycode/api/store/orders/{checkout_id}`) returns for each line
+  `product_name` and `product_name_ar` beside Sales's own `name` and `name_ar` (which stay as Sales wrote them): for a variant
+  line, the product's name from the site's catalogue (the product whose variants include the line's item, that is the variant's
+  `parent_item_id`; the catalogue is the one every page reads, kept 60 seconds); null for a plain item and for a variant whose
+  product the catalogue no longer has. The confirmation element draws `product_name` above the options
+  (`confirmationLineName`, `card-data.ts`) and Sales's name when there is none. An order with no variant line never reads the
+  catalogue. When the catalogue cannot be read (Product & Services or Organization Setup down) the confirmation is still
+  answered, with Sales's names, and the failure is logged as a warning: the order exists and its code must reach the buyer.
+- **Templates meta (22, 34).** `GET /ycode/api/platform/templates` returns `page_count` (the template's draft pages, the error
+  pages left out, as the Pages list shows them) and `languages` (locale codes, the default first) for each template, for the
+  cards' "5 pages · Arabic · English" line (session 24 shows it in the app).
+- **Product page SEO (45).** On a published product page (`storeProduct` found) `generateMetadata` fills what the page's own SEO
+  fields leave empty, field by field and ahead of the site's defaults: the title is "{product name} · {site name}" (the
+  `site_name` setting; the name alone when the site has none) and the description is the product's, its first 160 characters on
+  one line, both in the page's language (Arabic when the request or the site's default is Arabic and the product has an Arabic
+  text); the canonical path is the page's path with the item's id (lower case) as its last segment, per language. The pure
+  parts are `store-elements/product-seo.ts`; the seam is `GenerateMetadataOptions.productSeo` and `GlobalPageSettings.siteName`
+  in `generate-page-metadata.ts`. `sitemap.xml` lists one entry per product the store sells and per language, with the same
+  hreflang cluster as every page, and leaves out the page with the product role (its bare address keeps answering 404): the
+  rules are `store-elements/product-sitemap.ts`, the read is `lib/platform/store-sitemap.ts`, and the route calls both. A store
+  that does not sell, a site with no product page and a `noindex` product page list no products; a catalogue that cannot be
+  read is a 503 with `Retry-After` for a crawler to retry, not a sitemap without the products. Not changed: with a canonical URL
+  set in the site settings ycode also writes hreflang links for a page from the page's own path, which for the product page is
+  the bare address; the sitemap's hreflang is right, the `<link>`s of a product page's head are ycode's (found, outside the brief).
+- **Cloudflare (53).** Not done: the owner's switch for the zone was not in effect on 9 Nov 2026 (see "Part 2 in production"):
+  the exception stays in `e2e/server/storefront-browser.spec.ts`.
+- **Tests.** `pnpm test` (unit, new cases beside each module) and `pnpm e2e` (`checkout.spec.ts`, `checkout-flow.spec.ts`,
+  `templates.spec.ts`, and the new `product-seo.spec.ts` and `form-rtl.spec.ts`; each case that sets a product page's own SEO fields has a
+  site of its own, because a product page's data lives 60 seconds per item address and a publish purges only the page's own route).
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
@@ -879,8 +938,8 @@ Sales: none draft, none confirmed. `POST
   `e2e/canvas-marks.spec.ts` checks where the joiner is and is not.
 
 ## Not done (c1 and after)
-- Part 2's open findings are in "Part 2 in production": Cloudflare's beacon on the builder host, the Orders API's empty
-  history, the rollback not rehearsed.
+- Part 2's open findings are in "Part 2 in production": Cloudflare's beacon on the builder host (still requested on
+  9 Nov 2026, see "Part 2 release fixes"), the Orders API's empty history, the rollback not rehearsed.
 - **A published page renders an image layer as ycode's placeholder** (the data-URL SVG of
   `ASSET_PLACEHOLDERS`) while the preview renders the asset (`/a/<token>/file`). Seen in
   session 4 on a site copied from a template and reproduced on a plain site (upload a PNG,

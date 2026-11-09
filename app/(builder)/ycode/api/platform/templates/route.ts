@@ -5,7 +5,10 @@ import { listTemplates } from '@/lib/platform/templates';
 /**
  * GET /ycode/api/platform/templates (part 1, session 4): TORCH's templates,
  * the same for every organization, each with its name and description in
- * Arabic and English. Read-only. The permission check is the proxy's
+ * Arabic and English, its `page_count` (the pages a site made from it starts
+ * with, the error pages left out) and its `languages` (locale codes, the
+ * default first), which the cards' "5 pages · Arabic · English" line reads
+ * (part 2 release fixes). Read-only. The permission check is the proxy's
  * (lib/platform/permissions.ts): manage_sites r.
  */
 export async function GET() {

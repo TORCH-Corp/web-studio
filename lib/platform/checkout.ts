@@ -32,11 +32,11 @@ import { siteCatalogue } from '@/lib/platform/catalogue';
 import { forgetCatalogue } from '@/lib/platform/catalogue-cache';
 import type { CheckoutInput } from '@/lib/platform/checkout-input';
 import { checkoutCounter, countedCheckout, limitKey } from '@/lib/platform/checkout-limit';
-import { confirmationOf, salesRefusalAnswer, unavailableLines, type Confirmation, type UnavailableLine } from '@/lib/platform/checkout-rules';
+import { confirmationOf, salesRefusalAnswer, unavailableLines, type Confirmation, type ProductName, type UnavailableLine } from '@/lib/platform/checkout-rules';
 import { ContactCenterUnavailableError, findOrCreatePerson } from '@/lib/platform/contact-center';
 import { OrgSetupUnavailableError, usdIqdRate } from '@/lib/platform/org-setup';
 import { ProductServicesUnavailableError } from '@/lib/platform/product-services';
-import { createStorefrontOrder, getOrder, SalesRefusedError, SalesUnavailableError } from '@/lib/platform/sales';
+import { createStorefrontOrder, getOrder, SalesRefusedError, SalesUnavailableError, type SalesOrder } from '@/lib/platform/sales';
 import type { Site } from '@/lib/platform/site';
 import { rateDay } from '@/lib/platform/store-money';
 import type { StoreRow } from '@/lib/platform/store-settings-input';
@@ -168,10 +168,39 @@ export async function placeOrder(site: Site, store: StoreRow, input: CheckoutInp
 }
 
 /**
+ * The product of each variant line of an order, by the line's item id, from the
+ * site's catalogue (read and kept 60 seconds as every page's read is; a
+ * variant's product is the one that lists it, i.e. the variant's
+ * parent_item_id). A variant whose product the catalogue no longer has is
+ * absent: the confirmation then shows Sales's name for the line. An order with
+ * no variant line never reads the catalogue. When the catalogue cannot be read
+ * (Product & Services or Organization Setup down) the confirmation is still
+ * answered, with Sales's names, and the failure is logged: the order exists and
+ * its code must reach the buyer.
+ */
+async function productsOfVariantLines(site: Site, order: SalesOrder): Promise<Map<string, ProductName>> {
+  const products = new Map<string, ProductName>();
+  if (!order.lines.some((line) => line.axes.length > 0)) return products;
+  let variantsById;
+  try {
+    variantsById = (await siteCatalogue(site)).variantsById;
+  } catch (error) {
+    if (!(error instanceof ProductServicesUnavailableError || error instanceof OrgSetupUnavailableError)) throw error;
+    console.warn(`[checkout] site ${site.id} order ${order.code}: the catalogue could not be read, so the confirmation names variant lines as Sales does: ${error.message}`);
+    return products;
+  }
+  for (const line of order.lines) {
+    const parent = variantsById.get(line.itemId)?.product;
+    if (parent) products.set(line.itemId, { name: parent.name, name_ar: parent.name_ar });
+  }
+  return products;
+}
+
+/**
  * The confirmation of a site's checkout, read from Sales (Web Studio keeps the
- * order's id and code only). Null when the site has no such checkout, or Sales
- * no longer has its order (logged). Throws SalesUnavailableError when Sales
- * cannot be asked.
+ * order's id and code only), a variant line with its product's name apart from
+ * its options. Null when the site has no such checkout, or Sales no longer has
+ * its order (logged). Throws SalesUnavailableError when Sales cannot be asked.
  */
 export async function confirmation(site: Site, checkoutId: string): Promise<Confirmation | null> {
   const stored = await storedCheckout(site.id, checkoutId);
@@ -181,5 +210,6 @@ export async function confirmation(site: Site, checkoutId: string): Promise<Conf
     console.warn(`[checkout] site ${site.id} checkout ${checkoutId}: Sales has no order ${stored.sales_order_id}`);
     return null;
   }
-  return confirmationOf(checkoutId, order);
+  const products = await productsOfVariantLines(site, order);
+  return confirmationOf(checkoutId, order, (itemId) => products.get(itemId) ?? null);
 }

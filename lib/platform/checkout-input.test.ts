@@ -124,8 +124,10 @@ test('every length rule, at its bound and one past it', () => {
   const chars = (n: number) => 'ب'.repeat(n);
   assert.equal(accepted(body({ buyer: { name: chars(LIMITS.nameMin) } })).buyer.name, chars(2));
   assert.deepEqual(fieldErrors(body({ buyer: { name: 'ع' } })), { 'buyer.name': MESSAGES.en.name });
-  accepted(body({ buyer: { name: chars(LIMITS.nameMax) } }));
-  assert.deepEqual(fieldErrors(body({ buyer: { name: chars(LIMITS.nameMax + 1) } })), { 'buyer.name': MESSAGES.en.nameTooLong });
+  // Two words, so that only the whole name's length is in question (a word of more than 100 characters is the next test's).
+  const words = (total: number) => `${chars(40)} ${chars(total - 41)}`;
+  assert.equal(Array.from(accepted(body({ buyer: { name: words(LIMITS.nameMax) } })).buyer.name).length, LIMITS.nameMax);
+  assert.deepEqual(fieldErrors(body({ buyer: { name: words(LIMITS.nameMax + 1) } })), { 'buyer.name': MESSAGES.en.nameTooLong });
   accepted(body({ buyer: { address: chars(LIMITS.addressMin) } }));
   assert.deepEqual(fieldErrors(body({ buyer: { address: chars(LIMITS.addressMin - 1) } })), { 'buyer.address': MESSAGES.en.address });
   accepted(body({ buyer: { address: chars(LIMITS.addressMax) } }));
@@ -136,6 +138,41 @@ test('every length rule, at its bound and one past it', () => {
   assert.deepEqual(fieldErrors(body({ buyer: { notes: chars(LIMITS.notesMax + 1) } })), { 'buyer.notes': MESSAGES.en.notesTooLong });
   // A phone longer than Sales keeps is refused even when its digits would do.
   assert.deepEqual(fieldErrors(body({ buyer: { phone: `0770${' '.repeat(LIMITS.phoneMax)}1234567` } })), { 'buyer.phone': MESSAGES.en.phone });
+});
+
+test('the first word and the rest of the name are each at most 100 characters, as Contact Center takes them (OPEN_QUESTIONS 37)', () => {
+  const chars = (n: number) => 'ب'.repeat(n);
+  const first = LIMITS.namePartMax;
+  // The first word: 100 pass, 101 do not, though the whole name is within 120.
+  assert.equal(accepted(body({ buyer: { name: `${chars(first)} ${chars(10)}` } })).buyer.name, `${chars(first)} ${chars(10)}`);
+  assert.equal(accepted(body({ buyer: { name: chars(first) } })).buyer.name, chars(first));
+  assert.deepEqual(fieldErrors(body({ buyer: { name: chars(first + 1) } })), { 'buyer.name': MESSAGES.en.namePartTooLong });
+  assert.deepEqual(fieldErrors(body({ buyer: { name: `${chars(first + 1)} ${chars(10)}` } })), { 'buyer.name': MESSAGES.en.namePartTooLong });
+  // The rest, every word after the first with single spaces: 100 pass, 101 do not.
+  const rest = (n: number) => `${chars(30)} ${chars(30)} ${chars(n - 62)}`; // 30 + 1 + 30 + 1 + (n - 62) = n
+  assert.equal(accepted(body({ buyer: { name: `Ali ${rest(first)}` } })).buyer.name, `Ali ${rest(first)}`);
+  assert.deepEqual(fieldErrors(body({ buyer: { name: `Ali ${rest(first + 1)}` } })), { 'buyer.name': MESSAGES.en.namePartTooLong });
+  // Spaces count as the parser makes them: a run of spaces is one, and the name is trimmed first.
+  accepted(body({ buyer: { name: `  Ali   ${chars(first)}  ` } }));
+  assert.deepEqual(fieldErrors(body({ buyer: { name: `  Ali   ${chars(first + 1)}  ` } })), { 'buyer.name': MESSAGES.en.namePartTooLong });
+  // A name over 120 characters is the whole-name error, not this one.
+  assert.deepEqual(fieldErrors(body({ buyer: { name: `${chars(first + 1)} ${chars(30)}` } })), { 'buyer.name': MESSAGES.en.nameTooLong });
+});
+
+test('a name part counts in UTF-16 units, the way Contact Center counts it, so a name it would refuse is refused here', () => {
+  // 51 emoji are 51 characters but 102 units: the first word is too long for Contact Center's VARCHAR(100) check.
+  const emoji = '😀'.repeat(51);
+  assert.deepEqual(fieldErrors(body({ buyer: { name: `${emoji} Ali` } })), { 'buyer.name': MESSAGES.en.namePartTooLong });
+  accepted(body({ buyer: { name: `${'😀'.repeat(50)} Ali` } }));
+});
+
+test('the name-part error is worded in the page\'s language', () => {
+  const tooLong = `${'ب'.repeat(LIMITS.namePartMax + 1)} علي`;
+  assert.deepEqual(fieldErrors(body({ locale: 'ar', buyer: { name: tooLong } })), { 'buyer.name': MESSAGES.ar.namePartTooLong });
+  assert.match(MESSAGES.ar.namePartTooLong, /^اختصر الاسم/);
+  assert.match(MESSAGES.ar.namePartTooLong, /100/);
+  assert.match(MESSAGES.en.namePartTooLong, /first word/);
+  assert.match(MESSAGES.en.namePartTooLong, /100/);
 });
 
 test('one to fifty lines, each an item id and a quantity above zero', () => {

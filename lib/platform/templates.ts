@@ -50,6 +50,22 @@ export interface TemplateSummary extends TemplateMeta {
   slug: string;
   default_locale: string;
   created_at: string;
+  /**
+   * The pages a site made from it starts with (part 2 release fixes,
+   * OPEN_QUESTIONS 22 and 34): its draft pages, the error pages left out, as
+   * the builder's Pages list shows them. The cards read "5 pages · Arabic ·
+   * English".
+   */
+  page_count: number;
+  /** The language codes it has, the default one first. */
+  languages: string[];
+}
+
+/** A template's languages: its locale codes, the default one first and the others by code, each once. */
+export function templateLanguages(locales: ReadonlyArray<{ code: string; is_default: boolean }>): string[] {
+  const codes = Array.from(new Set(locales.map((locale) => locale.code)));
+  const defaults = new Set(locales.filter((locale) => locale.is_default).map((locale) => locale.code));
+  return codes.sort((a, b) => Number(defaults.has(b)) - Number(defaults.has(a)) || (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /** TORCH's live templates, oldest first; the same for every organization. */
@@ -60,6 +76,26 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
     .where({ organization_id: templatesOrganizationId(), is_template: true })
     .whereNull('deleted_at')
     .orderBy('created_at', 'asc')) as Array<Pick<Site, 'id' | 'slug' | 'name' | 'template' | 'default_locale' | 'created_at'>>;
+  const ids = rows.map((row) => row.id);
+  // A template's content is under its own site id (tenant_id), as any site's is: the draft rows, not the published twins.
+  const [pageCounts, locales] = ids.length
+    ? await Promise.all([
+        knex('pages')
+          .select('tenant_id')
+          .count({ count: '*' })
+          .whereIn('tenant_id', ids)
+          .where({ is_published: false })
+          .whereNull('deleted_at')
+          .whereNull('error_page')
+          .groupBy('tenant_id') as Promise<Array<{ tenant_id: string; count: string | number }>>,
+        knex('locales')
+          .select('tenant_id', 'code', 'is_default')
+          .whereIn('tenant_id', ids)
+          .where({ is_published: false })
+          .whereNull('deleted_at') as Promise<Array<{ tenant_id: string; code: string; is_default: boolean }>>,
+    ])
+    : [[], []];
+  const pagesOf = new Map(pageCounts.map((row) => [row.tenant_id, Number(row.count)]));
   return rows.map((row) => ({
     id: row.id,
     slug: row.slug,
@@ -67,6 +103,8 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
     description: row.template?.description ?? { ar: '', en: '' },
     default_locale: row.default_locale,
     created_at: row.created_at,
+    page_count: pagesOf.get(row.id) ?? 0,
+    languages: templateLanguages(locales.filter((locale) => locale.tenant_id === row.id)),
   }));
 }
 

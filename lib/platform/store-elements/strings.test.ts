@@ -36,8 +36,19 @@ test('the words come from the handoff in both languages, and every key is in bot
 test('the cart label says the count in each language', () => {
   assert.equal(STORE_STRINGS.en.cartCount(4), 'Cart: 4 items');
   assert.equal(STORE_STRINGS.en.cartCount(1), 'Cart: 1 item');
-  assert.equal(STORE_STRINGS.ar.cartCount(4), 'السلة: 4 قطع');
-  assert.equal(STORE_STRINGS.ar.cartCount(120), 'السلة: 120 قطع');
+  assert.equal(STORE_STRINGS.ar.cartCount(4), 'السلة: 4 قطعة');
+  assert.equal(STORE_STRINGS.ar.cartCount(120), 'السلة: 120 قطعة');
+});
+
+test('Arabic counts use the invariant singular after the count, for every count (OPEN_QUESTIONS 51, context/rules/rtl-and-i18n.md)', () => {
+  const ar = STORE_STRINGS.ar;
+  // The plural "قطع" is right for 3 to 10 only; "قطعة" after the number reads right for all of them.
+  for (const count of [1, 2, 3, 4, 10, 11, 25, 99, 120]) {
+    assert.equal(ar.cartCount(count), `السلة: ${count} قطعة`);
+    assert.equal(ar.itemCount(count), `${count} قطعة`);
+    assert.equal(ar.summaryCount(count), `· ${count} قطعة`);
+    for (const text of [ar.cartCount(count), ar.itemCount(count), ar.summaryCount(count)]) assert.doesNotMatch(text, /قطع(?!ة)/);
+  }
 });
 
 test('the product page speaks in the handoff\'s words in both languages', () => {
@@ -77,7 +88,7 @@ test('the cart, checkout and confirmation speak in the handoff\'s words in both 
   const en = STORE_STRINGS.en;
   const ar = STORE_STRINGS.ar;
   assert.deepEqual([en.cartTitle, ar.cartTitle], ['Shopping cart', 'سلة التسوق']);
-  assert.deepEqual([en.itemCount(4), en.itemCount(1), ar.itemCount(4)], ['4 items', '1 item', '4 قطع']);
+  assert.deepEqual([en.itemCount(4), en.itemCount(1), ar.itemCount(4)], ['4 items', '1 item', '4 قطعة']);
   assert.deepEqual([en.checkout, ar.checkout], ['Checkout', 'إتمام الطلب']);
   assert.deepEqual([en.placeOrder('115,000 IQD'), ar.placeOrder('115,000 د.ع')], ['Place order · 115,000 IQD', 'تأكيد الطلب · 115,000 د.ع']);
   assert.deepEqual([en.placing, ar.placing], ['Placing your order…', 'جارٍ إرسال الطلب…']);

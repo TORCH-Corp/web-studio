@@ -43,3 +43,15 @@ export function cardOf(product: ProductForCard): CardData {
 export function nameFor(card: Pick<CardData, 'name' | 'name_ar'>, lang: StoreLang): string {
   return lang === 'ar' && card.name_ar ? card.name_ar : card.name;
 }
+
+/**
+ * What a confirmation line is called: its product's name when the read gave one
+ * (a variant: the options are drawn under it), else Sales's name for the line
+ * (OPEN_QUESTIONS 47).
+ */
+export function confirmationLineName(
+  line: { name: string; name_ar: string | null; product_name: string | null; product_name_ar: string | null },
+  lang: StoreLang,
+): string {
+  return line.product_name === null ? nameFor(line, lang) : nameFor({ name: line.product_name, name_ar: line.product_name_ar }, lang);
+}
