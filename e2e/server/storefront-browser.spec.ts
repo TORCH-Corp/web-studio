@@ -14,6 +14,11 @@
  * platform mirror, scripts and styles from the app, images from Document Center
  * through the site; nothing goes to Google Fonts, a CDN or an analytics host,
  * except the one beacon Cloudflare's edge adds to the builder's HTML (EDGE_INJECTED).
+ *
+ * Session 26: the site carries a Google font of its own (IBM Plex Sans Arabic on
+ * the body, as TORCH's templates have it), so the same check covers a published
+ * page's own font: its rules are inlined from the mirror, its files are on the
+ * site's host, and no request goes to fonts.gstatic.com.
  */
 
 import { chromium, expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
@@ -45,7 +50,7 @@ const element = (id: string, name: string, extra: Record<string, unknown> = {}) 
 const indicator = (id: string) => ({ id, name: 'cartIndicator', classes: 'w-fit', settings: { tag: 'div' }, children: [] });
 const grid = (id: string) => element(id, 'productGrid', { store: { productGrid: {} } });
 const detail = (id: string) => element(id, 'productDetail', { store: { productDetail: { product: null } } });
-const body = (...children: unknown[]) => [{ id: 'body', name: 'body', classes: '', children }];
+const body = (...children: unknown[]) => [{ id: 'body', name: 'body', classes: 'font-[IBM_Plex_Sans_Arabic]', children }];
 
 async function putLayers(pageId: string, layers: unknown[]): Promise<void> {
   const response = await api.put(`/ycode/api/layers?page_id=${pageId}`, { data: { layers } });
@@ -86,6 +91,9 @@ test.beforeAll(async ({ baseURL: configured }) => {
   store = await createSellingSite(api, RUN, { slugPrefix: 'e2e-web', name: 'E2E storefront', deliveryFee: 2500, publishIt: false });
   const opened = await api.get(`/ycode/api/platform/sites/${store.site.id}/open`, { maxRedirects: 0 });
   expect(opened.status()).toBe(303);
+  // The site's own font, as the builder installs a Google font (session 26).
+  const font = await api.post('/ycode/api/fonts', { data: { name: 'ibm-plex-sans-arabic', family: 'IBM Plex Sans Arabic', type: 'google', variants: [], weights: ['400', '700'], category: 'sans-serif' } });
+  expect(font.status() < 300, await font.text()).toBe(true);
   const home = (await draftPages(api)).find((page) => page.is_index)!;
   await putLayers(home.id, body(indicator('cart-home'), grid('grid-home')));
   await putLayers(await createPage('products'), body(indicator('cart-products'), grid('grid-products')));
@@ -112,6 +120,12 @@ test('a buyer finds the real item on /products with its image, adds it, checks o
 
     const products = await page.goto('/products');
     expect(products?.status()).toBe(200);
+    // The page's own font: rules from the platform mirror, files on this host, no Google host named anywhere.
+    const html = await products!.text();
+    expect(html).toContain('id="ycode-google-fonts"');
+    expect(html).toContain('/ycode/api/fonts/published/ibmplexsansarabic/');
+    expect(html).not.toMatch(/fonts\.gstatic\.com|fonts\.googleapis\.com/);
+    expect(products!.headers().link ?? '').not.toMatch(/gstatic|googleapis/);
     const card = page.locator('[data-ws-store="productGrid"] article.ws-card', { hasText: STORE_ITEM.name });
     await expect(card).toBeVisible({ timeout: 30_000 });
     await expect(card).toContainText('25,000');

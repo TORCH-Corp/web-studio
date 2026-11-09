@@ -4,7 +4,8 @@
  * The builder itself (font picker, canvas, installed-font links) never calls
  * fonts.googleapis.com or fonts.gstatic.com: it asks the app's own mirror,
  * which keeps what it fetched in the platform storage (font-mirror.ts).
- * Published pages keep the Google URLs: the font is the designer's choice.
+ * Published pages use the same mirror through their own anonymous route
+ * (published-fonts.ts, part 2, session 26).
  *
  * Pure string functions, safe in the browser.
  */

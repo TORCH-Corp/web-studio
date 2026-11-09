@@ -171,6 +171,8 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'fonts/google': content(),
   'fonts/mirror/css2': content(), // the builder's Google Fonts, from the platform mirror (session 3)
   'fonts/mirror/s/[...path]': content(),
+  // A published page's fonts (part 2, session 26): its visitor has no session, and gets only the files its pages' font rules name.
+  'fonts/published/[...path]': isPublic('a font file that a published page\'s font rules name, from the platform mirror; any other file is a 404'),
   'icons': content(), // the Remix icon set, from the repository (session 3)
   'assets': content(),
   'assets/[id]': content(),
