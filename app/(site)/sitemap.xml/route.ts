@@ -22,6 +22,9 @@ import {
   getDefaultSitemapSettings,
 } from '@/lib/sitemap-utils';
 import { getRequestOrigin, getSiteBaseUrl } from '@/lib/url-utils';
+import { pagesForSitemap } from '@/lib/platform/store-elements/product-sitemap';
+import { isStoreUnavailable } from '@/lib/platform/store-api';
+import { storeSitemapUrls } from '@/lib/platform/store-sitemap';
 import type { SitemapSettings, Translation, CollectionItem } from '@/types';
 
 // Reads the request origin, so it can never be prerendered at build time
@@ -30,7 +33,8 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     // A host that belongs to no site has no robots.txt or sitemap (part 1, session 5).
-    if (!(await getTenantIdFromHeaders())) return new NextResponse(null, { status: 404 });
+    const siteId = await getTenantIdFromHeaders();
+    if (!siteId) return new NextResponse(null, { status: 404 });
 
     const hasSupabaseCredentials = await credentials.exists();
     if (!hasSupabaseCredentials) {
@@ -141,9 +145,29 @@ export async function GET() {
       }
     }
 
+    // TORCH part 2 release fixes (OPEN_QUESTIONS 45): the product page's bare address answers 404, so it is not listed;
+    // each product the store sells is, at the page's address and its id. A catalogue that cannot be read is a 503,
+    // which a crawler retries, not a sitemap without the products.
+    let storeUrls;
+    try {
+      storeUrls = await storeSitemapUrls({
+        siteId,
+        baseUrl,
+        pages: validPages,
+        folders,
+        locales,
+        translationsByLocale,
+        changefreq: settings.defaultChangeFrequency,
+      });
+    } catch (error) {
+      if (!isStoreUnavailable(error)) throw error;
+      console.error(`[sitemap] the catalogue could not be read: ${(error as Error).message}`);
+      return new NextResponse('The sitemap cannot be built right now', { status: 503, headers: { 'Retry-After': '300' } });
+    }
+
     // Generate sitemap URLs
     const sitemapUrls = generateSitemapUrls(
-      validPages,
+      pagesForSitemap(validPages),
       folders,
       baseUrl,
       settings,
@@ -151,6 +175,7 @@ export async function GET() {
       translationsByLocale,
       dynamicPageData
     );
+    sitemapUrls.push(...storeUrls);
 
     // Generate XML
     const xml = generateSitemapXml(sitemapUrls);

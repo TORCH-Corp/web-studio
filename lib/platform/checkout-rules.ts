@@ -123,8 +123,18 @@ export function salesRefusalAnswer(
 export interface ConfirmationLine {
   item_id: string;
   sku: string;
+  /** Sales's name for the line: the item sold, so a variant's reads "Linen shirt - Small / White". */
   name: string;
   name_ar: string | null;
+  /**
+   * The product's own name, apart from the options, for a variant line whose
+   * product the site's catalogue still has; null for a plain item and when the
+   * catalogue has no such product (OPEN_QUESTIONS 47). The confirmation draws
+   * this above "Size: Small · Colour: White" as the handoff does; Sales's name
+   * above stays Sales's.
+   */
+  product_name: string | null;
+  product_name_ar: string | null;
   axes: Array<{ name: string; name_ar: string | null; option: string; option_ar: string | null }>;
   unit: { code: string; name: string };
   quantity: string;
@@ -146,23 +156,38 @@ export interface Confirmation {
   phone: string | null;
 }
 
-/** What the confirmation page shows of a Sales order. */
-export function confirmationOf(checkoutId: string, order: SalesOrder): Confirmation {
+/** The name of the product a variant belongs to, as the catalogue has it. */
+export interface ProductName {
+  name: string;
+  name_ar: string | null;
+}
+
+/**
+ * What the confirmation page shows of a Sales order. `productOf` names the
+ * product of a variant line (a line with axes) by the line's item id; it is
+ * never asked about a plain line.
+ */
+export function confirmationOf(checkoutId: string, order: SalesOrder, productOf: (itemId: string) => ProductName | null = () => null): Confirmation {
   return {
     checkout_id: checkoutId,
     code: order.code,
     currency: order.currency,
-    lines: order.lines.map((line) => ({
-      item_id: line.itemId,
-      sku: line.sku,
-      name: line.name.en,
-      name_ar: line.name.ar,
-      axes: line.axes.map((axis) => ({ name: axis.specification.en, name_ar: axis.specification.ar, option: axis.option.en, option_ar: axis.option.ar })),
-      unit: line.unit,
-      quantity: line.quantity,
-      unit_price: line.unitPrice,
-      line_total: line.lineTotal,
-    })),
+    lines: order.lines.map((line) => {
+      const product = line.axes.length > 0 ? productOf(line.itemId) : null;
+      return {
+        item_id: line.itemId,
+        sku: line.sku,
+        name: line.name.en,
+        name_ar: line.name.ar,
+        product_name: product?.name ?? null,
+        product_name_ar: product?.name_ar ?? null,
+        axes: line.axes.map((axis) => ({ name: axis.specification.en, name_ar: axis.specification.ar, option: axis.option.en, option_ar: axis.option.ar })),
+        unit: line.unit,
+        quantity: line.quantity,
+        unit_price: line.unitPrice,
+        line_total: line.lineTotal,
+      };
+    }),
     subtotal: order.subtotal,
     delivery_fee: order.deliveryFee,
     total: order.total,

@@ -6,8 +6,10 @@
  * decision 16g).
  *
  * Any locale that is not Arabic reads English. Numbers are Western digits in
- * both languages (DESIGN_SYSTEM.md); the Arabic count is the invariant plural
- * the handoff uses ("4 قطع").
+ * both languages (DESIGN_SYSTEM.md); the Arabic count is the invariant
+ * singular after the number ("4 قطعة"), as context/rules/rtl-and-i18n.md asks
+ * and the owner decided (OPEN_QUESTIONS 51): the handoff draws the plural
+ * "4 قطع", which reads right only for 3 to 10.
  *
  * Kept free of Next and React imports so it runs under `node --test`.
  */
@@ -300,7 +302,7 @@ export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
     emptyStoreText: 'عد إلينا لاحقًا.',
     cartLabel: 'السلة',
     cartEmpty: 'السلة فارغة',
-    cartCount: (count) => `السلة: ${count} قطع`,
+    cartCount: (count) => `السلة: ${count} قطعة`,
     currency: { IQD: 'د.ع', USD: '$' },
     sku: 'رمز المنتج',
     description: 'الوصف',
@@ -322,7 +324,7 @@ export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
     loadingCheckout: 'جارٍ تحميل صفحة إتمام الطلب…',
     loadingOrder: 'جارٍ تحميل طلبك…',
     cartTitle: 'سلة التسوق',
-    itemCount: (count) => `${count} قطع`,
+    itemCount: (count) => `${count} قطعة`,
     pricePerUnit: (price, unit) => (unit ? `${price} / ${unit}` : `${price} / للقطعة`),
     removeLine: (name) => `إزالة ${name} من السلة`,
     remove: 'إزالة',
@@ -345,7 +347,7 @@ export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
     pricesNotCheckedText: 'الكتالوج غير متاح مؤقتًا، لذلك الأسعار المعروضة هي أسعار وقت إضافة المنتجات. يُحتسب عليك سعر المتجر عند تأكيد الطلب.',
 
     backToCart: 'العودة إلى السلة',
-    summaryCount: (count) => `· ${count} قطع`,
+    summaryCount: (count) => `· ${count} قطعة`,
     deliveryDetails: 'معلومات التوصيل',
     fullName: 'الاسم الكامل',
     fullNamePlaceholder: 'الاسم الثلاثي',

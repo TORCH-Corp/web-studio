@@ -19,6 +19,8 @@ import { getSettingByKey } from '@/lib/repositories/settingsRepository';
 import { parseAuthCookie, getPasswordProtection, fetchFoldersForAuth } from '@/lib/page-auth';
 import { getSiteBaseUrl } from '@/lib/url-utils';
 import { getOffCanonicalDynamicRedirect } from '@/lib/hreflang-utils';
+import { productCanonicalPath, productSeo } from '@/lib/platform/store-elements/product-seo';
+import { storeLangOf } from '@/lib/platform/store-elements/strings';
 import { matchRedirect } from '@/lib/redirect-utils';
 import type { PageFolder, Translation, Redirect as RedirectType } from '@/types';
 
@@ -480,6 +482,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
   const metaTenantId = (await getTenantIdFromHeaders()) ?? '';
   const routeTag = buildRouteTag(metaTenantId, slugPath);
   const metaStorePage = !isHomepage && (await isStorePageRequest(slugPath, metaTenantId || undefined));
+
+  // A product page says what its product says (part 2 release fixes, OPEN_QUESTIONS 45): the product's name and
+  // description where the page's own SEO fields are empty, and a canonical address that names the item. The page's
+  // language is the request's, else the site's default.
+  const shown = data.storeProduct?.kind === 'found' ? data.storeProduct.product : null;
+  const metaLang = storeLangOf(data.locale?.code ?? data.availableLocales?.find((locale) => locale.is_default)?.code);
+  const productHead = shown ? productSeo({ product: shown, lang: metaLang, siteName: globalSettings.siteName }) : null;
+  const metaPath = shown ? productCanonicalPath(slugPath, shown.id) : isHomepage ? '/' : `/${slugPath}`;
   const { meta, baseUrl } = await unstable_cache(
     async () => scoped(metaTenantId, async () => ({
       meta: await generatePageMetadata(data.page, {
@@ -487,9 +497,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
           ? 'Home'
           : slugPath.charAt(0).toUpperCase() + slugPath.slice(1),
         collectionItem: data.collectionItem,
-        pagePath: isHomepage ? '/' : `/${slugPath}`,
+        pagePath: metaPath,
         globalSeoSettings: globalSettings,
         translations: data.translations,
+        productSeo: productHead,
       }),
       baseUrl: getSiteBaseUrl({ globalCanonicalUrl: globalSettings.globalCanonicalUrl }),
     })),

@@ -3,10 +3,19 @@ import { getRequestOrigin } from '@/lib/url-utils';
 /**
  * Extract the client IP from reverse-proxy headers.
  * Returns null when no forwarding header is present (e.g. local dev).
+ *
+ * TORCH (part 2 release fixes, OPEN_QUESTIONS 35): ycode read the first
+ * `X-Forwarded-For` entry, which is the one the visitor wrote itself: nginx
+ * appends the address it saw (`$proxy_add_x_forwarded_for`), so a script that
+ * sent its own header got a fresh count on every request. `X-Real-IP` is what
+ * nginx sets to `$remote_addr`, a value a visitor cannot choose, so it comes
+ * first; without it the last `X-Forwarded-For` entry is the nearest proxy's.
  */
 export function getClientIp(headers: Headers): string | null {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwarded || headers.get('x-real-ip')?.trim() || null;
+  const real = headers.get('x-real-ip')?.trim();
+  if (real) return real;
+  const forwarded = headers.get('x-forwarded-for')?.split(',').map((entry) => entry.trim()).filter(Boolean);
+  return forwarded?.at(-1) || null;
 }
 
 /**

@@ -325,8 +325,9 @@ test('a buyer adds two items and a variant, reviews the cart, changes a quantity
     await expect(order.locator('[data-order-code]')).toHaveText(created[0].response.data.code);
     await expect(order.locator('[data-order-code]')).toHaveText(CODE);
     await expect(order.locator('.ws-conf-text')).toHaveText(`We’ll call you on ${PHONE} to confirm the delivery time.`);
-    // Sales names a variant's line by the variant's own item ("Linen shirt - Small / White") and keeps its options beside it.
-    await expect(order.locator('.ws-mini .ws-mini-name')).toHaveText(['Desk lamp', 'Linen shirt - Small / White']);
+    // The product's name above the options, as the handoff draws it. Sales names the variant's line "Linen shirt - Small / White";
+    // the read gives the product's name apart (OPEN_QUESTIONS 47), so the options are not said twice.
+    await expect(order.locator('.ws-mini .ws-mini-name')).toHaveText(['Desk lamp', 'Linen shirt']);
     await expect(order.locator('.ws-mini').nth(1).locator('.ws-line-opts')).toHaveText('Size: Small · Colour: White');
     await expect(order.locator('.ws-mini').first().locator('.ws-line-unit')).toHaveText('2 × 25,000 IQD / Piece');
     await expect(summaryRow(order, 'Subtotal')).toHaveText('85,000 IQD');
@@ -397,6 +398,36 @@ test('the phone field accepts a number with the country code, and says what it t
     expect(created).toHaveLength(1);
     const people = (await calls('contact-center')).slice(peopleBefore.length);
     expect(people[0].body).toMatchObject({ phone: `964771${DIGITS}` });
+  } finally {
+    await context.close();
+  }
+});
+
+test('a name Contact Center would refuse is refused under the name field, in the page\'s language, and nobody is called (OPEN_QUESTIONS 37)', async () => {
+  const salesBefore = await calls('sales');
+  const peopleBefore = await calls('contact-center');
+  const context = await visitor();
+  try {
+    const page = await context.newPage();
+    await addPlainItems(page, 'Desk lamp');
+    await openCheckout(page);
+    const fullName = checkoutEl(page).getByLabel('Full name');
+    const nameField = checkoutEl(page).locator('.ws-field', { has: page.getByLabel('Full name') });
+    // Every other field is right; the first word is 101 characters, inside the name's 120 but over Contact Center's 100.
+    await fullName.fill(`${'A'.repeat(101)} Ali`);
+    await checkoutEl(page).getByLabel('Phone number').fill(PHONE);
+    await checkoutEl(page).getByLabel('City').selectOption({ label: 'Basra' });
+    await checkoutEl(page).getByLabel('Address', { exact: true }).fill('Ashar, main road, house 4');
+    await placeOrder(page).click();
+    await expect(alertOf(page, 'validation')).toBeVisible();
+    await expect(nameField.locator('.ws-err')).toHaveText('Shorten the name: the first word and the rest can each be up to 100 characters.');
+    await expect(fullName).toHaveAttribute('aria-invalid', 'true');
+    expect(await attemptsSince(salesBefore)).toEqual([]);
+    expect((await calls('contact-center')).length).toBe(peopleBefore.length);
+
+    // Correcting the name takes the message away.
+    await fullName.fill('Ali Hassan Kadhim');
+    await expect(nameField.locator('.ws-err')).toHaveCount(0);
   } finally {
     await context.close();
   }
@@ -674,12 +705,14 @@ test('in Arabic the pages, the city names, the field errors and the confirmation
     await page.goto('/ar/products');
     await expect(page.locator('[data-ws-store="productGrid"] article.ws-card').first()).toBeVisible();
     await addFromGrid(page, 'مصباح مكتب');
-    await expect(page.getByRole('link', { name: 'السلة: 1 قطع' })).toHaveAttribute('href', '/ar/cart');
-    await page.getByRole('link', { name: 'السلة: 1 قطع' }).click();
+    await expect(page.getByRole('link', { name: 'السلة: 1 قطعة' })).toHaveAttribute('href', '/ar/cart');
+    await page.getByRole('link', { name: 'السلة: 1 قطعة' }).click();
     await expect(page).toHaveURL('/ar/cart');
 
     await expect(cartEl(page)).toHaveAttribute('dir', 'rtl');
     await expect(cartEl(page).getByRole('heading', { level: 1 })).toHaveText('سلة التسوق');
+    // The count after the number is the invariant singular, also for one (OPEN_QUESTIONS 51).
+    await expect(cartEl(page).locator('.ws-muted').first()).toHaveText('1 قطعة');
     await expect(lineOf(page, 'مصباح مكتب').locator('.ws-line-unit')).toHaveText('25,000 د.ع / pcs');
     await expect(summaryRow(cartEl(page), 'المجموع الفرعي')).toHaveText('25,000 د.ع');
     await expect(summaryRow(cartEl(page), 'رسوم التوصيل')).toHaveText(`${fee.toLocaleString('en-US')} د.ع`);
@@ -698,6 +731,12 @@ test('in Arabic the pages, the city names, the field errors and the confirmation
     await expect(alertOf(page, 'validation').locator('.ws-alert-title')).toHaveText('لم يُرسَل الطلب. صحّح 4 حقول:');
     await expect(checkoutEl(page).locator('.ws-field', { has: page.getByLabel('الاسم الكامل') }).locator('.ws-err')).toHaveText('أدخل اسمك الكامل.');
     await expect(checkoutEl(page).locator('.ws-field', { has: page.getByLabel('رقم الهاتف') }).locator('.ws-err')).toContainText('أدخل رقم هاتف محمول عراقي');
+
+    // A first word over Contact Center's 100 characters is refused under the name, in Arabic too.
+    await checkoutEl(page).getByLabel('الاسم الكامل').fill(`${'ب'.repeat(101)} علي`);
+    await placeOrder(page).click();
+    await expect(checkoutEl(page).locator('.ws-field', { has: page.getByLabel('الاسم الكامل') }).locator('.ws-err'))
+      .toHaveText('اختصر الاسم: لا تزيد الكلمة الأولى ولا بقية الاسم على 100 حرف.');
 
     await checkoutEl(page).getByLabel('الاسم الكامل').fill('علي حسن كاظم');
     await checkoutEl(page).getByLabel('رقم الهاتف').fill(PHONE);

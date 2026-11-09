@@ -12,7 +12,10 @@
  * `invalid_body`, in English, for the developer: unknown keys are refused
  * rather than dropped, so a misnamed field never passes unseen.
  *
- * The rules: name 2 to 120 characters; phone an Iraqi mobile number, with or
+ * The rules: name 2 to 120 characters, its first word and the rest each up to
+ * 100 (Contact Center's find-or-create refuses a longer part, so the buyer is
+ * told here, in the page's language, where it can be corrected: OPEN_QUESTIONS
+ * 37); phone an Iraqi mobile number, with or
  * without the country code (OPEN_QUESTIONS 33); city one of
  * lib/platform/iraq-governorates.ts; address 5 to 300; landmark up to 120;
  * notes up to 500; 1 to 50 lines; a quantity above zero with up to four
@@ -62,6 +65,8 @@ export type CheckoutParse =
 export const LIMITS = {
   nameMin: 2,
   nameMax: 120,
+  /** The first word and the rest after it, each: Contact Center's `NAME_PART_MAX` (Person.firstName and lastName are VARCHAR(100)). */
+  namePartMax: 100,
   /** Sales keeps the typed phone in 1 to 32 characters (SL1). */
   phoneMax: 32,
   addressMin: 5,
@@ -79,6 +84,7 @@ const QUANTITY = /^(?!0+(\.0+)?$)[0-9]{1,12}(\.[0-9]{1,4})?$/;
 type MessageKey =
   | 'name'
   | 'nameTooLong'
+  | 'namePartTooLong'
   | 'phone'
   | 'city'
   | 'address'
@@ -101,6 +107,7 @@ export const MESSAGES: Record<CheckoutLocale, Record<MessageKey, string>> = {
   en: {
     name: 'Enter your full name.',
     nameTooLong: `Enter a name of up to ${LIMITS.nameMax} characters.`,
+    namePartTooLong: `Shorten the name: the first word and the rest can each be up to ${LIMITS.namePartMax} characters.`,
     phone: 'Enter an Iraqi mobile number, such as 0770 123 4567 or +964 770 123 4567.',
     city: 'Choose your delivery city.',
     address: 'Enter your delivery address: area, street and house.',
@@ -116,6 +123,7 @@ export const MESSAGES: Record<CheckoutLocale, Record<MessageKey, string>> = {
   ar: {
     name: 'أدخل اسمك الكامل.',
     nameTooLong: `أدخل اسمًا لا يزيد على ${LIMITS.nameMax} حرفًا.`,
+    namePartTooLong: `اختصر الاسم: لا تزيد الكلمة الأولى ولا بقية الاسم على ${LIMITS.namePartMax} حرف.`,
     phone: 'أدخل رقم هاتف محمول عراقي، مثل 0770 123 4567 أو ‎+964 770 123 4567.',
     city: 'اختر مدينة التوصيل.',
     address: 'أدخل عنوان التوصيل: المنطقة والشارع والدار.',
@@ -138,6 +146,19 @@ export function checkoutLocale(value: unknown, siteDefault: string): CheckoutLoc
 
 /** Characters, not UTF-16 units. */
 const length = (text: string) => Array.from(text).length;
+
+/**
+ * Whether the first word or the rest of a name is longer than Contact Center
+ * accepts. The split and the count are Contact Center's (`splitFullName`,
+ * `find-or-create-person.service.ts`): the first word, and every word after it
+ * joined by single spaces, each counted in UTF-16 units (`String.length`), not
+ * characters, so a name it would refuse is never one this accepts. `name` is
+ * already trimmed with its runs of spaces made one.
+ */
+function namePartTooLong(name: string): boolean {
+  const [first = '', ...rest] = name.split(' ');
+  return first.length > LIMITS.namePartMax || rest.join(' ').length > LIMITS.namePartMax;
+}
 
 /** Arabic-Indic (٠-٩) and Eastern Arabic-Indic (۰-۹) digits as ASCII digits: a buyer on an Arabic keyboard types them. */
 function asciiDigits(text: string): string {
@@ -231,6 +252,7 @@ export function parseCheckout(body: unknown, siteDefault: string): CheckoutParse
   const name = texts.name.replace(/\s+/g, ' ');
   if (length(name) < LIMITS.nameMin) fields['buyer.name'] = message.name;
   else if (length(name) > LIMITS.nameMax) fields['buyer.name'] = message.nameTooLong;
+  else if (namePartTooLong(name)) fields['buyer.name'] = message.namePartTooLong;
 
   const canonical = length(texts.phone) <= LIMITS.phoneMax ? canonicalIraqiMobile(texts.phone) : null;
   if (!canonical) fields['buyer.phone'] = message.phone;

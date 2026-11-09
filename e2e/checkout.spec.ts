@@ -110,10 +110,11 @@ async function json(response: APIResponse, status: number) {
 const confirmation = (checkoutId: string, context: APIRequestContext = visitor) => context.get(`/ycode/api/store/orders/${checkoutId}`);
 
 /**
- * The site's form-spam setting, which the checkout's rate limit reads. Next
- * fills a missing x-forwarded-for with the socket's address, so every request
- * of this spec counts as 127.0.0.1: the spec runs with a high limit and lowers
- * it in its own test.
+ * The site's form-spam setting, which the checkout's rate limit reads. A
+ * request that carries neither x-real-ip nor x-forwarded-for gets the socket's
+ * address in x-forwarded-for from Next, so it counts as 127.0.0.1: the spec runs
+ * with a high limit and lowers it in its own tests, which send their own
+ * addresses.
  */
 async function spamSetting(rateLimitMaxSubmissions: number): Promise<void> {
   const response = await owner.put('/ycode/api/settings/form_spam_protection', {
@@ -198,9 +199,11 @@ test('the confirmation read returns the order\'s lines with their axes, the fee,
     code: placed.code,
     currency: 'IQD',
     lines: [
-      { item_id: ITEM.lamp, sku: 'LMP-001', name: 'Desk lamp', name_ar: 'مصباح مكتب', axes: [], unit: PIECE, quantity: '2', unit_price: '25000', line_total: '50000' },
+      { item_id: ITEM.lamp, sku: 'LMP-001', name: 'Desk lamp', name_ar: 'مصباح مكتب', product_name: null, product_name_ar: null, axes: [], unit: PIECE, quantity: '2', unit_price: '25000', line_total: '50000' },
       {
+        // Sales's own name for the line, and the product's name apart from the options (OPEN_QUESTIONS 47).
         item_id: ITEM.shirtSmallWhite, sku: 'SHT-001-S-WHT', name: 'Linen shirt - Small / White', name_ar: null,
+        product_name: 'Linen shirt', product_name_ar: 'قميص كتان',
         axes: [
           { name: 'Size', name_ar: 'المقاس', option: 'Small', option_ar: 'صغير' },
           { name: 'Colour', name_ar: 'اللون', option: 'White', option_ar: 'أبيض' },
@@ -354,6 +357,23 @@ test('with Contact Center down the answer is 503 and Sales is never called', asy
   expect(await since('sales', sales)).toHaveLength(0);
 });
 
+test('with the catalogue unreadable the confirmation is still answered, naming the variant line as Sales does; once it can be read the product\'s name is back', async () => {
+  await forgetCatalogue(); // the next read asks Product & Services again
+  await servicesDown(['product-services']);
+  try {
+    const body = await json(await confirmation(placed.checkout_id), 200);
+    const shirt = body.data.lines.find((line: { item_id: string }) => line.item_id === ITEM.shirtSmallWhite);
+    expect(shirt).toMatchObject({ name: 'Linen shirt - Small / White', product_name: null, product_name_ar: null });
+    expect(shirt.axes).toHaveLength(2);
+    expect(body.data.code).toBe(placed.code);
+  } finally {
+    await servicesDown([]);
+  }
+  await forgetCatalogue();
+  const again = await json(await confirmation(placed.checkout_id), 200);
+  expect(again.data.lines.find((line: { item_id: string }) => line.item_id === ITEM.shirtSmallWhite)).toMatchObject({ product_name: 'Linen shirt', product_name_ar: 'قميص كتان' });
+});
+
 test('with Sales down the confirmation read answers 503', async () => {
   await servicesDown(['sales']);
   try {
@@ -417,6 +437,22 @@ test('the rate limit counts the site\'s checkouts from one IP that reached Conta
     expect((await json(await checkout(checkoutBody(), visitor, ip), 429)).code).toBe('rate_limited');
     // Another IP has its own count.
     await json(await checkout(checkoutBody(), visitor, { 'x-forwarded-for': '198.51.100.9' }), 201);
+  } finally {
+    await spamSetting(1000);
+  }
+});
+
+test('a visitor who sends its own X-Forwarded-For does not get a fresh count: the address nginx saw is the one counted (OPEN_QUESTIONS 35)', async () => {
+  await spamSetting(2);
+  try {
+    // What nginx adds: X-Real-IP is the address it saw; X-Forwarded-For is what the visitor sent, that address after it.
+    const seen = `203.0.113.${(Date.now() % 200) + 1}`;
+    const asNginx = (visitorSent: string) => ({ 'x-real-ip': seen, 'x-forwarded-for': `${visitorSent}, ${seen}` });
+    await json(await checkout(checkoutBody(), visitor, asNginx('198.51.100.1')), 201);
+    await json(await checkout(checkoutBody(), visitor, asNginx('198.51.100.2')), 201);
+    expect((await json(await checkout(checkoutBody(), visitor, asNginx('198.51.100.3')), 429)).code).toBe('rate_limited');
+    // Another address nginx saw has its own count.
+    await json(await checkout(checkoutBody(), visitor, { 'x-real-ip': '198.51.100.9', 'x-forwarded-for': `198.51.100.1, 198.51.100.9` }), 201);
   } finally {
     await spamSetting(1000);
   }
