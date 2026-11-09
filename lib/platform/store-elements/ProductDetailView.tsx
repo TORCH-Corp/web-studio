@@ -6,7 +6,7 @@ import type { StoreAxis, StoreProduct, StoreVariant } from '@/lib/platform/catal
 import { nameFor } from '@/lib/platform/store-elements/card-data';
 import { CardMedia } from '@/lib/platform/store-elements/CardView';
 import { formatPrice } from '@/lib/platform/store-elements/format';
-import { AlertIcon, BagIcon, BoxIcon, CheckIcon, MinusIcon, PlusIcon } from '@/lib/platform/store-elements/icons';
+import { AlertIcon, BagIcon, BoxIcon, CheckIcon, ChevronIcon, MinusIcon, PlusIcon } from '@/lib/platform/store-elements/icons';
 import type { StoreLinks } from '@/lib/platform/store-elements/links';
 import { galleryFor, optionRows, type Selection } from '@/lib/platform/store-elements/picker';
 import { STORE_STRINGS, type StoreLang } from '@/lib/platform/store-elements/strings';
@@ -44,11 +44,42 @@ const axisName = (axis: Pick<StoreAxis, 'name' | 'name_ar'>, lang: StoreLang) =>
 const optionLabel = (option: { label: string; label_ar: string | null }, lang: StoreLang) => (lang === 'ar' && option.label_ar ? option.label_ar : option.label);
 
 /**
- * The product page as handoff/store draws it (browse-product-*): the gallery, the name and SKU, the price with its
- * unit, one row of chips per axis, the quantity stepper and Add to cart, the "added" notice, the description. It
- * holds no state of its own, so the canvas draws it with sample data and the published page with the live product.
+ * The product page as handoff/store draws it (browse-product-*): the breadcrumb (Products, the item's category, the
+ * product; a product with no category has two steps), the gallery, the name and SKU, the price with its unit, one
+ * row of chips per axis, the quantity stepper and Add to cart, the "added" notice, the description. It holds no
+ * state of its own, so the canvas draws it with sample data and the published page with the live product.
  */
 export function ProductDetailView(props: ProductDetailViewProps) {
+  return (
+    <>
+      <ProductCrumbs
+        product={props.product} lang={props.lang}
+        links={props.links}
+      />
+      <ProductBody {...props} />
+    </>
+  );
+}
+
+/** Where the product is: the products page, its category there, and its own name (the page the buyer is on). */
+function ProductCrumbs({ product, lang, links }: Pick<ProductDetailViewProps, 'product' | 'lang' | 'links'>) {
+  const t = STORE_STRINGS[lang];
+  return (
+    <nav className="ws-crumbs" aria-label={t.breadcrumb}>
+      <a className="ws-crumb" href={links.products()}>{t.products}</a>
+      <span className="ws-crumb-sep" aria-hidden="true"><ChevronIcon /></span>
+      {product.category && (
+        <>
+          <a className="ws-crumb" href={links.category(product.category.id)}>{nameFor(product.category, lang)}</a>
+          <span className="ws-crumb-sep" aria-hidden="true"><ChevronIcon /></span>
+        </>
+      )}
+      <span aria-current="page">{nameFor(product, lang)}</span>
+    </nav>
+  );
+}
+
+function ProductBody(props: ProductDetailViewProps) {
   const { product, lang, links, selection, variant, pickedImage, quantity, added, cartFull } = props;
   const t = STORE_STRINGS[lang];
   const rows = optionRows(product, selection);
@@ -198,22 +229,25 @@ export function ProductDetailView(props: ProductDetailViewProps) {
 export function ProductDetailSkeleton({ lang }: { lang: StoreLang }) {
   const t = STORE_STRINGS[lang];
   return (
-    <div className="ws-pd" aria-busy="true">
-      <p className="ws-sr" role="status">{t.loadingProduct}</p>
-      <div className="ws-gallery" aria-hidden="true">
-        <div className="ws-sk ws-sk-media" />
-        <div className="ws-thumbs">
-          {[0, 1, 2, 3].map((n) => <div key={n} className="ws-sk ws-sk-thumb" />)}
+    <>
+      <div className="ws-crumbs" aria-hidden="true"><div className="ws-sk ws-sk-line ws-sk-crumbs" /></div>
+      <div className="ws-pd" aria-busy="true">
+        <p className="ws-sr" role="status">{t.loadingProduct}</p>
+        <div className="ws-gallery" aria-hidden="true">
+          <div className="ws-sk ws-sk-media" />
+          <div className="ws-thumbs">
+            {[0, 1, 2, 3].map((n) => <div key={n} className="ws-sk ws-sk-thumb" />)}
+          </div>
+        </div>
+        <div className="ws-info" aria-hidden="true">
+          <div className="ws-sk ws-sk-title" />
+          <div className="ws-sk ws-sk-line ws-sk-short" />
+          <div className="ws-sk ws-sk-title ws-sk-short" />
+          <div className="ws-sk-chips">{[0, 1, 2, 3].map((n) => <div key={n} className="ws-sk ws-sk-chip" />)}</div>
+          <div className="ws-sk ws-sk-btn" />
         </div>
       </div>
-      <div className="ws-info" aria-hidden="true">
-        <div className="ws-sk ws-sk-title" />
-        <div className="ws-sk ws-sk-line ws-sk-short" />
-        <div className="ws-sk ws-sk-title ws-sk-short" />
-        <div className="ws-sk-chips">{[0, 1, 2, 3].map((n) => <div key={n} className="ws-sk ws-sk-chip" />)}</div>
-        <div className="ws-sk ws-sk-btn" />
-      </div>
-    </div>
+    </>
   );
 }
 

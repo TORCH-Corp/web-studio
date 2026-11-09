@@ -43,6 +43,11 @@
  * a background chevron (`#ybody select` in app/globals.css), whose ID selector beats a class, so the rule that
  * clears it is `!important`.
  *
+ * Session 25 (F2) adds the grid's count line, the product page's breadcrumb
+ * (handoff browse-product-*, `.crumbs`) and the category cards (handoff
+ * browse-home-default, `.cats`). A breadcrumb link takes the shop's Primary on
+ * hover, as the handoff's does; the handoff gives a category card no hover.
+ *
  * Written as one string so every render path can carry it: the React elements
  * (canvas and published) put it in a <style> inside the element, and the HTML
  * string path (layerToHtml) writes the same text.
@@ -244,6 +249,14 @@ box-sizing:border-box;font-family:var(--ws-font);font-size:var(--ws-text-md);lin
 .ws-store .ws-sk-square{aspect-ratio:1 / 1;border-radius:var(--ws-radius-md)}
 .ws-store .ws-sk-block{height:var(--ws-size-control);border-radius:var(--ws-radius-md)}
 .ws-store .ws-sk-panel{height:calc(var(--ws-size-control) * 5);border-radius:var(--ws-radius-lg)}
+.ws-store .ws-count{min-height:calc(var(--ws-text-sm) * var(--ws-lh-normal))}
+.ws-store .ws-crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ws-space-1);margin-bottom:var(--ws-space-3);color:var(--ws-grey-500);font-size:var(--ws-text-sm)}
+.ws-store .ws-crumb{display:inline-flex;align-items:center;min-height:var(--ws-size-touch);color:var(--ws-grey-700)}
+.ws-store .ws-crumb-sep{display:inline-flex;align-items:center}
+.ws-store .ws-sk-crumbs{width:40%;margin-block:calc((var(--ws-size-touch) - var(--ws-space-4)) / 2)}
+.ws-store .ws-cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--ws-space-3)}
+.ws-store .ws-cat-card{display:flex;flex-direction:column;gap:var(--ws-space-2);min-width:0;color:var(--ws-dark)}
+.ws-store .ws-cat-name{font-size:var(--ws-text-sm);font-weight:var(--ws-fw-semibold);line-height:var(--ws-lh-tight)}
 @keyframes ws-pulse{50%{opacity:.45}}
 @keyframes ws-badge-settle{from{transform:scale(0.85)}to{transform:scale(1)}}
 @keyframes ws-notice-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -251,7 +264,7 @@ box-sizing:border-box;font-family:var(--ws-font);font-size:var(--ws-text-md);lin
 @keyframes ws-spin{to{transform:rotate(360deg)}}
 .ws-store .ws-alert-in,.ws-store .ws-conf{animation:ws-notice-in 200ms cubic-bezier(0.23,1,0.32,1)}
 @media (hover:hover) and (prefers-reduced-motion:no-preference){
-.ws-store .ws-btn,.ws-store .ws-chip,.ws-store .ws-card-link,.ws-store .ws-input{transition:background-color 150ms ease,border-color 150ms ease,color 150ms ease}
+.ws-store .ws-btn,.ws-store .ws-chip,.ws-store .ws-card-link,.ws-store .ws-input,.ws-store .ws-crumb{transition:background-color 150ms ease,border-color 150ms ease,color 150ms ease}
 }
 @media (hover:hover){
 .ws-store .ws-btn-primary:not([disabled]):hover{background:var(--ws-dark);border-color:var(--ws-dark)}
@@ -261,6 +274,7 @@ box-sizing:border-box;font-family:var(--ws-font);font-size:var(--ws-text-md);lin
 .ws-store .ws-notice-link:hover{text-decoration:underline}
 .ws-store .ws-line-name:hover,.ws-store .ws-mini-name a:hover{color:var(--ws-primary)}
 .ws-store .ws-remove:hover{color:var(--ws-dark)}
+.ws-store .ws-crumb:hover{color:var(--ws-primary)}
 }
 @media (prefers-reduced-motion:no-preference){
 .ws-store .ws-chev{transition:transform 150ms ease}
@@ -303,5 +317,9 @@ box-sizing:border-box;font-family:var(--ws-font);font-size:var(--ws-text-md);lin
 .ws-store .ws-cart-label{display:inline}
 .ws-store .ws-pd{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ws-space-9);align-items:start}
 .ws-store .ws-pd-title{font-size:var(--ws-text-3xl)}
+.ws-store .ws-crumbs{margin-bottom:var(--ws-space-5)}
+.ws-store .ws-cats{gap:var(--ws-space-6)}
+.ws-store .ws-ph-cat{aspect-ratio:4 / 3}
+.ws-store .ws-cat-name{font-size:var(--ws-text-lg)}
 }
 `;

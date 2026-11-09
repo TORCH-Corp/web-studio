@@ -61,8 +61,8 @@ each is built by hand in the builder, in the `WS_TEMPLATES_ORG` organization):
     docker exec web-studio sh -c 'cd /tooling && TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json \
       node -r ts-node/register -r tsconfig-paths/register scripts/seed-templates.ts'
 
-It creates `company-site`, `landing-page` and `blank` with their fixed ids if absent and refreshes names and descriptions
-if present; it never touches a template's content.
+It creates `company-site`, `landing-page`, `blank` and, since part 2, `online-store` with their fixed ids if absent and
+refreshes names and descriptions if present; it never touches a template's content.
 
 ## How a site is created and published
 The Tauri app (or any caller with `webstudio.manage_sites`) `POST`s `/ycode/api/platform/sites` with a name, a slug,
@@ -76,7 +76,7 @@ an unused host is 404. Details of each step are in the sections below.
 `pnpm e2e:server` (`playwright.server.config.ts`, `e2e/server/*.spec.ts`) runs against the deployed service over HTTPS. It
 needs `E2E_BOS_EMAIL` and `E2E_BOS_PASSWORD` (a test account; its organization is the test organization) and starts nothing.
 `deployment.spec.ts` (part 1) is: health, the dev login refused (404), 401 without a session, an unused address 404, a real
-access token from auth-service through the callback, the three templates, a site created, published and served on
+access token from auth-service through the callback, the four templates, a site created, published and served on
 `https://{slug}.sites.torchcorp.com` in both languages, then deleted. Part 2 (session D1) adds five, against the real
 Organization Setup, Product & Services, Contact Center, Sales and Document Center, no stub: `store-settings.spec.ts`,
 `catalogue.spec.ts` (with the item's real image), `checkout.spec.ts`, `orders-api.spec.ts` and `storefront-browser.spec.ts` (a
@@ -154,8 +154,8 @@ drops the schema.
   The blank template is provisioning, not a copy; an unknown `template_id` is 404. The
   templates organization may send `is_template: true` with the template's `template` meta
   (defaults: the site name, no description); anyone else gets 400. `pnpm templates:seed`
-  (`scripts/seed-templates.ts`) creates the three templates of part 1 with fixed ids
-  (`lib/platform/templates.ts`, `PART_1_TEMPLATES`) or refreshes their names and
+  (`scripts/seed-templates.ts`) creates the three templates of part 1 and part 2's online store with fixed ids
+  (`lib/platform/templates.ts`, `SEEDED_TEMPLATES`) or refreshes their names and
   descriptions; their content is built by hand (Task B).
 - **Storage.** `lib/platform/storage.ts` + `/platform-storage/...` route: files on disk per
   site/bucket, public GET, signed PUT uploads. Swap for the platform object store in
@@ -748,6 +748,49 @@ the platform seams of this section: `lib/request-utils.ts`, `components/FormHone
   `templates.spec.ts`, and the new `product-seo.spec.ts` and `form-rtl.spec.ts`; each case that sets a product page's own SEO fields has a
   site of its own, because a product page's data lives 60 seconds per item address and a publish purges only the page's own route).
 
+## What the templates need (part 2, session 25)
+What Task B's templates could not draw from the Store elements as `handoff/store/` draws it (OPEN_QUESTIONS 55 to 58 of
+`features/storefront-and-cart`, answered by the owner on 9 Nov 2026), and the online-store template in the seed. Platform
+code is `lib/platform/store-elements/`; the ycode files only name the new element (the same places as W4's).
+- **Category cards** (`categoryCards`, a leaf with no settings) and the section **Shop by category** in the Store category
+  of the Layouts tab (a heading and the element in a band). `CategoryCards.tsx` reads `GET /ycode/api/store/categories` (W2:
+  the site's chosen categories, or the top level of the tree when it chose none) and `CategoryCardsView.tsx` draws the cards
+  of `browse-home-default`: three to a row, the first product's picture (`first_product_image`) or the placeholder tile the
+  product card has, the category's name, each a link to `links.category(id)`: the products page (`/products`, the path
+  "View all" uses) with `?category={id}`, which the grid reads. A category the site sells nothing in has no card
+  (`category-cards.ts`); a store that does not sell, or one with no such category, renders nothing; a catalogue that cannot
+  be read shows the designed error with "Try again". The picture is hidden from assistive technology, so the link is read
+  by the category's name. Three render paths as W4: the canvas draws the handoff's three categories and calls nothing, the
+  HTML shell is the skeleton.
+- **The grid's count** (`showCount` in `layer.settings.store.productGrid`; "Show product count" in the grid's panel). Off
+  unless set: a grid saved before it, the library's element and the "Products grid" section (whose board draws none) are
+  unchanged; a products page turns it on. The count is of everything the grid lists (its own categories), whatever chip or
+  search is on, as `browse-products-*` writes "8 products" over every state: the `meta.total` of the first unfiltered
+  answer, or, when the page opens on a category or a search, one more request for one product. Its line is drawn empty
+  until the count is known, so nothing under it moves. Arabic is the invariant singular, "8 منتج".
+- **Featured products with nothing picked** (`featured.ts`). A product card with no product picked shows one of the
+  store's first products, so the section's four cards are full on a shop new from a template. The card's wrapper carries
+  `data-ws-unpicked`, or `data-ws-picked="{id}"`; the unpicked cards of a page take the first products in the grid's order
+  (by name), each by its place among the unpicked ones, leaving out what the picked cards show; they share one request
+  (`page_size` = unpicked + picked, 48 at most). A picked card shows its pick as before. A card with nothing to show (fewer
+  products than cards, a pick no longer on sale, a store that does not sell) now takes no room: `StoreShell`'s `collapsed`
+  sets `display: none` on the wrapper, where the empty wrapper used to keep its cell in the row. The canvas still draws
+  the one sample card.
+- **The breadcrumb.** `ProductDetailView` draws `Products › {category} › {product}` above the product
+  (`browse-product-*`): `links.products()`, then `links.category(product.category.id)` (the item's own category, which
+  the product read already carried; a product with none has two steps), then the name as the current page. The skeleton
+  and the HTML shell keep its place.
+- **The seed.** `SEEDED_TEMPLATES` is `PART_1_TEMPLATES` and `PART_2_TEMPLATES`: `online-store`, id
+  `c0a8e7d6-0000-4000-8000-000000000004`, created Arabic first, with the name and description of the app's Templates
+  board. `pnpm templates:seed` creates it empty, as it did part 1's three; its content is Task B's.
+- **Design values I had to choose** (in the pull request's Notes): the count is a setting and off by default; a category
+  with no product has no card; a category card has no hover (the handoff draws none); the breadcrumb's category is the
+  item's own, which can be a sub-category that is not one of the grid's chips, and the products page then lists it with
+  no chip pressed.
+- **Test.** `e2e/shop-home.spec.ts` and the unit tests beside the modules (`featured`, `category-cards`, `settings`,
+  `links`, `strings`, `html`).
+
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -761,7 +804,7 @@ Session 1: `e2e/sites.spec.ts` (two organizations, three sites, publish, isolati
 pages, assets and locales, 404 across organizations, 401 without a session, 404 on an
 unknown host, soft delete) and `pnpm test` pass; 49 migrations from empty.
 
-Session 4: `e2e/templates.spec.ts` (the three seeded templates listed for any
+Session 4: `e2e/templates.spec.ts` (the seeded templates listed for any
 organization, 403 without `manage_sites` r; a template with three pages, a component, a
 style, a colour, an uploaded asset and a translation created through the API in the
 templates organization; a site copied from it in another organization with the same

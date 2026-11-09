@@ -4,9 +4,9 @@
  * Product Grid Settings (part 2, session W4; PRD V1.1 "Store elements and sections")
  *
  * Settings panel for the product grid: which categories it lists (from the
- * site's store categories), the page size, and whether it shows the search
- * field, the category filter and the page's ?category=. In the builder's own
- * controls (owner decision 4: no redesign).
+ * site's store categories), the page size, and whether it shows its count,
+ * the search field, the category filter and the page's ?category=. In the
+ * builder's own controls (owner decision 4: no redesign).
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -148,6 +148,10 @@ export default function ProductGridSettings({ layer, onLayerUpdate }: Props) {
           </div>
         </div>
 
+        <div className="flex items-center justify-between gap-2">
+          <Label variant="muted" title="The count of the products the grid lists, above the search and the filter">Show product count</Label>
+          <Checkbox checked={settings.showCount} onCheckedChange={(checked) => update({ showCount: checked === true })} />
+        </div>
         <div className="flex items-center justify-between gap-2">
           <Label variant="muted">Show search</Label>
           <Checkbox checked={settings.showSearch} onCheckedChange={(checked) => update({ showSearch: checked === true })} />

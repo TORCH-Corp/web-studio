@@ -40,6 +40,9 @@ export const SAMPLE_CATEGORIES = [
   { id: 'sample-accessories', name: 'Accessories', name_ar: 'إكسسوارات' },
 ];
 
+/** The count a grid shows in the canvas: the handoff's "8 products". */
+export const SAMPLE_PRODUCT_COUNT = SAMPLES.length;
+
 /** The cart indicator's count in the canvas (the handoff's "items" state). */
 export const SAMPLE_CART_COUNT = 4;
 
@@ -121,7 +124,8 @@ export function sampleProduct(): StoreProduct {
     price: { ...SAMPLE_PRICE, from: true },
     unit: { name: 'Piece', symbol: 'pcs' },
     images: [1, 2, 3, 4].map((n) => ({ document_id: `sample-image-${n}`, url: '' })),
-    category: null,
+    // The handoff's breadcrumb: Products, Men, Cotton T-shirt.
+    category: SAMPLE_CATEGORIES[0],
     variants,
     axes_summary: [
       { id: 'sample-colour', code: 'CLR', name: 'Colour', name_ar: 'اللون', options: SAMPLE_COLOURS.map((c) => ({ id: c.id, code: c.id, label: c.label, label_ar: c.label_ar })) },

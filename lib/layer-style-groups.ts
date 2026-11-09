@@ -22,6 +22,7 @@ const LAYER_NAME_TO_GROUP: Record<string, string> = {
   cart: 'block',
   checkout: 'block',
   orderConfirmation: 'block',
+  categoryCards: 'block',
   filter: 'block',
   localeSelector: 'block',
 

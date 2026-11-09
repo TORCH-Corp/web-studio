@@ -64,6 +64,11 @@ export const ArrowBackIcon = () => (
   <Svg className="ws-icon-sm ws-flip"><path d="M19 12H5" /><path d="M11 6l-6 6 6 6" /></Svg>
 );
 
+/** The breadcrumb's separator, the handoff's chevron; it turns round on a right to left page. */
+export const ChevronIcon = () => (
+  <Svg className="ws-icon-sm ws-flip"><path d="M9 6l6 6-6 6" /></Svg>
+);
+
 export const ChevronDownIcon = ({ className = '' }: { className?: string }) => (
   <Svg className={className}><path d="M6 9l6 6 6-6" /></Svg>
 );

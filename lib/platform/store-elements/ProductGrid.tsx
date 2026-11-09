@@ -66,6 +66,9 @@ export default function ProductGrid({ settings, lang, links }: Props) {
   const [typed, setTyped] = useState('');
   const [data, setData] = useState<Data>({ kind: 'loading' });
   const [chipSource, setChipSource] = useState<Array<{ id: string; name: string; name_ar: string | null }>>([]);
+  // What the grid lists in all, for its count: the chip and the search narrow the cards, not the count (the handoff
+  // writes "8 products" over an empty category and over a search with no results).
+  const [listed, setListed] = useState<number | null>(null);
   const [attempt, setAttempt] = useState(0);
   const rest = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The search timer fires later than the render that started it, so it reads the filters as they are then.
@@ -111,6 +114,7 @@ export default function ProductGrid({ settings, lang, links }: Props) {
     fetchProducts({ page: 1, pageSize, category: filters.category, categories, q: filters.q }, controller.signal)
       .then((result) => {
         if (result.kind === 'not_selling') return setData({ kind: 'hidden' });
+        if (!filters.category && !filters.q) setListed(result.value.meta.total);
         setData({ kind: 'ready', cards: result.value.data.map(cardOf), total: result.value.meta.total, page: 1, loadingMore: false, moreFailed: false });
       })
       .catch((error: unknown) => {
@@ -122,6 +126,23 @@ export default function ProductGrid({ settings, lang, links }: Props) {
     // `categories` is read through its key: a new array with the same ids is not a new request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, pageSize, categoriesKey, attempt]);
+
+  // A page opened on a category or a search has no unfiltered answer to count from: the count is asked for apart, once.
+  const narrowed = filters !== null && (filters.category !== null || filters.q !== '');
+  useEffect(() => {
+    if (!settings.showCount || !narrowed || listed !== null) return;
+    const controller = new AbortController();
+    fetchProducts({ page: 1, pageSize: 1, categories }, controller.signal)
+      .then((result) => {
+        if (result.kind === 'ok') setListed(result.value.meta.total);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) console.error('[store] the count of the products could not be read', error);
+      });
+    return () => controller.abort();
+    // `categories` is read through its key, as above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.showCount, narrowed, listed, categoriesKey, attempt]);
 
   const apply = useCallback((next: Filters) => {
     clearTimeout(rest.current);
@@ -189,6 +210,8 @@ export default function ProductGrid({ settings, lang, links }: Props) {
       phase={phase}
       showSearch={settings.showSearch}
       showCategoryFilter={settings.showCategoryFilter}
+      showCount={settings.showCount}
+      count={listed}
       chips={chips}
       selectedCategory={filters?.category ?? null}
       typed={typed}

@@ -2,8 +2,9 @@
  * Store Elements Templates (part 2, session W4; PRD V1.1 "Store elements and sections")
  *
  * The Store category of the element library: the product grid, the product
- * card, the product page, the cart indicator, and the cart, checkout and
- * order confirmation (session W6). Each is a leaf the builder styles like any
+ * card, the product page, the cart indicator, the cart, checkout and order
+ * confirmation (session W6), and the category cards of the shop home (session
+ * 25). Each is a leaf the builder styles like any
  * other layer (its wrapper); what it draws inside is the store pages' own
  * design (lib/platform/store-elements).
  *
@@ -125,6 +126,24 @@ export const storeTemplates: Record<string, BlockTemplate> = {
     name: 'Order confirmation',
     template: {
       name: 'orderConfirmation',
+      classes: ['w-full'],
+      settings: {
+        tag: 'div',
+      },
+      design: {
+        sizing: {
+          isActive: true,
+          width: '100%',
+        },
+      },
+    },
+  },
+
+  categoryCards: {
+    icon: 'folder',
+    name: 'Category cards',
+    template: {
+      name: 'categoryCards',
       classes: ['w-full'],
       settings: {
         tag: 'div',

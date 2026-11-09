@@ -26,6 +26,9 @@ interface GridViewProps {
   phase: GridPhase;
   showSearch: boolean;
   showCategoryFilter: boolean;
+  /** Whether the grid draws its count, and the count: of everything it lists, whatever chip or search is on; null until it is known. */
+  showCount: boolean;
+  count: number | null;
   /** The category chips after "All"; none hides the row. */
   chips: ChipData[];
   selectedCategory: string | null;
@@ -58,9 +61,10 @@ function Empty({ icon, title, text, action }: { icon: React.ReactNode; title: st
 }
 
 /**
- * The product grid as handoff/store draws it (browse-products-*, section-products-*): the search field and
- * category chips above the cards, the skeleton while loading, the empty-category and no-results states, and,
- * built from the same patterns (decision 16g), the catalogue-failure state, "Load more" and an empty store.
+ * The product grid as handoff/store draws it (browse-products-*, section-products-*): the count when the grid
+ * shows one (the line under the products page's title), the search field and category chips above the cards, the
+ * skeleton while loading, the empty-category and no-results states, and, built from the same patterns (decision
+ * 16g), the catalogue-failure state, "Load more" and an empty store.
  */
 export function ProductGridView(props: GridViewProps) {
   const { lang, links, phase, chips, selectedCategory, typed, query } = props;
@@ -138,6 +142,12 @@ export function ProductGridView(props: GridViewProps) {
 
   return (
     <div className="ws-grid-root">
+      {props.showCount && (
+        // The line is there before the count is: nothing under it moves when the count arrives.
+        <p className="ws-muted ws-count" aria-hidden={props.count === null || undefined}>
+          {props.count === null ? '\u00a0' : t.productCount(props.count)}
+        </p>
+      )}
       {(props.showSearch || hasChips) && (
         <div className="ws-toolbar">
           {props.showSearch && (

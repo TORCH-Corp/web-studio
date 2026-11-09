@@ -25,11 +25,27 @@ test('an Arabic page gets an Arabic, right to left shell', () => {
   assert.ok(html.startsWith('<div class="ws-store"'), 'a layer with no class still gets the store class');
 });
 
-test('a lone card is a skeleton card when a product is chosen and nothing when none is', () => {
-  assert.equal(storeElementHtml({ layer: CARD(null), attrs: [] }), '');
-  assert.equal(storeElementHtml({ layer: { name: 'productCard' }, attrs: [] }), '');
-  const html = storeElementHtml({ layer: CARD({ id: ID, name: 'Lamp' }), attrs: ['class="x"'] });
-  assert.equal(html.split('class="ws-sk ws-sk-media"').length - 1, 1);
+test('a lone card is a skeleton card, with a product chosen or with none: an unpicked card shows one of the store\'s first products (OPEN_QUESTIONS 58)', () => {
+  for (const layer of [CARD({ id: ID, name: 'Lamp' }), CARD(null), { name: 'productCard' }]) {
+    const html = storeElementHtml({ layer, attrs: ['class="x"'] });
+    assert.ok(html.includes('data-ws-store="productCard"'));
+    assert.equal(html.split('class="ws-sk ws-sk-media"').length - 1, 1);
+  }
+});
+
+test('a grid that shows its count keeps the count\'s line, empty, above the skeleton; one that does not has no such line (OPEN_QUESTIONS 57)', () => {
+  const counted = storeElementHtml({ layer: { name: 'productGrid', settings: { store: { productGrid: { showCount: true } } } }, attrs: [] });
+  assert.ok(counted.includes('<div class="ws-grid-root"><p class="ws-muted ws-count" aria-hidden="true">&nbsp;</p>'));
+  assert.ok(!storeElementHtml({ layer: GRID, attrs: [] }).includes('class="ws-muted ws-count"'));
+});
+
+test('the category cards are a skeleton of three cards, in the page\'s language (OPEN_QUESTIONS 55)', () => {
+  const html = storeElementHtml({ layer: { name: 'categoryCards' }, attrs: ['class="w-full"'] });
+  assert.ok(html.includes('data-ws-store="categoryCards"') && html.includes('class="ws-cats"') && html.includes('aria-busy="true"'));
+  assert.ok(html.includes('role="status">Loading the categories…'));
+  assert.equal(html.split('class="ws-sk ws-sk-media ws-ph-cat"').length - 1, 3);
+  const arabic = storeElementHtml({ layer: { name: 'categoryCards' }, attrs: [], locale: { code: 'ar', is_default: true } });
+  assert.ok(arabic.includes('dir="rtl"') && arabic.includes('جارٍ تحميل الأقسام…'));
 });
 
 test('the cart indicator is the empty cart; the shell knows no store pages, so it links nowhere', () => {
@@ -40,6 +56,8 @@ test('the cart indicator is the empty cart; the shell knows no store pages, so i
 test('the product page element is a skeleton of the page: gallery, name, price, options and button, in the page\'s language', () => {
   const html = storeElementHtml({ layer: { name: 'productDetail' }, attrs: ['class="w-full"'] });
   assert.ok(html.includes('data-ws-store="productDetail"') && html.includes('class="ws-pd"') && html.includes('aria-busy="true"'));
+  // The breadcrumb's place is kept above the product, so nothing moves when the product arrives.
+  assert.ok(html.includes('<div class="ws-crumbs" aria-hidden="true"><div class="ws-sk ws-sk-line ws-sk-crumbs"></div></div><div class="ws-pd"'));
   assert.ok(html.includes('role="status">Loading the product…'));
   assert.equal(html.split('class="ws-sk ws-sk-thumb"').length - 1, 4);
   assert.ok(html.includes('class="ws-sk ws-sk-chip"') && html.includes('class="ws-sk ws-sk-btn"'));
