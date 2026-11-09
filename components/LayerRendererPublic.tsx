@@ -37,6 +37,7 @@ import type { HiddenLayerInfo } from '@/lib/animation-utils';
 import { transformLayerIdsForInstance } from '@/lib/resolve-components';
 import { FormHoneypotField } from '@/components/FormHoneypotField';
 import { PublishedStoreElement } from '@/lib/platform/store-elements/StoreElement';
+import { pageLocaleOf } from '@/lib/platform/store-elements/links';
 import { isStoreElement } from '@/lib/platform/store-elements/settings';
 import type { StorePageContext } from '@/lib/platform/store-elements/pages';
 
@@ -1469,7 +1470,7 @@ const LayerItem: React.FC<{
           layer={layer}
           elementProps={elementProps}
           colorVariables={serverSettings?.color_variables as Array<{ id: string; name: string }> | undefined}
-          locale={currentLocale}
+          locale={pageLocaleOf(currentLocale, availableLocales)}
           store={serverSettings?.store as StorePageContext | undefined}
         />
       );

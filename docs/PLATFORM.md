@@ -787,6 +787,13 @@ code is `lib/platform/store-elements/`; the ycode files only name the new elemen
   with no product has no card; a category card has no hover (the handoff draws none); the breadcrumb's category is the
   item's own, which can be a sub-category that is not one of the grid's chips, and the products page then lists it with
   no chip pressed.
+- **Review fix, found building the templates (9 Nov 2026): the default language.** The renderer names a page's locale
+  only under a language's prefix, so on a page in the site's default language the store elements had none and read
+  English, left to right: an Arabic-first site showed English store elements at its root (the e2e sites were all
+  English first; session 22 had met the same gap for the product page's meta tags). `LayerRendererPublic` now hands the
+  elements `pageLocaleOf(currentLocale, availableLocales)` (`links.ts`): the page's own locale, else the site's default
+  one. Links are unchanged: the default locale has no prefix. Not changed: the HTML string path (`layerToHtml`, the
+  static export) still has only the page's own locale, so its loading shell reads English on a default-language page.
 - **Test.** `e2e/shop-home.spec.ts` and the unit tests beside the modules (`featured`, `category-cards`, `settings`,
   `links`, `strings`, `html`).
 
