@@ -12,13 +12,13 @@ import { STORE_STRINGS, type StoreLang } from '@/lib/platform/store-elements/str
  * The product's picture, or the placeholder tile (the handoff's grey square with an icon and a label). The
  * product page's main picture is `eager` (it is what the page is for); cards and thumbnails load as they scroll in.
  */
-export function CardMedia({ url, label, eager = false }: { url: string | null; label: string; eager?: boolean }) {
+export function CardMedia({ url, label, eager = false, className }: { url: string | null; label: string; eager?: boolean; className?: string }) {
   // An image the site cannot serve (a refused type, a document gone) leaves the placeholder tile, not a broken picture.
   const [failed, setFailed] = useState(false);
   const showImage = !!url && !failed;
   return (
     <div
-      className={clsx('ws-ph', showImage && 'ws-ph-img')}
+      className={clsx('ws-ph', showImage && 'ws-ph-img', className)}
       role="img"
       aria-label={label}
     >

@@ -4,7 +4,8 @@
  * store elements as handoff/store draws them (section-products-*,
  * section-featured-default; browse-product-* for the product page, session W5;
  * checkout-cart-*, checkout-form-* and checkout-confirmation-default for the
- * cart, checkout and confirmation pages, session W6).
+ * cart, checkout and confirmation pages, session W6; browse-home-default for
+ * "Shop by category", session 25).
  *
  * They are starting points on the design system's own values (Dark text,
  * Primary for the link, the spacing and the type of store/DESIGN_SYSTEM.md);
@@ -157,6 +158,22 @@ export const storeLayoutTemplates: Record<string, LayoutTemplate> = {
         }),
       ],
       'Checkout page',
+    ),
+  },
+
+  'Shop by category': {
+    category: 'Store',
+    previewImage: '/ycode/layouts/previews/store-shop-by-category.webp',
+    // The shop home's categories, each a card that opens the products page listing it (the page with the slug
+    // `products`, as "View all" does).
+    template: band(
+      [
+        heading('Shop by category'),
+        layer('categoryCards', 'w-[100%]', {
+          settings: { tag: 'div' },
+        }),
+      ],
+      'Shop by category',
     ),
   },
 

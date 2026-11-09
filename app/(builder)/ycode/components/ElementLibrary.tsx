@@ -162,7 +162,7 @@ const elementCategories: Record<string, string[]> = {
   Form: ['form', 'filter', 'input', 'textarea', 'select', 'checkbox', 'radio', 'label'],
   Table: ['table', 'thead', 'tbody', 'tr', 'th', 'td'],
   Utilities: ['map', 'slider', 'lightbox', 'localeSelector', 'htmlEmbed'],
-  Store: ['productGrid', 'productCard', 'productDetail', 'cartIndicator', 'cart', 'checkout', 'orderConfirmation'],
+  Store: ['productGrid', 'productCard', 'productDetail', 'cartIndicator', 'cart', 'checkout', 'orderConfirmation', 'categoryCards'],
 };
 
 /**

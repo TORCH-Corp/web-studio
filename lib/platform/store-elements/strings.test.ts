@@ -51,6 +51,22 @@ test('Arabic counts use the invariant singular after the count, for every count 
   }
 });
 
+test('the grid\'s count is "8 products" in English, one product in the singular, and the invariant singular in Arabic for every count (OPEN_QUESTIONS 57)', () => {
+  assert.equal(STORE_STRINGS.en.productCount(8), '8 products');
+  assert.equal(STORE_STRINGS.en.productCount(1), '1 product');
+  assert.equal(STORE_STRINGS.en.productCount(0), '0 products');
+  // The handoff draws the plural "8 منتجات", right for 3 to 10 only.
+  for (const count of [0, 1, 2, 3, 8, 10, 11, 48, 120]) {
+    assert.equal(STORE_STRINGS.ar.productCount(count), `${count} منتج`);
+    assert.doesNotMatch(STORE_STRINGS.ar.productCount(count), /منتجات/);
+  }
+});
+
+test('the breadcrumb and the category cards speak in the handoff\'s words in both languages', () => {
+  assert.deepEqual([STORE_STRINGS.en.breadcrumb, STORE_STRINGS.en.products, STORE_STRINGS.en.categoryImage], ['Breadcrumb', 'Products', 'Category image']);
+  assert.deepEqual([STORE_STRINGS.ar.breadcrumb, STORE_STRINGS.ar.products, STORE_STRINGS.ar.categoryImage], ['مسار التصفح', 'المنتجات', 'صورة القسم']);
+});
+
 test('the product page speaks in the handoff\'s words in both languages', () => {
   const en = STORE_STRINGS.en;
   const ar = STORE_STRINGS.ar;

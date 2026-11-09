@@ -43,6 +43,8 @@ export interface StoreLinks {
   /** The confirmation page of a checkout (`…?order={checkout id}`); null when no page has the confirmation role. */
   confirmation(checkoutId: string): string | null;
   products(): string;
+  /** The products page listing one category (`…?category={id}`, which the product grid reads): a category card, the breadcrumb's category. */
+  category(categoryId: string): string;
 }
 
 export function createStoreLinks(locale: LinkLocale | null | undefined, paths: StorePagePaths): StoreLinks {
@@ -55,5 +57,6 @@ export function createStoreLinks(locale: LinkLocale | null | undefined, paths: S
       return path === null ? null : `${path}?order=${encodeURIComponent(checkoutId)}`;
     },
     products: () => productsHref(locale),
+    category: (categoryId) => `${productsHref(locale)}?category=${encodeURIComponent(categoryId)}`,
   };
 }

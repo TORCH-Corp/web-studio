@@ -16,7 +16,7 @@ import { CONTACT_CENTER_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_APP_ID, 
  *
  * Needs DATABASE_URL_TEST: a PostgreSQL 16 database of its own whose name
  * contains "test"; its public schema is dropped and recreated on every run.
- * `pnpm templates:seed` then creates TORCH's three templates (session 4).
+ * `pnpm templates:seed` then creates TORCH's templates (session 4; part 2 adds the online store).
  *
  * Session 2: a stand-in for auth-service (e2e/auth-stub.ts) runs beside the
  * app, and the app verifies access tokens with a test key pair

@@ -9,7 +9,8 @@
  * both languages (DESIGN_SYSTEM.md); the Arabic count is the invariant
  * singular after the number ("4 قطعة"), as context/rules/rtl-and-i18n.md asks
  * and the owner decided (OPEN_QUESTIONS 51): the handoff draws the plural
- * "4 قطع", which reads right only for 3 to 10.
+ * "4 قطع", which reads right only for 3 to 10. The grid's count follows the
+ * same rule ("8 منتج", OPEN_QUESTIONS 57).
  *
  * Kept free of Next and React imports so it runs under `node --test`.
  */
@@ -157,6 +158,16 @@ export interface StoreStrings {
   orderNotFoundText: string;
   orderErrorTitle: string;
   orderErrorText: string;
+
+  // The grid's count, the breadcrumb and the category cards (session 25, F2)
+  /** The count of the products a grid lists, under the page's title: "8 products". */
+  productCount: (count: number) => string;
+  /** The breadcrumb's name for assistive technology, and its first step, the products page. */
+  breadcrumb: string;
+  products: string;
+  /** The tile of a category none of whose products has a picture. */
+  categoryImage: string;
+  loadingCategories: string;
 }
 
 export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
@@ -277,6 +288,12 @@ export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
     orderNotFoundText: 'The link may be incomplete, or the order may belong to another shop. Check the order code you were given, or go back to the shop.',
     orderErrorTitle: 'We couldn’t load your order',
     orderErrorText: 'The order can’t be read right now. Try again in a moment.',
+
+    productCount: (count) => `${count} ${count === 1 ? 'product' : 'products'}`,
+    breadcrumb: 'Breadcrumb',
+    products: 'Products',
+    categoryImage: 'Category image',
+    loadingCategories: 'Loading the categories…',
   },
   ar: {
     searchLabel: 'ابحث عن منتج بالاسم',
@@ -395,6 +412,12 @@ export const STORE_STRINGS: Record<StoreLang, StoreStrings> = {
     orderNotFoundText: 'ربما الرابط غير مكتمل، أو أن الطلب يخص متجرًا آخر. تأكد من رمز الطلب الذي وصلك، أو عد إلى المتجر.',
     orderErrorTitle: 'تعذّر تحميل طلبك الآن',
     orderErrorText: 'لا يمكن قراءة الطلب حاليًا. حاول مرة أخرى بعد قليل.',
+
+    productCount: (count) => `${count} منتج`,
+    breadcrumb: 'مسار التصفح',
+    products: 'المنتجات',
+    categoryImage: 'صورة القسم',
+    loadingCategories: 'جارٍ تحميل الأقسام…',
   },
 };
 

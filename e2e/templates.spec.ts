@@ -101,9 +101,9 @@ test.afterAll(async () => {
   await orgA?.dispose();
 });
 
-test('Templates lists TORCH\'s three templates for any organization, and needs manage_sites r', async () => {
+test('Templates lists TORCH\'s templates for any organization, and needs manage_sites r', async () => {
   const list = await json<TemplateRow[]>(orgA.get('/ycode/api/platform/templates'));
-  expect(list.map((t) => t.slug)).toEqual(['company-site', 'landing-page', 'blank']);
+  expect(list.map((t) => t.slug)).toEqual(['company-site', 'landing-page', 'blank', 'online-store']);
   for (const t of list) {
     expect(t.name.ar).not.toBe('');
     expect(t.name.en).not.toBe('');
@@ -112,11 +112,18 @@ test('Templates lists TORCH\'s three templates for any organization, and needs m
   }
   expect(list[2].id).toBe(BLANK_TEMPLATE_ID);
   expect(list[0].name).toEqual({ ar: 'موقع شركة', en: 'Company site' });
+  // Part 2's template, with its fixed id, and the Templates board's name and description in both languages.
+  expect(list[3]).toMatchObject({
+    id: 'c0a8e7d6-0000-4000-8000-000000000004',
+    default_locale: 'ar',
+    name: { ar: 'متجر إلكتروني', en: 'Online store' },
+    description: { ar: 'موقع شركة مع صفحات المتجر: المنتجات والسلة وإتمام الطلب', en: 'A company site with the store pages: products, cart and checkout' },
+  });
   // The meta line of the picker's cards (OPEN_QUESTIONS 22 and 34): a seeded template is a blank site, one homepage, the error pages not counted;
-  // the seed makes English the default language, so it comes first.
+  // the seed makes English the default language of part 1's three and Arabic the online store's, and the default comes first.
   for (const t of list) {
     expect(t.page_count).toBe(1);
-    expect(t.languages).toEqual(['en', 'ar']);
+    expect(t.languages).toEqual(t.slug === 'online-store' ? ['ar', 'en'] : ['en', 'ar']);
   }
 
   const contentOnly = await request.newContext({ baseURL });
@@ -163,8 +170,8 @@ test('the templates organization creates a template; another organization cannot
   }
 
   const list = await json<TemplateRow[]>(orgA.get('/ycode/api/platform/templates'));
-  expect(list.map((t) => t.slug)).toEqual(['company-site', 'landing-page', 'blank', `tpl-${RUN}`]);
-  expect(list[3]).toMatchObject({ id: template.id, name: { ar: 'قالب متجر', en: 'Shop template' }, description: { ar: '', en: 'For shops' } });
+  expect(list.map((t) => t.slug)).toEqual(['company-site', 'landing-page', 'blank', 'online-store', `tpl-${RUN}`]);
+  expect(list[4]).toMatchObject({ id: template.id, name: { ar: 'قالب متجر', en: 'Shop template' }, description: { ar: '', en: 'For shops' } });
 
   // Nor through the settings API (session 7): renaming the template moves no address, and a custom host is refused.
   const renamed = await templates.patch(`/ycode/api/platform/sites/${template.id}/settings`, { data: { slug: `tpl2-${RUN}` } });

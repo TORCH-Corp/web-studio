@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useLayoutEffect } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { nameFor } from '@/lib/platform/store-elements/card-data';
 import Cart from '@/lib/platform/store-elements/Cart';
+import CategoryCards from '@/lib/platform/store-elements/CategoryCards';
+import { CategoryCardsView } from '@/lib/platform/store-elements/CategoryCardsView';
 import { CartView } from '@/lib/platform/store-elements/CartView';
 import { connectBrowserCart, MAX_LINE_QUANTITY } from '@/lib/platform/store-elements/cart-store';
 import Checkout from '@/lib/platform/store-elements/Checkout';
@@ -10,6 +12,7 @@ import { CheckoutView } from '@/lib/platform/store-elements/CheckoutView';
 import { ConfirmationView } from '@/lib/platform/store-elements/ConfirmationView';
 import { EMPTY_FORM } from '@/lib/platform/store-elements/checkout-form';
 import { storeColourStyle } from '@/lib/platform/store-elements/colours';
+import { PICKED_ATTRIBUTE, UNPICKED_ATTRIBUTE } from '@/lib/platform/store-elements/featured';
 import CartIndicator, { CartIndicatorView } from '@/lib/platform/store-elements/CartIndicator';
 import { ProductCardView } from '@/lib/platform/store-elements/CardView';
 import { ProductGridView } from '@/lib/platform/store-elements/GridView';
@@ -23,7 +26,7 @@ import ProductCardElement from '@/lib/platform/store-elements/ProductCardElement
 import ProductDetail from '@/lib/platform/store-elements/ProductDetail';
 import { ProductDetailView } from '@/lib/platform/store-elements/ProductDetailView';
 import ProductGrid from '@/lib/platform/store-elements/ProductGrid';
-import { SAMPLE_CART_COUNT, SAMPLE_CART_LINES, SAMPLE_CATEGORIES, SAMPLE_SELECTION, SAMPLE_TERMS, sampleCard, sampleCards, sampleOrder, sampleProduct } from '@/lib/platform/store-elements/sample-data';
+import { SAMPLE_CART_COUNT, SAMPLE_CART_LINES, SAMPLE_CATEGORIES, SAMPLE_PRODUCT_COUNT, SAMPLE_SELECTION, SAMPLE_TERMS, sampleCard, sampleCards, sampleOrder, sampleProduct } from '@/lib/platform/store-elements/sample-data';
 import { readProductCardSettings, readProductDetailSettings, readProductGridSettings, type StoreElementName } from '@/lib/platform/store-elements/settings';
 import { StoreShell } from '@/lib/platform/store-elements/StoreShell';
 import { storeLangOf } from '@/lib/platform/store-elements/strings';
@@ -66,19 +69,23 @@ export function PublishedStoreElement({ layer, elementProps, colorVariables, loc
   useLayoutEffect(() => {
     if (siteId) connectBrowserCart(siteId);
   }, [siteId]);
+  // A product card with nothing to show takes no room in its row.
+  const [collapsed, setCollapsed] = useState(false);
 
   let inside: React.ReactNode = null;
+  let marks: Record<string, string> | undefined;
   if (name === 'productGrid') inside = <ProductGrid
     settings={readProductGridSettings(layer)} lang={lang}
     links={links}
                                        />;
   else if (name === 'productCard') {
     const { product } = readProductCardSettings(layer);
-    // A card with nothing chosen has nothing to show on a published page.
-    if (!product) return null;
+    // The page's cards read these: an unpicked card shows one of the store's first products, by its place among
+    // the unpicked ones, and leaves out what the picked ones show (featured.ts).
+    marks = product ? { [PICKED_ATTRIBUTE]: product.id } : { [UNPICKED_ATTRIBUTE]: '' };
     inside = <ProductCardElement
-      productId={product.id} lang={lang}
-      links={links}
+      productId={product?.id ?? null} lang={lang}
+      links={links} onEmpty={setCollapsed}
              />;
   } else if (name === 'productDetail') {
     const chosen = readProductDetailSettings(layer).product;
@@ -93,10 +100,12 @@ export function PublishedStoreElement({ layer, elementProps, colorVariables, loc
   else if (name === 'cart') inside = <Cart lang={lang} links={links} />;
   else if (name === 'checkout') inside = <Checkout lang={lang} links={links} />;
   else if (name === 'orderConfirmation') inside = <OrderConfirmation lang={lang} links={links} />;
+  else if (name === 'categoryCards') inside = <CategoryCards lang={lang} links={links} />;
   return (
     <StoreShell
-      {...elementProps} element={name}
-      lang={lang} colours={storeColourStyle(colorVariables)}
+      {...elementProps} {...marks}
+      element={name} lang={lang}
+      colours={storeColourStyle(colorVariables)} collapsed={collapsed}
     >
       {inside}
     </StoreShell>
@@ -122,6 +131,8 @@ export function CanvasStoreElement({ layer, elementProps, colorVariables, locale
         phase={{ kind: 'ready', cards: sampleCards(settings.pageSize), hasMore: false, loadingMore: false, moreFailed: false }}
         showSearch={settings.showSearch}
         showCategoryFilter={settings.showCategoryFilter}
+        showCount={settings.showCount}
+        count={SAMPLE_PRODUCT_COUNT}
         chips={SAMPLE_CATEGORIES.map((category) => ({ id: category.id, name: nameFor(category, lang) }))}
         selectedCategory={null}
         typed=""
@@ -202,6 +213,14 @@ export function CanvasStoreElement({ layer, elementProps, colorVariables, locale
         lang={lang} links={links}
         phase={{ kind: 'ready', order: sampleOrder() }}
         onRetry={noop}
+      />
+    );
+  } else if (name === 'categoryCards') {
+    // The handoff's three categories, with no picture to fetch: the placeholder tiles.
+    inside = (
+      <CategoryCardsView
+        categories={SAMPLE_CATEGORIES.map((category) => ({ ...category, imageUrl: null }))} lang={lang}
+        links={links}
       />
     );
   }

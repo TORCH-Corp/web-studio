@@ -14,7 +14,7 @@
 import { DEFAULT_PAGE_SIZE, MAX_CATEGORIES, MAX_PAGE_SIZE, isUuid } from '@/lib/platform/store-query';
 
 /** Layer names of the elements this module owns (keys of lib/templates/store.ts). */
-export const STORE_ELEMENT_NAMES = ['productGrid', 'productCard', 'productDetail', 'cartIndicator', 'cart', 'checkout', 'orderConfirmation'] as const;
+export const STORE_ELEMENT_NAMES = ['productGrid', 'productCard', 'productDetail', 'cartIndicator', 'cart', 'checkout', 'orderConfirmation', 'categoryCards'] as const;
 export type StoreElementName = (typeof STORE_ELEMENT_NAMES)[number];
 
 export function isStoreElement(name: string | undefined | null): name is StoreElementName {
@@ -30,6 +30,8 @@ export interface ProductGridSettings {
   showCategoryFilter: boolean;
   /** The page's ?category= selects that category. */
   honourUrlCategory: boolean;
+  /** The count of the products the grid lists ("8 products"), above the search and the chips. */
+  showCount: boolean;
 }
 
 /** The product a lone card shows, with the names the builder saw when it was picked (for the canvas label only). */
@@ -39,6 +41,12 @@ export interface ChosenProduct {
   name_ar: string | null;
 }
 
+/**
+ * A lone product card. With no product picked it shows one of the store's
+ * first products, by its place among the page's unpicked cards
+ * (lib/platform/store-elements/featured.ts): "Featured products" is four of
+ * them, so a new shop's row is full before its owner picks anything.
+ */
 export interface ProductCardSettings {
   product: ChosenProduct | null;
 }
@@ -65,6 +73,8 @@ export const PRODUCT_GRID_DEFAULTS: ProductGridSettings = {
   showSearch: true,
   showCategoryFilter: true,
   honourUrlCategory: true,
+  // Off unless asked for: the section board (section-products-*) draws no count, the products page (browse-products-*) does.
+  showCount: false,
 };
 
 type WithStore = { settings?: { store?: StoreElementSettings } } | null | undefined;
@@ -94,6 +104,7 @@ export function readProductGridSettings(layer: WithStore): ProductGridSettings {
     showSearch: flag(stored?.showSearch, PRODUCT_GRID_DEFAULTS.showSearch),
     showCategoryFilter: flag(stored?.showCategoryFilter, PRODUCT_GRID_DEFAULTS.showCategoryFilter),
     honourUrlCategory: flag(stored?.honourUrlCategory, PRODUCT_GRID_DEFAULTS.honourUrlCategory),
+    showCount: flag(stored?.showCount, PRODUCT_GRID_DEFAULTS.showCount),
   };
 }
 

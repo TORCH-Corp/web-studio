@@ -63,7 +63,7 @@ test('the sites domain answers: an unused address is 404 with no site in it', as
   expect(unused.html).toContain('Page Not Found');
 });
 
-test('an access token from auth-service signs in, and TORCH\'s three templates are listed', async () => {
+test('an access token from auth-service signs in, and TORCH\'s templates are listed', async () => {
   const token = await accessToken();
   api = await signInWithToken(baseURL, token);
 
@@ -83,7 +83,7 @@ test('an access token from auth-service signs in, and TORCH\'s three templates a
   const response = await api.get('/ycode/api/platform/templates');
   expect(response.status(), await response.text()).toBe(200);
   const slugs = ((await response.json()).data as Array<{ slug: string }>).map((t) => t.slug);
-  expect(slugs).toEqual(['company-site', 'landing-page', 'blank']);
+  expect(slugs).toEqual(['company-site', 'landing-page', 'blank', 'online-store']);
 });
 
 test('a site is created, published and served on its own address in both languages', async () => {

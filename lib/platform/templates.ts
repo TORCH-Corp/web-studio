@@ -9,10 +9,11 @@
  * copies it (lib/platform/template-copy.ts); the blank template is
  * provisioning, not a copy.
  *
- * Part 1 has three templates, created by `pnpm templates:seed`
- * (scripts/seed-templates.ts) with fixed ids, so every environment and the
- * shell know each by the same id. Their content is built by hand (Task B);
- * the seed only gives them their names and descriptions.
+ * Part 1 has three templates and part 2 adds the online store, created by
+ * `pnpm templates:seed` (scripts/seed-templates.ts) with fixed ids, so every
+ * environment and the shell know each by the same id. Their content is built
+ * by hand (Task B of each part); the seed only gives them their names and
+ * descriptions.
  */
 
 import { getKnexClient } from '@/lib/knex-client';
@@ -118,12 +119,14 @@ export function isBlankTemplate(template: Site): boolean {
   return template.slug === BLANK_TEMPLATE_SLUG;
 }
 
-/** One of part 1's templates as the seed creates it. */
+/** One of TORCH's templates as the seed creates it. */
 export interface TemplateSeed {
   id: string;
   slug: string;
   /** The site's name in the builder. */
   name: string;
+  /** The language the empty template is created in; English when not given, as part 1's three were. */
+  default_language?: 'ar' | 'en';
   meta: TemplateMeta;
 }
 
@@ -166,3 +169,27 @@ export const PART_1_TEMPLATES: readonly TemplateSeed[] = [
     },
   },
 ];
+
+/**
+ * The template part 2 adds (PRD V1.1 "Store pages and templates"): the online
+ * store, Arabic first. Its name and description are the Templates board's
+ * (handoff/app/*\/templates-list-default.html).
+ */
+export const PART_2_TEMPLATES: readonly TemplateSeed[] = [
+  {
+    id: 'c0a8e7d6-0000-4000-8000-000000000004',
+    slug: 'online-store',
+    name: 'Online store',
+    default_language: 'ar',
+    meta: {
+      name: { ar: 'متجر إلكتروني', en: 'Online store' },
+      description: {
+        ar: 'موقع شركة مع صفحات المتجر: المنتجات والسلة وإتمام الطلب',
+        en: 'A company site with the store pages: products, cart and checkout',
+      },
+    },
+  },
+];
+
+/** Every template the seed creates, in the order the Templates list shows them (oldest first). */
+export const SEEDED_TEMPLATES: readonly TemplateSeed[] = [...PART_1_TEMPLATES, ...PART_2_TEMPLATES];

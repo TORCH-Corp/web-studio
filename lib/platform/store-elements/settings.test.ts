@@ -9,7 +9,7 @@ const grid = (productGrid: unknown) => ({ settings: { store: { productGrid } } }
 const card = (productCard: unknown) => ({ settings: { store: { productCard } } }) as never;
 const detail = (productDetail: unknown) => ({ settings: { store: { productDetail } } }) as never;
 
-test('a grid with no settings is the defaults: twelve a page, search and category filter on, the URL category honoured', () => {
+test('a grid with no settings is the defaults: twelve a page, search and category filter on, the URL category honoured, no count', () => {
   assert.deepEqual(readProductGridSettings(undefined), PRODUCT_GRID_DEFAULTS);
   assert.deepEqual(readProductGridSettings({ settings: {} }), {
     categories: [],
@@ -17,16 +17,24 @@ test('a grid with no settings is the defaults: twelve a page, search and categor
     showSearch: true,
     showCategoryFilter: true,
     honourUrlCategory: true,
+    showCount: false,
   });
 });
 
+test('a grid saved before the count existed draws none, and one that asks for it does (OPEN_QUESTIONS 57)', () => {
+  assert.equal(readProductGridSettings(grid({ pageSize: 24, showSearch: true })).showCount, false);
+  assert.equal(readProductGridSettings(grid({ showCount: true })).showCount, true);
+  assert.equal(readProductGridSettings(grid({ showCount: 'yes' })).showCount, false, 'a flag that is not a boolean is the default');
+});
+
 test('a grid keeps what the builder set and turns off what was turned off', () => {
-  assert.deepEqual(readProductGridSettings(grid({ categories: [A, B.toUpperCase(), A], pageSize: 24, showSearch: false, showCategoryFilter: false, honourUrlCategory: false })), {
+  assert.deepEqual(readProductGridSettings(grid({ categories: [A, B.toUpperCase(), A], pageSize: 24, showSearch: false, showCategoryFilter: false, honourUrlCategory: false, showCount: true })), {
     categories: [A, B],
     pageSize: 24,
     showSearch: false,
     showCategoryFilter: false,
     honourUrlCategory: false,
+    showCount: true,
   });
 });
 
@@ -80,4 +88,9 @@ test('the four store elements are known by name, nothing else is', () => {
 test('the cart, checkout and order confirmation are store elements, so every render path draws them', () => {
   for (const name of ['cart', 'checkout', 'orderConfirmation']) assert.equal(isStoreElement(name), true, name);
   assert.equal(isStoreElement('form'), false);
+});
+
+test('the category cards are a store element, so every render path draws them (OPEN_QUESTIONS 55)', () => {
+  assert.equal(isStoreElement('categoryCards'), true);
+  assert.equal(isStoreElement('categoryCard'), false);
 });

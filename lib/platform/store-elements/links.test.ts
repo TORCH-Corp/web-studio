@@ -58,3 +58,11 @@ test('a placed order links to the confirmation page with the checkout id in ?ord
 test('the page settings panel offers all four roles', () => {
   assert.deepEqual([...PANEL_PAGE_KINDS], ['product', 'cart', 'checkout', 'confirmation']);
 });
+
+test('a category links to the products page with ?category={id}, with the language\'s prefix, the id escaped (OPEN_QUESTIONS 9 and 55)', () => {
+  const id = '25252525-0001-4525-8525-252525252525';
+  assert.equal(createStoreLinks(null, {}).category(id), `/products?category=${id}`);
+  assert.equal(createStoreLinks({ code: 'ar', is_default: true }, PATHS).category(id), `/products?category=${id}`);
+  assert.equal(createStoreLinks({ code: 'en', is_default: false }, PATHS).category(id), `/en/products?category=${id}`);
+  assert.equal(createStoreLinks(null, {}).category('a b&c'), '/products?category=a%20b%26c');
+});
