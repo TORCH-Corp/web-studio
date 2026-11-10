@@ -16,7 +16,8 @@ export interface SessionView {
   session: Session;
   user: User;
   organization: string;
-  site: { id: string; name: string; slug: string } | null;
+  /** The open site; `hosts` are its addresses, the default one first. */
+  site: { id: string; name: string; slug: string; hosts: string[] } | null;
   permissions: BosSession['perms'];
   /** The user's x flag on Sales's sales.manage_orders, read at sign-in (part 2, session W8). */
   sales_manage_orders_x: boolean;
@@ -38,7 +39,7 @@ export function sessionView(session: BosSession, site: Site | null): SessionView
     } as Session,
     user,
     organization: session.org,
-    site: site ? { id: site.id, name: site.name, slug: site.slug } : null,
+    site: site ? { id: site.id, name: site.name, slug: site.slug, hosts: site.hosts } : null,
     permissions: session.perms,
     sales_manage_orders_x: hasSalesOrdersExecute(session),
     role: roleFromPermissions(session.perms),
