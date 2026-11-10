@@ -172,7 +172,7 @@ interface Posted {
 function watchCheckouts(page: Page): Posted[] {
   const posted: Posted[] = [];
   page.on('request', (req) => {
-    if (req.method() === 'POST' && new URL(req.url()).pathname === '/ycode/api/store/checkout') posted.push(req.postDataJSON() as Posted);
+    if (req.method() === 'POST' && new URL(req.url()).pathname === '/studio/api/store/checkout') posted.push(req.postDataJSON() as Posted);
   });
   return posted;
 }
@@ -249,7 +249,7 @@ test('a buyer adds two items and a variant, reviews the cart, changes a quantity
 
     // A variant from the product page: Small White, 35,000 IQD.
     const [, product] = await Promise.all([
-      page.waitForResponse((r) => new URL(r.url()).pathname === `/ycode/api/store/products/${ITEM.shirt}`),
+      page.waitForResponse((r) => new URL(r.url()).pathname === `/studio/api/store/products/${ITEM.shirt}`),
       page.goto(`/product/${ITEM.shirt}`),
     ]);
     expect(product?.status()).toBe(200);
@@ -946,7 +946,7 @@ test('the builder canvas draws the cart, checkout and confirmation with sample d
     const storeCalls: string[] = [];
     page.on('request', (req) => {
       const { pathname } = new URL(req.url());
-      if (/^\/ycode\/api\/store\/(products|categories|settings|checkout|orders)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
+      if (/^\/(?:ycode|studio)\/api\/store\/(products|categories|settings|checkout|orders)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
     });
     await page.goto(`/ycode/api/platform/sites/${site.id}/open`);
     await expect(page.getByRole('tab', { name: 'Pages' })).toBeVisible({ timeout: 60_000 });

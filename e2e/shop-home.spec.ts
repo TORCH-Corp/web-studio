@@ -166,7 +166,7 @@ test('the first paint of the category cards is their skeleton, with the status f
     const page = await context.newPage();
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });
-    await page.route('**/ycode/api/store/categories', async (route) => {
+    await page.route('**/studio/api/store/categories', async (route) => {
       await held;
       await route.continue();
     });
@@ -254,7 +254,7 @@ test('a products page opened on a category still counts everything the grid list
     const page = await context.newPage();
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });
-    await page.route('**/ycode/api/store/products?*', async (route) => {
+    await page.route('**/studio/api/store/products?*', async (route) => {
       await held;
       await route.continue();
     });
@@ -301,7 +301,7 @@ test('four cards with nothing picked show the store\'s first products, one each,
     const asked: string[] = [];
     page.on('request', (req) => {
       const url = new URL(req.url());
-      if (url.pathname === '/ycode/api/store/products') asked.push(url.search);
+      if (url.pathname === '/studio/api/store/products') asked.push(url.search);
     });
     await page.goto('/');
     // The store sells three products; the grid's order is by name.
@@ -482,7 +482,7 @@ test('the builder canvas draws the category cards, the count and the breadcrumb 
     const storeCalls: string[] = [];
     page.on('request', (req) => {
       const { pathname } = new URL(req.url());
-      if (/^\/ycode\/api\/store\/(products|categories|settings)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
+      if (/^\/(?:ycode|studio)\/api\/store\/(products|categories|settings)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
     });
     await page.goto(`/ycode/api/platform/sites/${site.id}/open`);
     await expect(page.getByRole('tab', { name: 'Pages' })).toBeVisible({ timeout: 60_000 });

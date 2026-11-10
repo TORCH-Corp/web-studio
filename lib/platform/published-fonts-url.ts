@@ -16,7 +16,7 @@
 import { FONT_MIRROR_BASE } from '@/lib/platform/font-mirror-url';
 
 /** Where a published page's font files are served from: `{base}/{family}/{version}/{file}`. */
-export const PUBLISHED_FONT_FILES_BASE = '/ycode/api/fonts/published';
+export const PUBLISHED_FONT_FILES_BASE = '/studio/api/fonts/published';
 
 const GOOGLE_CSS_BASE = 'https://fonts.googleapis.com/css2?';
 const MIRROR_FILE = new RegExp(`${FONT_MIRROR_BASE}/(s/[^)'"\\s]+)`, 'g');

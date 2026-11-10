@@ -48,23 +48,23 @@ export function productsUrl(query: ProductsQuery): string {
   if (query.category) params.set('category', query.category);
   else if (query.categories?.length) params.set('categories', query.categories.join(','));
   if (query.q) params.set('q', query.q);
-  return `/ycode/api/store/products?${params}`;
+  return `/studio/api/store/products?${params}`;
 }
 
 export const fetchProducts = (query: ProductsQuery, signal?: AbortSignal) =>
   get<{ data: StoreProduct[]; meta: { page: number; page_size: number; total: number } }>(productsUrl(query), signal);
 
-export const fetchCategories = (signal?: AbortSignal) => get<{ data: StoreCategorySummary[] }>('/ycode/api/store/categories', signal);
+export const fetchCategories = (signal?: AbortSignal) => get<{ data: StoreCategorySummary[] }>('/studio/api/store/categories', signal);
 
-export const fetchProduct = (id: string, signal?: AbortSignal) => get<{ data: StoreProduct }>(`/ycode/api/store/products/${encodeURIComponent(id)}`, signal);
+export const fetchProduct = (id: string, signal?: AbortSignal) => get<{ data: StoreProduct }>(`/studio/api/store/products/${encodeURIComponent(id)}`, signal);
 
-export const fetchStoreSettings = (signal?: AbortSignal) => get<{ data: { selling: true; currency: 'IQD' | 'USD'; delivery_fee: string } }>('/ycode/api/store/settings', signal);
+export const fetchStoreSettings = (signal?: AbortSignal) => get<{ data: { selling: true; currency: 'IQD' | 'USD'; delivery_fee: string } }>('/studio/api/store/settings', signal);
 
 // ---------------------------------------------------------------------------
 // Checkout and the confirmation (session W6)
 // ---------------------------------------------------------------------------
 
-/** What `POST /ycode/api/store/checkout` came to, for the checkout element to show. */
+/** What `POST /studio/api/store/checkout` came to, for the checkout element to show. */
 export type CheckoutResult =
   /** The order exists (made now, or made by an earlier try of the same checkout). */
   | { kind: 'placed'; checkout_id: string; code: string }
@@ -90,7 +90,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 export async function postCheckout(body: CheckoutBody, signal?: AbortSignal): Promise<CheckoutResult> {
   let response: Response;
   try {
-    response = await fetch('/ycode/api/store/checkout', {
+    response = await fetch('/studio/api/store/checkout', {
       method: 'POST',
       signal,
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -128,13 +128,13 @@ export async function postCheckout(body: CheckoutBody, signal?: AbortSignal): Pr
   return { kind: 'service_unavailable' };
 }
 
-/** What `GET /ycode/api/store/orders/{checkout_id}` came to. */
+/** What `GET /studio/api/store/orders/{checkout_id}` came to. */
 export type OrderResult = { kind: 'ok'; order: Confirmation } | { kind: 'not_found' } | { kind: 'not_selling' };
 
 /** Reads the order a checkout became: `not_found` for a checkout this site has no order for. Anything else that is not a success throws `StoreRequestError`. */
 export async function fetchOrder(checkoutId: string, signal?: AbortSignal): Promise<OrderResult> {
   try {
-    const result = await get<{ data: Confirmation }>(`/ycode/api/store/orders/${encodeURIComponent(checkoutId)}`, signal);
+    const result = await get<{ data: Confirmation }>(`/studio/api/store/orders/${encodeURIComponent(checkoutId)}`, signal);
     return result.kind === 'ok' ? { kind: 'ok', order: result.value.data } : { kind: 'not_selling' };
   } catch (error) {
     if (error instanceof StoreRequestError && error.status === 404 && error.code === 'order_not_found') return { kind: 'not_found' };

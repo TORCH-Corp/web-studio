@@ -157,7 +157,9 @@ export async function collectPublicAssets(urlPaths: string[]): Promise<OutputFil
   for (const urlPath of urlPaths) {
     const relPath = urlPath.replace(/^\/+/, '')
     try {
-      const buf = await fs.readFile(path.join(publicDir, relPath))
+      // The layouts' assets are named `/studio/layouts/…` in a page (lib/platform/public-path.ts) and live under public/ycode.
+      const diskPath = relPath.startsWith('studio/layouts/') ? `ycode/${relPath.slice('studio/'.length)}` : relPath
+      const buf = await fs.readFile(path.join(publicDir, diskPath))
       out.push({ key: relPath, body: buf, contentType: mediaContentType(relPath) })
     } catch (err) {
       console.warn(

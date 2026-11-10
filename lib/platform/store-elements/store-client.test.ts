@@ -32,7 +32,7 @@ test('the checkout is posted as JSON to the site\'s own route', async () => {
   const calls = answer(201, { data: { checkout_id: BODY.checkout_id, code: 'SO-2026-0142' } });
   const result = await postCheckout(BODY);
   assert.deepEqual(result, { kind: 'placed', checkout_id: BODY.checkout_id, code: 'SO-2026-0142' });
-  assert.equal(calls[0].url, '/ycode/api/store/checkout');
+  assert.equal(calls[0].url, '/studio/api/store/checkout');
   assert.equal(calls[0].init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(calls[0].init?.body)), BODY);
 });
@@ -95,7 +95,7 @@ test('the order is read by its checkout id; an unknown one is not found; a store
   const order = { checkout_id: BODY.checkout_id, code: 'SO-2026-0142', currency: 'IQD', lines: [], subtotal: '0', delivery_fee: '0', total: '0', payment_method: 'cash_on_delivery', phone: null };
   const calls = answer(200, { data: order });
   assert.deepEqual(await fetchOrder(BODY.checkout_id), { kind: 'ok', order });
-  assert.equal(calls[0].url, `/ycode/api/store/orders/${BODY.checkout_id}`);
+  assert.equal(calls[0].url, `/studio/api/store/orders/${BODY.checkout_id}`);
   answer(404, { code: 'order_not_found' });
   assert.deepEqual(await fetchOrder(BODY.checkout_id), { kind: 'not_found' });
   answer(404, { code: 'store_not_found' });
@@ -110,5 +110,5 @@ test('an order that cannot be read is an error the element shows with a way to t
 test('a checkout id is escaped into the path', async () => {
   const calls = answer(404, { code: 'order_not_found' });
   await fetchOrder('a/b c');
-  assert.equal(calls[0].url, '/ycode/api/store/orders/a%2Fb%20c');
+  assert.equal(calls[0].url, '/studio/api/store/orders/a%2Fb%20c');
 });

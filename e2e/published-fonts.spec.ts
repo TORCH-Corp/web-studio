@@ -22,7 +22,7 @@ const RUN = Date.now().toString(36);
 const SLUG = `fonts-${RUN}`;
 const HOST = `${SLUG}.${TEST_SITES_DOMAIN}`;
 const OWNER = { sub: '86868686-8686-4686-8686-868686868686', email: 'owner-fonts@example.com', name: 'Fonts Owner', org: '87878787-8787-4787-8787-878787878787' };
-const FILES = '/ycode/api/fonts/published';
+const FILES = '/studio/api/fonts/published';
 
 let baseURL: string;
 let owner: APIRequestContext;

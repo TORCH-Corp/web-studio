@@ -34,7 +34,7 @@ export default function ErrorPageContent({ published, reset }: ErrorPageContentP
           published: String(published),
           path: window.location.pathname,
         });
-        const response = await fetch(`/ycode/api/error-page?${params}`);
+        const response = await fetch(`/studio/api/error-page?${params}`);
         if (response.ok) {
           const data = await response.json();
           setErrorPageData(data.pageData);

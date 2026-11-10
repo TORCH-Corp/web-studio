@@ -6,6 +6,7 @@ import { applySecurityHeaders } from '@/lib/security-headers-server';
 import { isHiddenBuilderRoute, partsRaised } from '@/lib/platform/parts';
 import { acquireSiteLock } from '@/lib/platform/site-lock';
 import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
+import { internalPathOf, isUnderPublicPrefix } from '@/lib/platform/public-path';
 
 /**
  * Routes that need a session but no site: the sites API, which lists, creates
@@ -14,13 +15,24 @@ import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
  */
 const SITELESS_API_PREFIXES = ['/ycode/api/platform/', '/ycode/api/auth/'];
 
-/** Forward the request with its pathname as a header, keeping cookies and headers already set. */
+/**
+ * Forward the request with its pathname as a header, keeping cookies and headers already set.
+ * A request that came by the public prefix (`/studio/…`, lib/platform/public-path.ts) is
+ * forwarded to the path it stands for.
+ */
 function withPathname(response: NextResponse, request: NextRequest, pathname: string): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', pathname);
-  const next = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
+  let next: NextResponse;
+  if (pathname !== request.nextUrl.pathname) {
+    const target = request.nextUrl.clone();
+    target.pathname = pathname;
+    next = NextResponse.rewrite(target, { request: { headers: requestHeaders } });
+  } else {
+    next = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+  }
   response.cookies.getAll().forEach((cookie) => {
     next.cookies.set(cookie.name, cookie.value);
   });
@@ -42,8 +54,8 @@ function withPathname(response: NextResponse, request: NextRequest, pathname: st
  * the session's organization. A path the map does not know is not found.
  * Returns null to continue.
  */
-async function verifyApiAuth(request: NextRequest): Promise<NextResponse | null> {
-  const { pathname, searchParams } = request.nextUrl;
+async function verifyApiAuth(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  const { searchParams } = request.nextUrl;
   const access = accessFor(pathname, request.method, searchParams);
   if (!access || access.kind === 'public') return null;
 
@@ -118,7 +130,13 @@ async function refuseWriteWithoutLock(request: NextRequest, session: BosSession)
 }
 
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  // The public prefix: `/studio/api/…` and `/studio/layouts/…` are checked and served as the
+  // `/ycode` path they stand for; nothing else lives under `/studio`.
+  const aliased = internalPathOf(request.nextUrl.pathname);
+  if (!aliased && isUnderPublicPrefix(request.nextUrl.pathname)) {
+    return new NextResponse('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+  const pathname = aliased ?? request.nextUrl.pathname;
 
   // MCP endpoints use their own token-based authentication — skip session auth.
   // Cloud overlay proxies MUST also exempt these paths to avoid login redirects.
@@ -141,7 +159,7 @@ export async function proxy(request: NextRequest) {
   // `/ycode` tree (public site route group) but exposes destructive builder-only
   // operations (apply/export), so it must be gated here too.
   if (!skipPreviewAuth && (pathname.startsWith('/ycode/api') || pathname.startsWith('/ycode/preview') || pathname.startsWith('/api/templates'))) {
-    const authResponse = await verifyApiAuth(request);
+    const authResponse = await verifyApiAuth(request, pathname);
     if (authResponse) {
       if (authResponse.status >= 400) {
         // A preview with no session goes back to the builder, never to a login page.

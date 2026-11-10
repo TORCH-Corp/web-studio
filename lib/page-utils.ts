@@ -44,7 +44,7 @@ export function buildPreviewAuthRevision(
  * Reserved slugs that cannot be used at the root level (null parent folder)
  * These conflict with the app's routing structure
  */
-export const RESERVED_ROOT_SLUGS = ['ycode'] as const;
+export const RESERVED_ROOT_SLUGS = ['ycode', 'studio'] as const;
 
 /**
  * Check if a slug is reserved at root level

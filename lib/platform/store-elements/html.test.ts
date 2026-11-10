@@ -11,7 +11,7 @@ test('the grid\'s shell is its wrapper with the layer\'s attributes, the stylesh
   const html = storeElementHtml({ layer: GRID, attrs: ['data-layer-id="g1"', 'class="w-full mt-4"'] });
   assert.match(html, /^<div class="w-full mt-4 ws-store" data-layer-id="g1"|^<div data-layer-id="g1" class="w-full mt-4 ws-store"/);
   assert.ok(html.includes('data-ws-store="productGrid"') && html.includes('dir="ltr"') && html.includes('lang="en"'));
-  assert.ok(html.includes('<link rel="stylesheet" href="/ycode/api/store/font">'));
+  assert.ok(html.includes('<link rel="stylesheet" href="/studio/api/store/font">'));
   assert.ok(html.includes('<style>') && html.includes('.ws-store{'));
   assert.equal(html.split('class="ws-sk ws-sk-media"').length - 1, 4);
   assert.ok(html.includes('role="status">Loading products…'));
@@ -73,7 +73,7 @@ test('an attribute value is escaped and a layer that is not a store element is n
 
 test('a static export has no platform to fetch a font from, so its shell links none', () => {
   const html = storeElementHtml({ layer: GRID, attrs: [], staticExport: true });
-  assert.ok(!html.includes('<link') && !html.includes('/ycode/api/store/font'));
+  assert.ok(!html.includes('<link') && !html.includes('/studio/api/store/font'));
   assert.ok(html.includes('<style>') && html.includes('data-ws-store="productGrid"'));
 });
 
