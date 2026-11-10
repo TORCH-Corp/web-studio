@@ -481,8 +481,8 @@ export default function WebflowSettings({
             </div>
 
             <FieldDescription>
-              Pick a site to import its CMS collections, items and assets into Ycode. Items
-              that are live in Webflow will be auto-published in Ycode.
+              Pick a site to import its CMS collections, items and assets into Web Studio. Items
+              that are live in Webflow will be auto-published in Web Studio.
             </FieldDescription>
 
             <Field>
@@ -605,7 +605,7 @@ export default function WebflowSettings({
 
           <FieldDescription className="flex flex-col gap-2">
             <span>
-              Copy elements in the Webflow Designer and paste them onto the Ycode
+              Copy elements in the Webflow Designer and paste them onto the Web Studio
               canvas to recreate the layout, styles and components.
             </span>
             <span>
@@ -656,7 +656,7 @@ export default function WebflowSettings({
             <ol className="list-decimal list-inside space-y-1 text-xs text-muted-foreground">
               <li>Publish your site in Webflow.</li>
               <li>Select elements in the Webflow Designer and copy them.</li>
-              <li>Click the Ycode canvas and paste to import the design.</li>
+              <li>Click the Web Studio canvas and paste to import the design.</li>
             </ol>
           </div>
         </div>
@@ -667,7 +667,7 @@ export default function WebflowSettings({
         open={showDisconnect}
         onOpenChange={setShowDisconnect}
         title="Disconnect Webflow?"
-        description="This removes your CMS token, your Design site URL, and all import records. The Ycode collections created by past migrations will remain."
+        description="This removes your CMS token, your Design site URL, and all import records. The Web Studio collections created by past migrations will remain."
         confirmLabel="Disconnect"
         cancelLabel="Cancel"
         confirmVariant="destructive"
@@ -680,7 +680,7 @@ export default function WebflowSettings({
         open={!!importToRemove}
         onOpenChange={(open: boolean) => { if (!open) setImportToRemove(null); }}
         title="Remove import?"
-        description={`Removes the link to "${importToRemove?.siteName}". Re-sync won't be possible, but the Ycode collections themselves will stay.`}
+        description={`Removes the link to "${importToRemove?.siteName}". Re-sync won't be possible, but the Web Studio collections themselves will stay.`}
         confirmLabel="Remove"
         cancelLabel="Cancel"
         confirmVariant="destructive"

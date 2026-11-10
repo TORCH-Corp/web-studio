@@ -90,7 +90,7 @@ export function BackupRestoreDialog({
       const blob = await response.blob();
       const disposition = response.headers.get('Content-Disposition');
       const filenameMatch = disposition?.match(/filename="(.+)"/);
-      const filename = filenameMatch?.[1] || 'backup.ycode';
+      const filename = filenameMatch?.[1] || 'backup.webstudio';
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -112,7 +112,7 @@ export function BackupRestoreDialog({
 
   const handleRestore = async () => {
     if (!selectedFile) {
-      toast.error('No backup file selected', { description: 'Please select a .ycode backup file' });
+      toast.error('No backup file selected', { description: 'Please select a .webstudio backup file' });
       return;
     }
 
@@ -188,8 +188,8 @@ export function BackupRestoreDialog({
           <TabsContent value="backup">
             <div className="flex flex-col gap-4 pt-2">
               <p className="text-xs text-muted-foreground">
-                This will create a <code className="text-foreground/85">.ycode</code> backup file containing all of your project data. The file can be used to restore
-                your project data at a later date or to transfer your project to another instance of Ycode.
+                This will create a <code className="text-foreground/85">.webstudio</code> backup file containing all of your project data. The file can be used to restore
+                your project data at a later date or to transfer your project to another instance of Web Studio.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="backup-name">
@@ -242,7 +242,7 @@ export function BackupRestoreDialog({
           <TabsContent value="restore">
             <div className="flex flex-col gap-4 pt-2">
               <p className="text-xs text-muted-foreground">
-                Upload a <code className="text-foreground/85">.ycode</code> backup file to restore a project. Warning: This will delete all the current project data
+                Upload a <code className="text-foreground/85">.webstudio</code> backup file to restore a project. Warning: This will delete all the current project data
                 and replace it with the backup data, make sure you have a recent backup before attempting to restore!
               </p>
               <div className="space-y-2">
@@ -250,7 +250,7 @@ export function BackupRestoreDialog({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".ycode"
+                  accept=".webstudio"
                   className="hidden"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                 />

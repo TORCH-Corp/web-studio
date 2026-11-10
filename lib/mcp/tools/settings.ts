@@ -15,7 +15,7 @@ const SETTING_KEYS_DOC = `Supported keys (the same ones Settings > General write
 - ga_measurement_id: Google Analytics ID, e.g. "G-XXXXXXX"
 - google_site_verification: Search Console verification token
 - robots_txt, llms_txt, security_txt: file contents
-- ycode_badge: boolean, show the Ycode badge on the published site
+- ycode_badge: boolean, show the Web Studio badge on the published site
 - timezone: IANA timezone, e.g. "Europe/Vilnius"
 Redirects are managed with the redirect tools, not here.`;
 

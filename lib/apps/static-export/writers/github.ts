@@ -51,7 +51,7 @@ export async function createGithubWriter(config: ExportConfig): Promise<Writer> 
 
 async function pushViaApi(config: ExportConfig, files: OutputFile[]): Promise<number> {
   const { githubRepo: repo, githubBranch: branch, githubToken: token } = config
-  const authorName = config.githubAuthorName.trim() || 'Ycode Static Export'
+  const authorName = config.githubAuthorName.trim() || 'Web Studio Static Export'
   const authorEmail = config.githubAuthorEmail.trim() || 'static-export@ycode.local'
 
   const headers = apiHeaders(token)
@@ -288,7 +288,7 @@ async function bootstrapEmptyRepo(
 ): Promise<void> {
   const author = { name: authorName, email: authorEmail }
   // base64 of "Ycode static export — initializing repository\n"
-  const content = Buffer.from('Ycode static export — initializing repository\n', 'utf-8').toString('base64')
+  const content = Buffer.from('Web Studio static export — initializing repository\n', 'utf-8').toString('base64')
 
   const res = await fetch(
     `${GITHUB_API}/repos/${repo}/contents/.ycode-init`,
@@ -296,7 +296,7 @@ async function bootstrapEmptyRepo(
       method: 'PUT',
       headers,
       body: JSON.stringify({
-        message: 'Initialize repository for Ycode static export',
+        message: 'Initialize repository for Web Studio static export',
         content,
         branch,
         author,

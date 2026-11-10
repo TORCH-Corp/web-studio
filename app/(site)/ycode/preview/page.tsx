@@ -27,7 +27,7 @@ export default async function Home() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center p-8">
           <h1 className="text-6xl font-bold text-gray-900 mb-4">
-            Ycode Preview
+            Web Studio Preview
           </h1>
           <p className="text-xl text-gray-600 mb-8">
             No homepage found. Create an index page in the builder.
@@ -118,8 +118,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
   if (!data) {
     return {
-      title: 'Preview - Ycode',
-      description: 'Preview - Built with Ycode',
+      title: 'Preview - Web Studio',
+      description: 'Preview - Built with Web Studio',
     };
   }
 

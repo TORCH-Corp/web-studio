@@ -184,7 +184,7 @@ export default function AgentSettingsPage() {
               {isSavingEnabled && <Spinner className="size-3.5" />}
             </div>
             <FieldDescription className="mb-0">
-              Show the Agent tab in the builder. Turn off to use Ycode in manual mode only.
+              Show the Agent tab in the builder. Turn off to use Web Studio in manual mode only.
             </FieldDescription>
           </div>
           <Switch

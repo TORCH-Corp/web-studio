@@ -362,7 +362,7 @@ export default function GeneralSettingsPage() {
                       />
                     ) : (
                       <Image
-                        src={'/y-filled.svg'}
+                        src={'/web-studio-icon.png'}
                         alt="Favicon preview"
                         width={32}
                         height={32}
@@ -412,7 +412,7 @@ export default function GeneralSettingsPage() {
                       />
                     ) : (
                       <Image
-                        src={'/ycode-webclip.png'}
+                        src={'/web-studio-webclip.png'}
                         alt="Web clip preview"
                         width={64}
                         height={64}
@@ -488,24 +488,6 @@ export default function GeneralSettingsPage() {
 
                 <FieldSeparator className="col-span-2" />
 
-                <Field orientation="horizontal" className="flex-row-reverse col-span-2">
-                  <FieldContent>
-                    <FieldLabel htmlFor="badge">Display the &ldquo;Made in Ycode&rdquo; badge</FieldLabel>
-                    <FieldDescription>
-                      {isCloudVersion()
-                        ? 'Upgrade to a project plan in order to disable the badge.'
-                        : 'Help support Ycode by displaying this badge on your website.'}
-                    </FieldDescription>
-                  </FieldContent>
-                  <Switch
-                    id="badge"
-                    checked={ycodeBadge}
-                    onCheckedChange={setYcodeBadge}
-                  />
-                </Field>
-
-                <FieldSeparator className="col-span-2" />
-
                 <div className="col-span-2 flex justify-end">
                   <Button
                     size="sm"
@@ -564,7 +546,7 @@ export default function GeneralSettingsPage() {
                     Google Analytics Measurement ID
                   </FieldLabel>
                   <FieldDescription>
-                    Seamlessly integrate Google Analytics into your Ycode site. As the site owner, you are responsible for ensuring your site complies with privacy regulations, such as GDPR, and handles data appropriately.
+                    Seamlessly integrate Google Analytics into your Web Studio site. As the site owner, you are responsible for ensuring your site complies with privacy regulations, such as GDPR, and handles data appropriately.
                   </FieldDescription>
                   <Input
                     id="google-analytics-measurement-id"
@@ -646,7 +628,7 @@ export default function GeneralSettingsPage() {
                   <Tabs value={activeSeoTab} onValueChange={handleSitemapTabChange}>
                     <TabsList className="w-full">
                       <TabsTrigger value="no-sitemap">No sitemap</TabsTrigger>
-                      <TabsTrigger value="ycode-sitemap">Ycode generated</TabsTrigger>
+                      <TabsTrigger value="ycode-sitemap">Web Studio generated</TabsTrigger>
                       <TabsTrigger value="custom-sitemap">Custom XML</TabsTrigger>
                     </TabsList>
 

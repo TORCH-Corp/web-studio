@@ -74,7 +74,7 @@ export default function ConsentForm(props: ConsentFormProps) {
     // keep raw value on parse failure
   }
 
-  const siteLabel = props.siteName || siteHost || 'this Ycode project';
+  const siteLabel = props.siteName || siteHost || 'this Web Studio project';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-950 p-6">

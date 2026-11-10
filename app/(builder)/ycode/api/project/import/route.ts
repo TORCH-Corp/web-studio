@@ -10,9 +10,9 @@ export const revalidate = 0;
 /**
  * POST /ycode/api/project/import
  *
- * Import a project dump (.ycode file).
+ * Import a project dump (.webstudio file).
  * Accepts multipart form-data with:
- *   - "file" (required): the .ycode file
+ *   - "file" (required): the .webstudio file
  *   - "password" (optional): decryption password if the file is encrypted
  */
 export async function POST(request: NextRequest) {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const password = formData.get('password');
 
     if (!file || !(file instanceof Blob)) {
-      return noCache({ error: 'No file provided. Upload a .ycode file as form-data with field name "file".' }, 400);
+      return noCache({ error: 'No file provided. Upload a .webstudio file as form-data with field name "file".' }, 400);
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       if (err instanceof ToastError) {
         return noCache({ errorTitle: err.title, error: err.description }, 400);
       }
-      return noCache({ error: err instanceof Error ? err.message : 'Invalid .ycode file.' }, 400);
+      return noCache({ error: err instanceof Error ? err.message : 'Invalid .webstudio file.' }, 400);
     }
 
     const result = await importProject(parsed.manifest, parsed.data, parsed.files);

@@ -312,7 +312,7 @@ export default async function Page({ params }: PageProps) {
         <div className="min-h-screen flex items-center justify-center bg-white">
           <div className="text-center p-8 flex flex-col items-center justify-center gap-2">
             <h1 className="text-xl font-semibold text-neutral-900">
-              Welcome to Ycode
+              Welcome to Web Studio
             </h1>
             <Link
               href="/ycode"
@@ -458,8 +458,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug?: st
   if (!data) {
     if (isHomepage) {
       return {
-        title: 'Ycode',
-        description: 'Built with Ycode',
+        title: 'Web Studio',
+        description: 'Built with Web Studio',
       };
     }
 

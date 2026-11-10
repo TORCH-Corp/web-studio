@@ -13369,7 +13369,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'How to create a professional website in minutes with Ycode',
+                                                  'text': 'How to create a professional website in minutes with Web Studio',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -13979,7 +13979,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'The ultimate guide to building responsive websites using Ycode',
+                                                  'text': 'The ultimate guide to building responsive websites using Web Studio',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -14284,7 +14284,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'Building professional websites with Ycode in 5 steps',
+                                                  'text': 'Building professional websites with Web Studio in 5 steps',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -14784,7 +14784,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'How to create a professional website in minutes with Ycode',
+                                                  'text': 'How to create a professional website in minutes with Web Studio',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -15716,7 +15716,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                           'type': 'paragraph',
                                           'content': [
                                             {
-                                              'text': 'How to create a professional website in minutes with Ycode',
+                                              'text': 'How to create a professional website in minutes with Web Studio',
                                               'type': 'text'
                                             }
                                           ]
@@ -16371,7 +16371,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                           'content': [
                                             {
                                               'type': 'text',
-                                              'text': 'The ultimate guide to building responsive websites using Ycode'
+                                              'text': 'The ultimate guide to building responsive websites using Web Studio'
                                             }
                                           ]
                                         }
@@ -16968,7 +16968,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'How to create a professional website in minutes with Ycode',
+                                                  'text': 'How to create a professional website in minutes with Web Studio',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -18404,7 +18404,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'How to create a professional website in minutes with Ycode',
+                                                  'text': 'How to create a professional website in minutes with Web Studio',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -18870,7 +18870,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'content': [
                                                 {
                                                   'type': 'text',
-                                                  'text': 'The ultimate guide to building responsive websites using Ycode'
+                                                  'text': 'The ultimate guide to building responsive websites using Web Studio'
                                                 }
                                               ]
                                             }
@@ -19431,7 +19431,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'How to create a professional website in minutes with Ycode',
+                                                  'text': 'How to create a professional website in minutes with Web Studio',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -20043,7 +20043,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                               'type': 'paragraph',
                                               'content': [
                                                 {
-                                                  'text': 'Building professional websites with Ycode in 5 steps',
+                                                  'text': 'Building professional websites with Web Studio in 5 steps',
                                                   'type': 'text'
                                                 }
                                               ]
@@ -33518,7 +33518,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                     'content': [
                                       {
                                         'type': 'text',
-                                        'text': 'Ycode is a no-code platform that allows users to build fully responsive websites without writing code.'
+                                        'text': 'Web Studio is a no-code platform that allows users to build fully responsive websites without writing code.'
                                       }
                                     ]
                                   }
@@ -33537,7 +33537,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                     'content': [
                                       {
                                         'type': 'text',
-                                        'text': 'What is Ycode?'
+                                        'text': 'What is Web Studio?'
                                       }
                                     ]
                                   }
@@ -33809,7 +33809,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                     'content': [
                                       {
                                         'type': 'text',
-                                        'text': 'No, Ycode is designed for non-developers and does not require any coding experience to build and launch websites.'
+                                        'text': 'No, Web Studio is designed for non-developers and does not require any coding experience to build and launch websites.'
                                       }
                                     ]
                                   }
@@ -33828,7 +33828,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                     'content': [
                                       {
                                         'type': 'text',
-                                        'text': 'Do I need coding knowledge to use Ycode?'
+                                        'text': 'Do I need coding knowledge to use Web Studio?'
                                       }
                                     ]
                                   }
@@ -34100,7 +34100,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                     'content': [
                                       {
                                         'type': 'text',
-                                        'text': 'Yes, Ycode allows team collaboration for free! Enabling multiple users to work on the same project simultaneously.'
+                                        'text': 'Yes, Web Studio allows team collaboration for free! Enabling multiple users to work on the same project simultaneously.'
                                       }
                                     ]
                                   }
@@ -34119,7 +34119,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                     'content': [
                                       {
                                         'type': 'text',
-                                        'text': 'Can I collaborate with a team on Ycode projects?'
+                                        'text': 'Can I collaborate with a team on Web Studio projects?'
                                       }
                                     ]
                                   }
@@ -34411,7 +34411,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/ycode-logo-black.svg'
+                                      'content': '/ycode/layouts/assets/company-1-logo-black.svg'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -34969,7 +34969,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/ycode-logo-black.svg'
+                                      'content': '/ycode/layouts/assets/company-1-logo-black.svg'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -35424,7 +35424,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/ycode-logo-black.svg'
+                                  'content': '/ycode/layouts/assets/company-1-logo-black.svg'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -36425,7 +36425,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/ycode-logo-black.svg'
+                                      'content': '/ycode/layouts/assets/company-1-logo-black.svg'
                                     },
                                     'type': 'dynamic_text'
                                   }

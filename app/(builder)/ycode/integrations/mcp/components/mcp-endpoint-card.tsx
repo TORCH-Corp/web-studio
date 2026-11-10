@@ -19,7 +19,7 @@ export default function McpEndpointCard({ url }: McpEndpointCardProps) {
       <div className="flex flex-col gap-1">
         <span className="text-sm font-medium">MCP server URL</span>
         <p className="text-xs text-muted-foreground">
-          Paste this URL into your AI tool. You&apos;ll be asked to sign in to Ycode and approve
+          Paste this URL into your AI tool. You&apos;ll be asked to sign in to Web Studio and approve
           access the first time it connects — no keys to copy.
         </p>
       </div>

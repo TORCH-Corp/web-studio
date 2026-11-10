@@ -51,7 +51,7 @@ ${LAYER_SCOPE_HINT}`,
         .describe('Element styles to merge, keyed by element: { h2: { design }, link: { design, ui_state: "hover" }, … }.'),
       hover_styles: z.record(z.string(), designSchema).optional()
         .describe('Shortcut for hover designs keyed by element, e.g. { link: { typography: { isActive: true, color: "#1d4ed8" } } }.'),
-      reset: z.array(z.string()).optional().describe('Element keys to reset to Ycode defaults.'),
+      reset: z.array(z.string()).optional().describe('Element keys to reset to Web Studio defaults.'),
     },
     async ({ page_id, component_id, variant_id, layer_ids, styles, hover_styles, reset }) => {
       const scope = await resolveLayerScope({ page_id, component_id, variant_id });

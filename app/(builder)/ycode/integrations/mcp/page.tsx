@@ -92,7 +92,7 @@ export default function McpPage() {
         <div className="flex flex-col gap-3 pt-8">
           <span className="text-base font-medium">MCP</span>
           <p className="text-sm text-muted-foreground">
-            Connect AI assistants like Claude, Cursor, or ChatGPT to this Ycode project. They can
+            Connect AI assistants like Claude, Cursor, or ChatGPT to this Web Studio project. They can
             read and edit pages, collections, assets, and more on your behalf.
           </p>
         </div>

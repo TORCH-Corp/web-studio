@@ -297,7 +297,7 @@ export default function ChatComposer({
     extensions: [
       StarterKit.configure({ heading: false }),
       Placeholder.configure({
-        placeholder: 'Ask Ycode...',
+        placeholder: 'Ask Web Studio...',
       }),
       LayerMentionWithView,
     ],

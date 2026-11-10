@@ -67,7 +67,7 @@ test('stamps a buffered response without contradicting Content-Length', async ()
     res.end(buf);
   });
 
-  assert.ok(result.body.includes('Made in Ycode'));
+  assert.ok(result.body.includes('Made in Web Studio'));
   assert.ok(result.body.trimEnd().endsWith('</html>'));
   assert.equal(result.declaredLength, result.bodyBytes);
 });
@@ -80,7 +80,7 @@ test('stamps a chunked response and drops the stale Content-Length', async () =>
     res.end('<body>hi</body></html>');
   });
 
-  assert.ok(result.body.includes('Made in Ycode'));
+  assert.ok(result.body.includes('Made in Web Studio'));
   assert.ok(result.body.includes('</html>'));
   assert.equal(result.declaredLength, null);
 });
@@ -94,7 +94,7 @@ test('leaves gzip-compressed bytes untouched', async () => {
     res.end(gzipped);
   });
 
-  assert.ok(!result.body.includes('Made in Ycode'));
+  assert.ok(!result.body.includes('Made in Web Studio'));
   assert.equal(result.declaredLength, gzipped.byteLength);
 });
 
@@ -118,6 +118,6 @@ test('skips builder routes', async () => {
     res.end(buf);
   }, '/ycode/pages');
 
-  assert.ok(!result.body.includes('Made in Ycode'));
+  assert.ok(!result.body.includes('Made in Web Studio'));
   assert.equal(result.declaredLength, result.bodyBytes);
 });

@@ -1,7 +1,7 @@
 /**
  * Project Service
  *
- * Handles exporting and importing project data as portable .ycode dumps.
+ * Handles exporting and importing project data as portable .webstudio dumps.
  */
 
 import { scryptSync, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
@@ -145,7 +145,7 @@ const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
-/** 4-byte magic header to identify encrypted .ycode files. */
+/** 4-byte magic header to identify encrypted .webstudio files. */
 const ENCRYPTED_MAGIC = Buffer.from('YCEN');
 
 /** Encrypt a buffer with a password using AES-256-GCM. */
@@ -228,7 +228,7 @@ function serializeExportToBuffer(exportData: ProjectExportData): Buffer {
 }
 
 /**
- * Pack export data into a .ycode file buffer.
+ * Pack export data into a .webstudio file buffer.
  * Gzip-compresses the JSON; optionally encrypts with a password.
  */
 export function packExport(exportData: ProjectExportData, password?: string): Buffer {
@@ -419,7 +419,7 @@ function parseExportFromBuffer(buf: Buffer): ProjectExportData {
 }
 
 /**
- * Unpack a .ycode file buffer into export data.
+ * Unpack a .webstudio file buffer into export data.
  * Handles both encrypted and plain gzipped files.
  */
 export function unpackImport(
@@ -595,11 +595,11 @@ export function sanitizeProjectNameSlug(value: string): string {
   return slug || DEFAULT_PROJECT_NAME;
 }
 
-/** Generate a filename for a .ycode export from the manifest. */
+/** Generate a filename for a .webstudio export from the manifest. */
 export function getExportFilename(manifest: ProjectManifest): string {
   const name = sanitizeProjectNameSlug(manifest.projectName || DEFAULT_PROJECT_NAME);
   const ts = new Date(manifest.exportedAt).toISOString().slice(0, 19).replace('T', '-').replace(/:/g, '-');
-  return `${name}-${ts}.ycode`;
+  return `${name}-${ts}.webstudio`;
 }
 
 // ─── Concurrency Helper ─────────────────────────────────────────────

@@ -26,7 +26,7 @@ export function registerAssetTools(server: McpServer) {
 
   server.tool(
     'upload_asset',
-    `Upload an image to the Ycode asset library (Ycode Assets, see https://docs.ycode.com). Accepts either a public image URL or base64-encoded image data.
+    `Upload an image to the Web Studio asset library (Web Studio Assets). Accepts either a public image URL or base64-encoded image data.
 
 The url is not an API endpoint: the image file at that address is downloaded with a single HTTP GET and stored in the asset library. No other API is called.
 

@@ -91,7 +91,7 @@ function ensureIds(interaction: z.infer<typeof interactionSchema>): LayerInterac
 export function registerAnimationTools(server: McpServer) {
   server.tool(
     'add_animation',
-    `Add a curated animation to a layer using one of Ycode's preset patterns.
+    `Add a curated animation to a layer using one of Web Studio's preset patterns.
 
 Presets cover ~80% of animation needs. Use set_layer_interactions for full GSAP control.
 Works on page layers (page_id) and on layers inside a component master (component_id +

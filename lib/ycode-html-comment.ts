@@ -9,7 +9,7 @@ const MONTHS = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ] as const;
 
-export const MADE_IN_YCODE_COMMENT = 'Made in Ycode · ycode.com';
+export const MADE_IN_YCODE_COMMENT = 'Made in Web Studio';
 
 /** Strip sequences that would terminate an HTML comment. */
 function escapeHtmlComment(text: string): string {

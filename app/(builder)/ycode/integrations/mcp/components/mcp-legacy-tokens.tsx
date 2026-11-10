@@ -222,7 +222,7 @@ export default function McpLegacyTokens({ tokens, onGenerate, onDelete }: McpLeg
               </div>
             )}
             <p className="text-xs text-muted-foreground mt-3">
-              Keep this URL private. Anyone with this URL can access your Ycode project through MCP.
+              Keep this URL private. Anyone with this URL can access your Web Studio project through MCP.
             </p>
           </div>
           <DialogFooter>
