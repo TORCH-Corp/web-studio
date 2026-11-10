@@ -31,6 +31,7 @@ import type { Page } from '@/types';
 import type { User } from '@/lib/platform/types';
 import ActiveUsersInHeader from './ActiveUsersInHeader';
 import { LocaleSelector } from './LocaleSelector';
+import { sessionState, subscribeSession, type SessionState } from '@/lib/platform/browser-session';
 import PublishPopover from './PublishPopover';
 import { isReadOnly, useSiteLock } from '@/lib/platform/site-lock-client';
 import { Label } from '@/components/ui/label';
@@ -165,9 +166,17 @@ export default function HeaderBar({
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [showTransferDialog, setShowTransferDialog] = useState(false);
 
-  // Get current host after mount
+  // The address the header shows and opens: the open site's own (its default address), not the
+  // builder's. The builder may be served from anywhere (the Tauri app frames it from a local
+  // listener), and its own host was never where the site is published. Without a site in the
+  // session, the page's host as before.
   useEffect(() => {
-    setBaseUrl(window.location.protocol + '//' + window.location.host);
+    const apply = (state: SessionState) => {
+      const host = state.view?.site?.hosts?.[0];
+      setBaseUrl(host ? `https://${host}` : window.location.protocol + '//' + window.location.host);
+    };
+    apply(sessionState());
+    return subscribeSession(apply);
   }, []);
 
   // Get selected locale (computed from subscribed store values)
