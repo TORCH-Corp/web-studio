@@ -118,7 +118,7 @@ export default async function AuthorizePage({
     return (
       <ErrorPanel
         title="Unknown client"
-        message="The application requesting access has not been registered with this Ycode instance, or its client metadata document could not be fetched."
+        message="The application requesting access has not been registered with this Web Studio instance, or its client metadata document could not be fetched."
       />
     );
   }

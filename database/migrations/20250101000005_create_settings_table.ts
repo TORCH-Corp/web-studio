@@ -55,8 +55,8 @@ export async function up(knex: Knex): Promise<void> {
   // jsonb columns, so bare strings/booleans would be sent unquoted and rejected
   // as "invalid input syntax for type json".
   const defaultSettings: { key: string; value: unknown }[] = [
-    { key: 'site_name', value: 'Ycode Site' },
-    { key: 'site_description', value: 'Built with Ycode' },
+    { key: 'site_name', value: 'Web Studio Site' },
+    { key: 'site_description', value: 'Built with Web Studio' },
     { key: 'ycode_version', value: '0.1.0' },
     { key: 'sitemap', value: getDefaultSitemapSettings() },
     { key: 'ycode_badge', value: true },

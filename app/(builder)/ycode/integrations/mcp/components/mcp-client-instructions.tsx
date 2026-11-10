@@ -44,7 +44,7 @@ export default function McpClientInstructions({ url, isLocalhost }: McpClientIns
   const hostedOnlyNote = isLocalhost ? (
     <Note>
       This client connects from the vendor&apos;s servers, so it needs a public HTTPS URL. It
-      can&apos;t reach <code className="font-mono">localhost</code> — deploy Ycode first, or use
+      can&apos;t reach <code className="font-mono">localhost</code> — deploy Web Studio first, or use
       Cursor, Claude Code, or VS Code for local development.
     </Note>
   ) : null;
@@ -64,7 +64,7 @@ export default function McpClientInstructions({ url, isLocalhost }: McpClientIns
       <div className="flex flex-col gap-1">
         <span className="text-base font-medium">How to connect</span>
         <p className="text-sm text-muted-foreground">
-          Self-hosted Ycode projects aren&apos;t listed in the Claude or ChatGPT connector
+          Self-hosted Web Studio projects aren&apos;t listed in the Claude or ChatGPT connector
           directories, because every project has its own URL. Add this project as a
           <strong> custom connector</strong> instead — the steps below cover each client.
         </p>
@@ -91,8 +91,8 @@ export default function McpClientInstructions({ url, isLocalhost }: McpClientIns
             steps={[
               { text: <>Open <strong>Settings → Connectors</strong>.</> },
               { text: <>Scroll past the directory and click <strong>Add custom connector</strong>.</> },
-              { text: <>Name it “Ycode” and paste the MCP server URL into <strong>Remote MCP server URL</strong>. Leave the OAuth client ID and secret fields empty.</> },
-              { text: <>Click <strong>Add</strong>, then <strong>Connect</strong>. Sign in to Ycode and approve access.</> },
+              { text: <>Name it “Web Studio” and paste the MCP server URL into <strong>Remote MCP server URL</strong>. Leave the OAuth client ID and secret fields empty.</> },
+              { text: <>Click <strong>Add</strong>, then <strong>Connect</strong>. Sign in to Web Studio and approve access.</> },
             ]}
           />
           <Note>
@@ -134,7 +134,7 @@ export default function McpClientInstructions({ url, isLocalhost }: McpClientIns
           <CodeBlock>{cursorConfig}</CodeBlock>
           <Steps
             steps={[
-              { text: 'Cursor will open a browser window to sign in to Ycode and approve access.' },
+              { text: 'Cursor will open a browser window to sign in to Web Studio and approve access.' },
             ]}
           />
         </TabsContent>
@@ -147,8 +147,8 @@ export default function McpClientInstructions({ url, isLocalhost }: McpClientIns
           <Steps
             steps={[
               { text: <>Open <strong>Settings → Connectors</strong> and enable <strong>Developer mode</strong> (under Advanced).</> },
-              { text: <>Click <strong>Create</strong>, name it “Ycode”, and paste the MCP server URL.</> },
-              { text: <>Choose <strong>OAuth</strong> authentication, then sign in to Ycode and approve access.</> },
+              { text: <>Click <strong>Create</strong>, name it “Web Studio”, and paste the MCP server URL.</> },
+              { text: <>Choose <strong>OAuth</strong> authentication, then sign in to Web Studio and approve access.</> },
             ]}
           />
           <Note>

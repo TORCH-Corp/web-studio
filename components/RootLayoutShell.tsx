@@ -4,7 +4,7 @@ import DarkModeProvider from '@/components/DarkModeProvider';
 import { htmlDirFromLang } from '@/lib/html-lang';
 
 export const defaultMetadata: Metadata = {
-  title: 'Ycode - Visual Website Builder',
+  title: 'Web Studio - Visual Website Builder',
   description: 'Self-hosted visual website builder',
 };
 

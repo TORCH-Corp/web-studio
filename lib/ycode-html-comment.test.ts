@@ -22,21 +22,21 @@ test('formats midnight and noon without a 0 hour', () => {
   );
 });
 
-test('always emits the Made in Ycode comment', () => {
+test('always emits the Made in Web Studio comment', () => {
   const html = buildYcodeHtmlComments();
-  assert.equal(html, '<!-- Made in Ycode · ycode.com -->');
+  assert.equal(html, '<!-- Made in Web Studio -->');
 });
 
 test('adds a Published line when a timestamp is provided', () => {
   const html = buildYcodeHtmlComments('2026-09-04T10:49:00.000Z');
   assert.equal(
     html,
-    '<!-- Made in Ycode · ycode.com -->\n<!-- Published Sep 4, 2026, 10:49 AM UTC -->',
+    '<!-- Made in Web Studio -->\n<!-- Published Sep 4, 2026, 10:49 AM UTC -->',
   );
 });
 
 test('ignores invalid published timestamps', () => {
-  assert.equal(buildYcodeHtmlComments('not-a-date'), '<!-- Made in Ycode · ycode.com -->');
+  assert.equal(buildYcodeHtmlComments('not-a-date'), '<!-- Made in Web Studio -->');
 });
 
 test('inserts comments after doctype and before html', () => {
@@ -44,7 +44,7 @@ test('inserts comments after doctype and before html', () => {
   const stamped = insertYcodeHtmlComments(html, '2026-09-04T10:49:00.000Z');
   assert.equal(
     stamped,
-    '<!DOCTYPE html>\n<!-- Made in Ycode · ycode.com -->\n<!-- Published Sep 4, 2026, 10:49 AM UTC -->\n<html lang="en"><head></head></html>',
+    '<!DOCTYPE html>\n<!-- Made in Web Studio -->\n<!-- Published Sep 4, 2026, 10:49 AM UTC -->\n<html lang="en"><head></head></html>',
   );
 });
 
@@ -53,7 +53,7 @@ test('normalizes a doctype that already has a newline', () => {
   const stamped = insertYcodeHtmlComments(html, '2026-09-04T10:49:00.000Z');
   assert.equal(
     stamped,
-    '<!DOCTYPE html>\n<!-- Made in Ycode · ycode.com -->\n<!-- Published Sep 4, 2026, 10:49 AM UTC -->\n<html lang="en">\n<head></head>\n</html>\n',
+    '<!DOCTYPE html>\n<!-- Made in Web Studio -->\n<!-- Published Sep 4, 2026, 10:49 AM UTC -->\n<html lang="en">\n<head></head>\n</html>\n',
   );
 });
 
@@ -68,6 +68,6 @@ test('inserts before html when doctype is missing', () => {
   const stamped = insertYcodeHtmlComments(html);
   assert.equal(
     stamped,
-    '<!-- Made in Ycode · ycode.com -->\n<html><head></head></html>',
+    '<!-- Made in Web Studio -->\n<html><head></head></html>',
   );
 });

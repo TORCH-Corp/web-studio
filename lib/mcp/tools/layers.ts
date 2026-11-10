@@ -368,7 +368,7 @@ or a named size ("sm", "md", "lg"). Apply on the text/heading/button layer.`,
 
   server.tool(
     'update_layer_link',
-    `Configure a link on any layer (button, div, text, image, etc.) in the Ycode editor (see https://docs.ycode.com).
+    `Configure a link on any layer (button, div, text, image, etc.) in the Web Studio editor.
 The url is stored on the layer as the link's href and is never requested by the server; no external API is called.
 
 LINK TYPES:
@@ -431,7 +431,7 @@ LINK TYPES:
 
   server.tool(
     'update_layer_video',
-    'Set the video source of a video layer in the Ycode editor (see https://docs.ycode.com). Supports asset IDs, YouTube video IDs, or direct URLs. The url is stored on the layer as the video source and is never requested by the server; no external API is called.',
+    'Set the video source of a video layer in the Web Studio editor. Supports asset IDs, YouTube video IDs, or direct URLs. The url is stored on the layer as the video source and is never requested by the server; no external API is called.',
     {
       page_id: z.string().describe('The page ID'),
       layer_id: z.string().describe('The video layer ID'),
@@ -469,7 +469,7 @@ LINK TYPES:
 
   server.tool(
     'update_layer_background_image',
-    'Set a background image on any layer in the Ycode editor (see https://docs.ycode.com) using an asset ID or URL. The url is stored on the layer as the CSS background image and is never requested by the server; no external API is called.',
+    'Set a background image on any layer in the Web Studio editor using an asset ID or URL. The url is stored on the layer as the CSS background image and is never requested by the server; no external API is called.',
     {
       page_id: z.string().describe('The page ID'),
       layer_id: z.string().describe('The layer ID'),
@@ -794,7 +794,7 @@ The rendered HTML is for inspection, not re-import (ids carry per-item suffixes)
 
   server.tool(
     'update_layer_iframe',
-    'Set the source URL for an iframe layer in the Ycode editor (see https://docs.ycode.com). The url is stored on the layer as the iframe src and is never requested by the server; no external API is called.',
+    'Set the source URL for an iframe layer in the Web Studio editor. The url is stored on the layer as the iframe src and is never requested by the server; no external API is called.',
     {
       page_id: z.string().describe('The page ID'),
       layer_id: z.string().describe('The iframe layer ID'),

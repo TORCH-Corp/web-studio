@@ -421,7 +421,7 @@ export default function WebhooksPage() {
         </header>
 
         <p className="text-sm text-muted-foreground mb-6">
-          Receive real-time notifications when events occur in your Ycode site.
+          Receive real-time notifications when events occur in your Web Studio site.
         </p>
 
         {isLoading ? (

@@ -201,7 +201,7 @@ function mediaPrefix(condition: string): string | null {
   const px = Number(m[1]);
   if (px <= 767) return 'max-md:'; // small + tiny fold into mobile
   if (px <= 991) return 'max-lg:'; // medium tablet tier
-  return null; // wider than Ycode's tiers represent
+  return null; // wider than Web Studio's tiers represent
 }
 
 function getAccum(map: Map<string, RuleAccum>, key: string): RuleAccum {

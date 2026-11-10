@@ -561,7 +561,7 @@ function resolveImportClasses(el: Element, ctx: ImportContext, path: string, lay
   if (ctx.warnings) {
     warnDroppedStyles(styleAttr, ctx, path, layerId);
     for (const cls of approximated) {
-      warn(ctx, path, `"${cls}" was approximated: Ycode's mobile breakpoint covers everything below 768px, so mobile uses the unprefixed value`, layerId, 'hint');
+      warn(ctx, path, `"${cls}" was approximated: Web Studio's mobile breakpoint covers everything below 768px, so mobile uses the unprefixed value`, layerId, 'hint');
     }
     for (const cls of resolved) warnClass(cls, ctx, path, layerId);
   }
@@ -595,7 +595,7 @@ function warnClass(cls: string, ctx: ImportContext, path: string, layerId: strin
 
   const mobileFirst = variants.find((v) => MOBILE_FIRST_BREAKPOINTS.has(v));
   if (mobileFirst) {
-    warn(ctx, path, `Mobile-first prefix "${mobileFirst}:" (in "${cls}") renders, but couldn't be converted to Ycode's desktop-first breakpoints (no unprefixed value for the same property, or xl:/2xl:), so it can't be edited per breakpoint. Use unprefixed classes for desktop, "max-lg:" for tablet and "max-md:" for mobile`, layerId, 'hint');
+    warn(ctx, path, `Mobile-first prefix "${mobileFirst}:" (in "${cls}") renders, but couldn't be converted to Web Studio's desktop-first breakpoints (no unprefixed value for the same property, or xl:/2xl:), so it can't be edited per breakpoint. Use unprefixed classes for desktop, "max-lg:" for tablet and "max-md:" for mobile`, layerId, 'hint');
     return;
   }
 

@@ -418,7 +418,7 @@ export function useImportPaste({
             );
           }
         } catch (error) {
-          console.error('[useImportPaste] Ycode cross-project paste failed:', error);
+          console.error('[useImportPaste] Web Studio cross-project paste failed:', error);
           toast.error('Failed to paste', {
             id: toastId,
             description: error instanceof Error ? error.message : 'Unknown error',

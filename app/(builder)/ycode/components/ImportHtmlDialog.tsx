@@ -46,7 +46,7 @@ export default function ImportHtmlDialog({
         <DialogHeader>
           <DialogTitle>Convert HTML to layers</DialogTitle>
           <DialogDescription>
-            If you use Tailwind CSS, classes will be converted to design settings in Ycode. &apos;Script&apos; and &apos;Style&apos; tags will be ignored.
+            If you use Tailwind CSS, classes will be converted to design settings in Web Studio. &apos;Script&apos; and &apos;Style&apos; tags will be ignored.
           </DialogDescription>
         </DialogHeader>
 

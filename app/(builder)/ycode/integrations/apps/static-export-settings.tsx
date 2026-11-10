@@ -459,7 +459,7 @@ export default function StaticExportSettings() {
               <FieldLabel htmlFor="github-author-name">Commit Author Name (optional)</FieldLabel>
               <Input
                 id="github-author-name"
-                placeholder="Ycode Static Export"
+                placeholder="Web Studio Static Export"
                 value={config.githubAuthorName}
                 onChange={(e) => updateConfig({ githubAuthorName: e.target.value })}
                 className="text-xs"

@@ -11,7 +11,7 @@ function getAvailableTemplates() {
 }
 
 const EXAMPLE_PROMPTS = {
-  description: 'Example prompts and tool usage patterns for common Ycode tasks',
+  description: 'Example prompts and tool usage patterns for common Web Studio tasks',
   quick_start: {
     title: 'Build a complete landing page',
     prompt: 'Create a modern landing page with a hero section, 3 feature cards, testimonials, and a footer.',

@@ -208,7 +208,7 @@ test('imports mobile-first, gradient and inset classes as editable design', () =
   assert.equal(heading.classes, 'text-7xl max-lg:text-5xl max-md:text-4xl');
 
   assert.deepEqual(warnings.map((w) => w.message), [
-    '"sm:text-5xl" was approximated: Ycode\'s mobile breakpoint covers everything below 768px, so mobile uses the unprefixed value',
+    '"sm:text-5xl" was approximated: Web Studio\'s mobile breakpoint covers everything below 768px, so mobile uses the unprefixed value',
   ]);
 });
 

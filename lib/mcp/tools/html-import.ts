@@ -158,7 +158,7 @@ function findPlacement(
 export function registerHtmlImportTools(server: McpServer) {
   server.tool(
     'import_html',
-    `Import HTML with Tailwind classes as native, editable Ycode layers in one call (see https://docs.ycode.com).
+    `Import HTML with Tailwind classes as native, editable Web Studio layers in one call.
 The HTML is parsed on the server and converted to layers; it is not sent to any external API and the URLs in it are not requested. The only outside lookup is installing Google Fonts named in the classes (see FONTS).
 Use ONLY when the user asks for HTML import or provides HTML/Tailwind markup. Otherwise build with
 add_layout and the layer tools (add_layer, batch_operations, update_layer_design).
@@ -168,7 +168,7 @@ tablet, "max-md:" = mobile) Tailwind work. Mobile-first classes are converted to
 automatically ("flex-col md:flex-row" → "flex-row max-md:flex-col"); without an unprefixed value the
 mobile value is the CSS default ("md:col-span-2" → "col-span-2 max-md:col-span-1"). Only font and color
 classes need an explicit base value; otherwise they stay raw and are reported. "xl:"/"2xl:" have no
-Ycode breakpoint and stay raw. v4 gradients (bg-linear-to-* + from/via/to), inset-*/top-*, and italic
+Web Studio breakpoint and stay raw. v4 gradients (bg-linear-to-* + from/via/to), inset-*/top-*, and italic
 convert to editable design too. Reference color variables as "bg-[var(--<id>)]" / "text-[var(--<id>)]".
 
 FONTS: Google Fonts used via font-['Family_Name'] are installed automatically (see
