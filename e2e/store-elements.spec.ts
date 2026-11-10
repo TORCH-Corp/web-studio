@@ -170,7 +170,7 @@ test('the first paint is the skeleton while the products are asked for, with the
     const page = await context.newPage();
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });
-    await page.route('**/ycode/api/store/products?*', async (route) => {
+    await page.route('**/studio/api/store/products?*', async (route) => {
       await held;
       await route.continue();
     });
@@ -190,7 +190,7 @@ test('the skeleton does not pulse when the visitor asks for reduced motion', asy
   const context = await browser.newContext({ baseURL, extraHTTPHeaders: { 'x-forwarded-host': HOST }, reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
-    await page.route('**/ycode/api/store/products?*', () => { /* held: the skeleton stays */ });
+    await page.route('**/studio/api/store/products?*', () => { /* held: the skeleton stays */ });
     await page.goto('/');
     await expect(gridOf(page).locator('.ws-sk-media')).toHaveCount(8);
     expect(await gridOf(page).locator('.ws-sk').first().evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
@@ -458,7 +458,7 @@ test('the page\'s font is IBM Plex Sans Arabic from this site, never Google', as
     });
     await page.goto('/');
     await expect(cards(page)).toHaveCount(2);
-    await expect(page.locator('link[rel="stylesheet"][href="/ycode/api/store/font"]').first()).toBeAttached();
+    await expect(page.locator('link[rel="stylesheet"][href="/studio/api/store/font"]').first()).toBeAttached();
     expect(await gridOf(page).evaluate((el) => getComputedStyle(el).fontFamily)).toContain('IBM Plex Sans Arabic');
     expect(external, 'no request leaves for a public font CDN').toEqual([]);
   } finally {
@@ -476,7 +476,7 @@ test('the font routes serve this one family to anyone, and nothing else the mirr
       const text = await css.text();
       expect(css.headers()['content-type']).toContain('text/css');
       expect(text).toContain('IBM Plex Sans Arabic');
-      expect(text).toContain('/ycode/api/store/font/files/ibmplexsansarabic/');
+      expect(text).toContain('/studio/api/store/font/files/ibmplexsansarabic/');
       expect(text).not.toContain('gstatic');
       expect(text).not.toContain('/ycode/api/fonts/mirror');
     }
@@ -569,7 +569,7 @@ test('the static export of the page carries each element\'s shell, the grid with
     expect(html.split('class="ws-sk ws-sk-media"').length - 1).toBe(8 + 1); // the grid's eight and the lone card's one
     expect(html).toContain('aria-label="Cart is empty"');
     // A static page has no platform behind it: the shell asks for no font (the export would have rewritten the link into a dead one).
-    expect(html).not.toContain('/ycode/api/store/font');
+    expect(html).not.toContain('/studio/api/store/font');
     expect(html).not.toContain('googleapis');
   } finally {
     await fs.rm(out, { recursive: true, force: true });
@@ -584,7 +584,7 @@ test('the builder canvas draws the sample data and never asks the store API', as
     page.on('request', (req) => {
       const { pathname } = new URL(req.url());
       // The font is the platform's own stylesheet, asked for by any page that draws a store element; the catalogue is what the canvas must not ask.
-      if (/^\/ycode\/api\/store\/(products|categories|settings)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
+      if (/^\/(?:ycode|studio)\/api\/store\/(products|categories|settings)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
     });
     await page.goto(`/ycode/api/platform/sites/${site.id}/open`);
     const canvas = page.frameLocator('iframe').first();

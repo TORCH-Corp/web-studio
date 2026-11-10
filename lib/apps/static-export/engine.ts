@@ -55,7 +55,7 @@ import { createS3Writer } from './writers/s3'
  *
  * Handles both bundled asset paths and internal page links.
  */
-const ABSOLUTE_ASSET_RE = /(?<=["'\s,=])\/(?=a\/[A-Za-z0-9]{22}\/|ycode\/layouts\/assets\/|swiper-minimal\.css|vendor\/swiper-bundle\.min\.js)/g
+const ABSOLUTE_ASSET_RE = /(?<=["'\s,=])\/(?=a\/[A-Za-z0-9]{22}\/|(?:ycode|studio)\/layouts\/assets\/|swiper-minimal\.css|vendor\/swiper-bundle\.min\.js)/g
 const INTERNAL_LINK_RE = /href="\/([^"]*?)"/g
 
 function relativizePaths(html: string, outputKey: string): string {
@@ -66,7 +66,7 @@ function relativizePaths(html: string, outputKey: string): string {
 
   result = result.replace(INTERNAL_LINK_RE, (_match, path: string) => {
     if (/^a\/[A-Za-z0-9]{22}\//.test(path)) return `href="${prefix}${path}"`
-    if (path.startsWith('ycode/layouts/assets/')) return `href="${prefix}${path}"`
+    if (path.startsWith('ycode/layouts/assets/') || path.startsWith('studio/layouts/assets/')) return `href="${prefix}${path}"`
 
     const hashIdx = path.indexOf('#')
     const pathPart = hashIdx >= 0 ? path.slice(0, hashIdx) : path
@@ -261,7 +261,7 @@ export async function exportSite(presetJobId?: string): Promise<ExportJob> {
           // Collect Ycode's built-in placeholder URLs referenced from this
           // page so we can ship them alongside the HTML for fully
           // self-contained hosting (collect before relativizing).
-          for (const match of html.matchAll(/\/ycode\/layouts\/assets\/[^"'\s)]+/g)) {
+          for (const match of html.matchAll(/\/(?:ycode|studio)\/layouts\/assets\/[^"'\s)]+/g)) {
             referencedAssetPaths.add(match[0])
           }
 

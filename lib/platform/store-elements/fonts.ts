@@ -18,10 +18,10 @@ import { FONT_MIRROR_BASE } from '@/lib/platform/font-mirror-url';
 export const STORE_FONT_QUERY = 'family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap';
 
 /** The stylesheet the elements link. */
-export const STORE_FONT_CSS_URL = '/ycode/api/store/font';
+export const STORE_FONT_CSS_URL = '/studio/api/store/font';
 
 /** Where the stylesheet's font files are served from. */
-export const STORE_FONT_FILES_BASE = '/ycode/api/store/font/files';
+export const STORE_FONT_FILES_BASE = '/studio/api/store/font/files';
 
 /** The directory Google serves this family under. */
 const FAMILY_DIRECTORY = 'ibmplexsansarabic';

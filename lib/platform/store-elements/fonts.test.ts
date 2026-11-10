@@ -7,7 +7,7 @@ test('the stylesheet\'s files point at the anonymous route, nothing else changes
   const css = '@font-face{font-family:\'IBM Plex Sans Arabic\';src:url(/ycode/api/fonts/mirror/s/ibmplexsansarabic/v12/a.woff2) format(\'woff2\')}';
   assert.equal(
     toStoreFontCss(css),
-    '@font-face{font-family:\'IBM Plex Sans Arabic\';src:url(/ycode/api/store/font/files/ibmplexsansarabic/v12/a.woff2) format(\'woff2\')}',
+    '@font-face{font-family:\'IBM Plex Sans Arabic\';src:url(/studio/api/store/font/files/ibmplexsansarabic/v12/a.woff2) format(\'woff2\')}',
   );
   assert.equal(toStoreFontCss('body{}'), 'body{}');
 });

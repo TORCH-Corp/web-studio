@@ -410,7 +410,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                   },
                   'src': {
                     'data': {
-                      'content': '/ycode/layouts/assets/hero-background-1.webp'
+                      'content': '/studio/layouts/assets/hero-background-1.webp'
                     },
                     'type': 'dynamic_text'
                   }
@@ -1089,7 +1089,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           },
                           'src': {
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-1.webp'
+                              'content': '/studio/layouts/assets/placeholder-1.webp'
                             },
                             'type': 'dynamic_text'
                           }
@@ -1464,7 +1464,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-2.webp'
+                              'content': '/studio/layouts/assets/placeholder-2.webp'
                             }
                           },
                           'alt': {
@@ -1787,7 +1787,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
               'src': {
                 'type': 'dynamic_text',
                 'data': {
-                  'content': '/ycode/layouts/assets/placeholder-3.webp'
+                  'content': '/studio/layouts/assets/placeholder-3.webp'
                 }
               },
               'alt': {
@@ -3093,7 +3093,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
               'src': {
                 'type': 'dynamic_text',
                 'data': {
-                  'content': '/ycode/layouts/assets/placeholder-2.webp'
+                  'content': '/studio/layouts/assets/placeholder-2.webp'
                 }
               },
               'alt': {
@@ -3319,7 +3319,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/placeholder-1.webp'
+                                  'content': '/studio/layouts/assets/placeholder-1.webp'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -3379,7 +3379,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/placeholder-1.webp'
+                                  'content': '/studio/layouts/assets/placeholder-1.webp'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -4732,7 +4732,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-4.webp'
+                              'content': '/studio/layouts/assets/placeholder-4.webp'
                             }
                           },
                           'alt': {
@@ -6157,7 +6157,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/placeholder-5.webp'
+                                  'content': '/studio/layouts/assets/placeholder-5.webp'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -7303,7 +7303,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
               },
               'src': {
                 'data': {
-                  'content': '/ycode/layouts/assets/placeholder-2.webp'
+                  'content': '/studio/layouts/assets/placeholder-2.webp'
                 },
                 'type': 'dynamic_text'
               }
@@ -8356,7 +8356,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-4.webp'
+                              'content': '/studio/layouts/assets/placeholder-4.webp'
                             }
                           },
                           'alt': {
@@ -10387,7 +10387,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-4.webp'
+                              'content': '/studio/layouts/assets/placeholder-4.webp'
                             }
                           },
                           'alt': {
@@ -13255,7 +13255,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-6.webp'
+                                      'content': '/studio/layouts/assets/placeholder-6.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -13560,7 +13560,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-5.webp'
+                                      'content': '/studio/layouts/assets/placeholder-5.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -13865,7 +13865,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-7.webp'
+                                      'content': '/studio/layouts/assets/placeholder-7.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -14170,7 +14170,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-8.webp'
+                                      'content': '/studio/layouts/assets/placeholder-8.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -14673,7 +14673,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-6.webp'
+                                      'content': '/studio/layouts/assets/placeholder-6.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -14900,7 +14900,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                           },
                                           'src': {
                                             'data': {
-                                              'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                              'content': '/studio/layouts/assets/user-profile-1.webp'
                                             },
                                             'type': 'dynamic_text'
                                           }
@@ -15071,7 +15071,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-7.webp'
+                                      'content': '/studio/layouts/assets/placeholder-7.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -15298,7 +15298,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                           },
                                           'src': {
                                             'data': {
-                                              'content': '/ycode/layouts/assets/user-profile-4.webp'
+                                              'content': '/studio/layouts/assets/user-profile-4.webp'
                                             },
                                             'type': 'dynamic_text'
                                           }
@@ -15832,7 +15832,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                          'content': '/studio/layouts/assets/user-profile-1.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -16158,7 +16158,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-4.webp'
+                                          'content': '/studio/layouts/assets/user-profile-4.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -16480,7 +16480,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       'src': {
                                         'type': 'dynamic_text',
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-3.webp'
+                                          'content': '/studio/layouts/assets/user-profile-3.webp'
                                         }
                                       },
                                       'alt': {
@@ -16855,7 +16855,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-6.webp'
+                                      'content': '/studio/layouts/assets/placeholder-6.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -17100,7 +17100,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                           },
                                           'src': {
                                             'data': {
-                                              'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                              'content': '/studio/layouts/assets/user-profile-1.webp'
                                             },
                                             'type': 'dynamic_text'
                                           }
@@ -17270,7 +17270,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-7.webp'
+                                      'content': '/studio/layouts/assets/placeholder-7.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -17515,7 +17515,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                           },
                                           'src': {
                                             'data': {
-                                              'content': '/ycode/layouts/assets/user-profile-4.webp'
+                                              'content': '/studio/layouts/assets/user-profile-4.webp'
                                             },
                                             'type': 'dynamic_text'
                                           }
@@ -17680,7 +17680,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   'src': {
                                     'type': 'dynamic_text',
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-8.webp'
+                                      'content': '/studio/layouts/assets/placeholder-8.webp'
                                     }
                                   },
                                   'alt': {
@@ -17924,7 +17924,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                           'src': {
                                             'type': 'dynamic_text',
                                             'data': {
-                                              'content': '/ycode/layouts/assets/user-profile-3.webp'
+                                              'content': '/studio/layouts/assets/user-profile-3.webp'
                                             }
                                           },
                                           'alt': {
@@ -18293,7 +18293,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-6.webp'
+                                      'content': '/studio/layouts/assets/placeholder-6.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -18525,7 +18525,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-7.webp'
+                                      'content': '/studio/layouts/assets/placeholder-7.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -18752,7 +18752,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   'src': {
                                     'type': 'dynamic_text',
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-9.webp'
+                                      'content': '/studio/layouts/assets/placeholder-9.webp'
                                     }
                                   },
                                   'alt': {
@@ -19317,7 +19317,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-6.webp'
+                                      'content': '/studio/layouts/assets/placeholder-6.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -19623,7 +19623,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-5.webp'
+                                      'content': '/studio/layouts/assets/placeholder-5.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -19929,7 +19929,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/placeholder-8.webp'
+                                      'content': '/studio/layouts/assets/placeholder-8.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -20406,7 +20406,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                      'content': '/studio/layouts/assets/user-profile-1.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -20546,7 +20546,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-2.webp'
+                              'content': '/studio/layouts/assets/placeholder-2.webp'
                             }
                           },
                           'alt': {
@@ -20904,7 +20904,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-8.webp'
+                              'content': '/studio/layouts/assets/placeholder-8.webp'
                             }
                           },
                           'alt': {
@@ -21255,7 +21255,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/placeholder-10.webp'
+                              'content': '/studio/layouts/assets/placeholder-10.webp'
                             }
                           },
                           'alt': {
@@ -21507,7 +21507,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                  'content': '/studio/layouts/assets/user-profile-1.webp'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -21729,7 +21729,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
               'src': {
                 'type': 'dynamic_text',
                 'data': {
-                  'content': '/ycode/layouts/assets/placeholder-2.webp'
+                  'content': '/studio/layouts/assets/placeholder-2.webp'
                 }
               },
               'alt': {
@@ -23392,7 +23392,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/placeholder-4.webp'
+                                  'content': '/studio/layouts/assets/placeholder-4.webp'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -25745,7 +25745,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                      'content': '/studio/layouts/assets/user-profile-1.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -25911,7 +25911,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-6.webp'
+                                      'content': '/studio/layouts/assets/user-profile-6.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -26077,7 +26077,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-5.webp'
+                                      'content': '/studio/layouts/assets/user-profile-5.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -26243,7 +26243,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-4.webp'
+                                      'content': '/studio/layouts/assets/user-profile-4.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -26409,7 +26409,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-7.webp'
+                                      'content': '/studio/layouts/assets/user-profile-7.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -26575,7 +26575,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-8.webp'
+                                      'content': '/studio/layouts/assets/user-profile-8.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -26946,7 +26946,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                      'content': '/studio/layouts/assets/user-profile-1.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -27115,7 +27115,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-6.webp'
+                                      'content': '/studio/layouts/assets/user-profile-6.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -27284,7 +27284,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-5.webp'
+                                      'content': '/studio/layouts/assets/user-profile-5.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -27453,7 +27453,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/user-profile-4.webp'
+                                      'content': '/studio/layouts/assets/user-profile-4.webp'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -27700,7 +27700,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           },
                           'src': {
                             'data': {
-                              'content': '/ycode/layouts/assets/user-profile-1.webp'
+                              'content': '/studio/layouts/assets/user-profile-1.webp'
                             },
                             'type': 'dynamic_text'
                           }
@@ -28078,7 +28078,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                          'content': '/studio/layouts/assets/user-profile-1.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -28299,7 +28299,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-6.webp'
+                                          'content': '/studio/layouts/assets/user-profile-6.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -28520,7 +28520,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-7.webp'
+                                          'content': '/studio/layouts/assets/user-profile-7.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -28960,7 +28960,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/company-2-logo-black.svg'
+                                  'content': '/studio/layouts/assets/company-2-logo-black.svg'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -29028,7 +29028,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               'src': {
                                 'type': 'dynamic_text',
                                 'data': {
-                                  'content': '/ycode/layouts/assets/company-1-logo-black.svg'
+                                  'content': '/studio/layouts/assets/company-1-logo-black.svg'
                                 }
                               },
                               'alt': {
@@ -29327,7 +29327,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                          'content': '/studio/layouts/assets/user-profile-1.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -29719,7 +29719,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-6.webp'
+                                          'content': '/studio/layouts/assets/user-profile-6.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -29885,7 +29885,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               'src': {
                                 'type': 'dynamic_text',
                                 'data': {
-                                  'content': '/ycode/layouts/assets/company-2-logo-black.svg'
+                                  'content': '/studio/layouts/assets/company-2-logo-black.svg'
                                 }
                               },
                               'alt': {
@@ -29958,7 +29958,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               'src': {
                                 'type': 'dynamic_text',
                                 'data': {
-                                  'content': '/ycode/layouts/assets/company-1-logo-black.svg'
+                                  'content': '/studio/layouts/assets/company-1-logo-black.svg'
                                 }
                               },
                               'alt': {
@@ -30095,7 +30095,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                           'src': {
                             'type': 'dynamic_text',
                             'data': {
-                              'content': '/ycode/layouts/assets/user-profile-6.webp'
+                              'content': '/studio/layouts/assets/user-profile-6.webp'
                             }
                           },
                           'alt': {
@@ -30487,7 +30487,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               'src': {
                                 'type': 'dynamic_text',
                                 'data': {
-                                  'content': '/ycode/layouts/assets/company-1-logo-black.svg'
+                                  'content': '/studio/layouts/assets/company-1-logo-black.svg'
                                 }
                               },
                               'alt': {
@@ -31041,7 +31041,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-1.webp'
+                                          'content': '/studio/layouts/assets/user-profile-1.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -31450,7 +31450,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-6.webp'
+                                          'content': '/studio/layouts/assets/user-profile-6.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -31854,7 +31854,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       'src': {
                                         'type': 'dynamic_text',
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-9.webp'
+                                          'content': '/studio/layouts/assets/user-profile-9.webp'
                                         }
                                       },
                                       'alt': {
@@ -32267,7 +32267,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-5.webp'
+                                          'content': '/studio/layouts/assets/user-profile-5.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -32676,7 +32676,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-4.webp'
+                                          'content': '/studio/layouts/assets/user-profile-4.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -33085,7 +33085,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                       },
                                       'src': {
                                         'data': {
-                                          'content': '/ycode/layouts/assets/user-profile-7.webp'
+                                          'content': '/studio/layouts/assets/user-profile-7.webp'
                                         },
                                         'type': 'dynamic_text'
                                       }
@@ -34411,7 +34411,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/company-1-logo-black.svg'
+                                      'content': '/studio/layouts/assets/company-1-logo-black.svg'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -34969,7 +34969,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/company-1-logo-black.svg'
+                                      'content': '/studio/layouts/assets/company-1-logo-black.svg'
                                     },
                                     'type': 'dynamic_text'
                                   }
@@ -35424,7 +35424,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                               },
                               'src': {
                                 'data': {
-                                  'content': '/ycode/layouts/assets/company-1-logo-black.svg'
+                                  'content': '/studio/layouts/assets/company-1-logo-black.svg'
                                 },
                                 'type': 'dynamic_text'
                               }
@@ -36425,7 +36425,7 @@ export const layoutTemplates: Record<string, LayoutTemplate> = {
                                   },
                                   'src': {
                                     'data': {
-                                      'content': '/ycode/layouts/assets/company-1-logo-black.svg'
+                                      'content': '/studio/layouts/assets/company-1-logo-black.svg'
                                     },
                                     'type': 'dynamic_text'
                                   }

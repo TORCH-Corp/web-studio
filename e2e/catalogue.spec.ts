@@ -94,6 +94,23 @@ test.afterAll(async () => {
   await owner?.dispose();
 });
 
+test('the public prefix: /studio/api answers as /ycode/api does, with the same checks, and nothing else lives under /studio', async () => {
+  const byOldPath = await readJson('/ycode/api/store/products');
+  const byPublicPath = await readJson('/studio/api/store/products');
+  expect(byPublicPath).toEqual(byOldPath);
+
+  // A route that needs a session refuses a visitor on both paths.
+  expect((await visitor.get('/ycode/api/pages')).status()).toBe(401);
+  expect((await visitor.get('/studio/api/pages')).status()).toBe(401);
+  // A path no route names is not found on both.
+  expect((await visitor.get('/studio/api/no-such-route')).status()).toBe(404);
+  // The layouts' assets answer under the public prefix.
+  expect((await visitor.get('/studio/layouts/assets/company-1-logo-black.svg')).status()).toBe(200);
+  // Builder screens are not aliased, and /studio is never a site's page.
+  expect((await visitor.get('/studio')).status()).toBe(404);
+  expect((await visitor.get('/studio/settings/general')).status()).toBe(404);
+});
+
 test('the products route lists the priced plain item and the shirt as one product "from" its lowest variant, and nothing else', async () => {
   const body = await readJson('/ycode/api/store/products');
   expect(body.meta).toEqual({ page: 1, page_size: 12, total: 2 });

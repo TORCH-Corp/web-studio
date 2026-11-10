@@ -123,7 +123,7 @@ test('a buyer finds the real item on /products with its image, adds it, checks o
     // The page's own font: rules from the platform mirror, files on this host, no Google host named anywhere.
     const html = await products!.text();
     expect(html).toContain('id="ycode-google-fonts"');
-    expect(html).toContain('/ycode/api/fonts/published/ibmplexsansarabic/');
+    expect(html).toContain('/studio/api/fonts/published/ibmplexsansarabic/');
     expect(html).not.toMatch(/fonts\.gstatic\.com|fonts\.googleapis\.com/);
     expect(products!.headers().link ?? '').not.toMatch(/gstatic|googleapis/);
     const card = page.locator('[data-ws-store="productGrid"] article.ws-card', { hasText: STORE_ITEM.name });

@@ -101,7 +101,7 @@ const readCart = (page: Page) =>
  */
 async function openProduct(page: Page, path: string) {
   const [, response] = await Promise.all([
-    page.waitForResponse((r) => /\/ycode\/api\/store\/products\/[^/?]+$/.test(new URL(r.url()).pathname)),
+    page.waitForResponse((r) => /\/studio\/api\/store\/products\/[^/?]+$/.test(new URL(r.url()).pathname)),
     page.goto(path),
   ]);
   return response;
@@ -466,7 +466,7 @@ test('the loading state while the chosen product is asked for, with the status f
     const page = await context.newPage();
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });
-    await page.route(`**/ycode/api/store/products/${ITEM.lamp}`, async (route) => {
+    await page.route(`**/studio/api/store/products/${ITEM.lamp}`, async (route) => {
       await held;
       await route.continue();
     });
@@ -614,7 +614,7 @@ test('the builder canvas draws the sample product and never asks the store API; 
     const storeCalls: string[] = [];
     page.on('request', (req) => {
       const { pathname } = new URL(req.url());
-      if (/^\/ycode\/api\/store\/(products|categories|settings)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
+      if (/^\/(?:ycode|studio)\/api\/store\/(products|categories|settings)/.test(pathname) || pathname.startsWith('/store-media/')) storeCalls.push(`${req.method()} ${pathname}`);
     });
     // Open the product page: its layers are the page's own (the cart indicator and the Product page element).
     await expect(async () => {

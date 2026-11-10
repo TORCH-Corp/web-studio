@@ -64,7 +64,7 @@ export default function LoadMoreCollection({
 
     try {
       const response = await fetch(
-        `/ycode/api/collections/${collectionId}/items/load-more`,
+        `/studio/api/collections/${collectionId}/items/load-more`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
