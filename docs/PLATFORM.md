@@ -200,6 +200,7 @@ The production values are in the compose service `web-studio` (secrets from the 
     SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
     SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
     SALES_APP_ID=<Sales's catalogue app id>   # ${SALES_APP_ID} in the root .env; the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
+    CONTACT_CENTER_APP_ID=<Contact Center's catalogue app id>   # the same value contact-center-service has in the compose; a submission's deep link into Contact Center (part 3, W4): torch://app/<this>/prospects/<id> or .../contacts/persons/<id>; unset: links.open_in_contact_center is null
     WS_VISIT_SALT=<a long random secret of Web Studio's own>   # the salt of the visitor key (part 3, W7; the events and totals of W8 use it too); at least 16 characters; unset: no view or event is counted, and the log says so once
     WS_FORM_RETRY_TICK_SECONDS=30   # optional (part 3, W3): how often the waiting form links are looked at; 30 when unset. Not the delay between a submission's attempts
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
@@ -1156,6 +1157,82 @@ A form can send its submissions to Contact Center, and each submission knows wha
   a browser cannot report an order or a form; the product card's button in a real browser reports once however many times
   it is pressed; the new table holds numbers only; the daily run totals every finished day once (the day boundary at
   midnight in Baghdad included), twice over changes nothing, and a row of 91 days ago is gone while its total stays.
+
+## Submissions API for the app (part 3, session W4)
+- **The routes.** All under `platform/`: a session and no site cookie, and **no editor lock**, so the app reads and deletes
+  without opening the site and a delete never answers 423 while another editor holds the lock (the proxy skips the lock
+  under `/ycode/api/platform/`; `e2e/submissions-api.spec.ts` has an editor hold the lock and a second Manager delete).
+  All are `webstudio.manage_forms`: `r` reads, `d` deletes. A site of another organization, an unknown id and an id that is
+  not a uuid are 404; no session 401; no forms leaf 403 `{ required: 'webstudio.manage_forms.r' }` (or `.d`). The site is
+  checked before the query, so a stranger learns nothing from a bad query.
+
+  | Route | Answers |
+  |---|---|
+  | `GET sites/{id}/submissions?form_id=&unread=&cursor=&limit=` | the site's submissions, newest first, spam left out |
+  | `GET sites/{id}/submissions/{submissionId}` | one submission with every field; **reading it sets it read** |
+  | `DELETE sites/{id}/submissions/{submissionId}` | `{ data: { id } }`; the submission and its link row |
+  | `GET sites/{id}/submissions/forms` | `{ data: [{ id, name }] }`: the site's forms, for the list's filter |
+  | `GET submissions/unread-count` | `{ data: { count, sites: [{ id, count }] } }`: the organization's and each live site's (0 when none) |
+
+  Logic in `lib/platform/submissions.ts` (the database), the shapes and rules in `lib/platform/submissions-view.ts` (pure,
+  unit-tested), the shape of each answer in its route file's comment.
+- **The list.** A row is `{ id, date, form: { id, name }, sender: { name, phone }, unread, contact_center: { state, kind, id } }`
+  and the page `{ data, next_cursor }`. `sender` is the payload's `name` and `phone` fields, trimmed; null for a form that has
+  none (the app shows "Not given"). `unread` is the status `new`. `contact_center` is `platform_form_links` (W3): `state`
+  `stored` | `waiting` | `prospect` | `contact`, and for the last two `kind` and `id` name the Contact Center record (null
+  otherwise); a submission with no link row reads `stored`. `date` is `created_at` as an ISO date. `form_id` filters by form;
+  `unread=true` is the unread, `unread=false` the read, absent both; the two combine. Any other query key, a bad value or a
+  `limit` outside 1 to 100 (25 by default) is 400 naming the parameter; a cursor this route did not give is 400
+  `{ code: 'invalid_cursor' }`.
+- **Paging.** Keyset, on `(created_at, id)` newest first, `limit + 1` rows read to know whether there is a next page. The
+  cursor is opaque (base64url of `{ at, id }`) and `at` is the date **as text to the microsecond** (`to_char(... AT TIME ZONE
+  'UTC', '...US')`): a JavaScript date has milliseconds, so two submissions in one millisecond would be skipped or repeated at a
+  page edge. A cursor is only decoded when it has exactly those two keys, a timestamp of that shape and a uuid, and the
+  values go to the database as parameters.
+- **The detail.** The row, and `fields: [{ name, label, value }]`, and `links: { open_in_contact_center }`. The fields are what
+  the visitor sent: the form's fields in the form's order with the form's labels, then what the form does not have (a field
+  removed since, or one invented) in the payload's order under its own name; a field of the form that was not sent is not
+  listed. The payload is jsonb, which keeps no order of its own, so the order can only come from the form. `value` is text, or
+  a list of text for a field sent more than once; the payload is free JSON (the submit route takes any object), so a number or
+  a nested value is made into text.
+- **The link.** `torch://app/<CONTACT_CENTER_APP_ID>/prospects/{id}` for a prospect and
+  `torch://app/<CONTACT_CENTER_APP_ID>/contacts/persons/{id}` for a contact, the same shape the Orders API gives for Sales and
+  Contact Center's own routes (`Contact-Center/src/app/App.tsx`: `prospects/:id`, `contacts/persons/:id`). A contact here is a
+  person: the route of C1 answers `contact` for a person who holds the phone. Null while the state is `waiting` or `stored`,
+  and null without `CONTACT_CENTER_APP_ID` (then the app cannot offer "Open in Contact Center"; the log says so once, as the
+  Orders API's does).
+- **Forms and their names.** ycode has no form name and no field label of its own: a form is the form layer's `settings.id`
+  (what the page sends as `form_id`, `unnamed-form` when it has none) and its fields are inputs. They are read from the site's
+  layers, the pages' and the components' (a form in a component is stored there), published and draft, by one jsonpath
+  statement like W3's. **A form's name is its layer's own name in the layers panel (`customName`), else its id** (open
+  question). Published layers lead and name the form, the draft adds what it has more; two layers with one id are one form
+  (the submit route stores the id only); a password form never submits here and is left out. A field's label is the text of
+  the nearest `label` wrapper around its input (the Form element's own layout), else the text of a label that names it with
+  `for`, else its placeholder, else its name. A form that no layer holds any more keeps its submissions and is listed under its
+  id.
+- **What is never answered.** The stored `metadata` (IP address, user agent, referrer, the page's URL) is not selected, and the
+  record type that the row and the detail are made from has no such field. `e2e/submissions-api.spec.ts` posts with a marker
+  user agent and address and finds neither in any answer. (The builder's own `/ycode/api/form-submissions` still answers the
+  whole row with its `metadata`, to any user who holds `manage_forms` `r`, which since W1 includes the Member and the Viewer.
+  Noted in the pull request.)
+- **Spam** is stored for review and is not a submission of the app: it is not listed, counted, read or deleted here (404).
+- **Delete.** One statement on the site's id; the link row goes with it through the table's foreign key (`ON DELETE CASCADE`).
+  Contact Center is never called: the prospect or contact a submission became stays there (the e2e compares the stub's call
+  log before and after).
+- **Unread count.** One statement over the organization's live sites with a left join on their `new` submissions: a deleted
+  site's are not counted, another organization's never. The Navigator takes `sites[].count` for the site's Contact form and
+  `count` for the module.
+- **Not here** (handoff decision 2): "Mark as unread", "Copy link", the page a submission came from.
+- **Before production.** Session 18 sets `CONTACT_CENTER_APP_ID` in web-studio's environment (the value is in
+  contact-center-service's block of the compose). No migration.
+- **Test.** `lib/platform/submissions-view.test.ts` (the query and its cursor, the sender, the Contact Center marker, the link,
+  the forms' names, fields and labels, the detail, the filter's forms), `lib/platform/permissions.test.ts`;
+  `e2e/submissions-api.spec.ts` (made by real submissions through the site's submit route against the stub Contact Center: the
+  four link states, a spam one and a form no layer holds; the list newest first and by cursor, both filters alone and together,
+  400s; the forms; the count by site and organization; the detail marks it read and the count drops; the deep link; no IP or user
+  agent; delete as a Manager with the link row gone and Contact Center untouched; 403 on delete for a Member and a Viewer who
+  can read; 401 and 403; another site, another organization, spam and unknown ids 404 with nothing changed; the editor lock;
+  a deleted site's count).
 
 ## Reports API for the app (part 3, session W9)
 - **Three reads, all `webstudio.manage_reports` r** (`lib/platform/permissions.ts`, siteless under `platform/`: no site cookie,
