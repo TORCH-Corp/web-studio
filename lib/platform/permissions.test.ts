@@ -231,6 +231,40 @@ test('part 3, W1: form submissions stay on the forms leaf: r to list and read, u
   assert.deepEqual(accessFor('/ycode/api/form-submissions/s1', 'POST', q()), forms('c'));
 });
 
+test('part 3, W4: the app\'s submissions routes are forms r to read and d to delete, and a Member and a Viewer may not delete', () => {
+  const S = '/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b';
+  const ONE = '5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a';
+  const forms = (flag: string) => ({ kind: 'leaf', leaf: 'webstudio.manage_forms', flag });
+
+  assert.equal(matchApiRoute(`${S}/submissions`), 'platform/sites/[id]/submissions');
+  assert.equal(matchApiRoute(`${S}/submissions/${ONE}`), 'platform/sites/[id]/submissions/[submissionId]');
+  // The word "forms" is the list of the site's forms, not a submission with that id.
+  assert.equal(matchApiRoute(`${S}/submissions/forms`), 'platform/sites/[id]/submissions/forms');
+  assert.equal(matchApiRoute('/ycode/api/platform/submissions/unread-count'), 'platform/submissions/unread-count');
+
+  assert.deepEqual(accessFor(`${S}/submissions`, 'GET', q('unread=true')), forms('r'));
+  assert.deepEqual(accessFor(`${S}/submissions/${ONE}`, 'GET', q()), forms('r'));
+  assert.deepEqual(accessFor(`${S}/submissions/${ONE}`, 'DELETE', q()), forms('d'));
+  assert.deepEqual(accessFor(`${S}/submissions/forms`, 'GET', q()), forms('r'));
+  assert.deepEqual(accessFor('/ycode/api/platform/submissions/unread-count', 'GET', q()), forms('r'));
+  // A write verb nobody built is still a write flag, never a read.
+  assert.deepEqual(accessFor(`${S}/submissions/${ONE}`, 'PUT', q()), forms('u'));
+  assert.deepEqual(accessFor(`${S}/submissions`, 'POST', q()), forms('c'));
+
+  for (const profile of ['member', 'viewer'] as const) {
+    const person = sessionOfProfile(profile);
+    for (const pathname of [`${S}/submissions`, `${S}/submissions/${ONE}`, `${S}/submissions/forms`, '/ycode/api/platform/submissions/unread-count']) {
+      assert.equal(allowed(person, 'GET', pathname), true, `${profile} ${pathname}`);
+    }
+    assert.equal(allowed(person, 'DELETE', `${S}/submissions/${ONE}`), false, profile);
+  }
+  const manager = sessionOfProfile('manager');
+  assert.equal(allowed(manager, 'DELETE', `${S}/submissions/${ONE}`), true);
+  // The sites and content leaves are not the forms leaf.
+  const every = { c: true, r: true, u: true, d: true, x: true, export: true, use_ai: true };
+  assert.equal(allowed(sessionWith({ 'webstudio.manage_sites': every, 'webstudio.manage_content': every }), 'GET', `${S}/submissions`), false);
+});
+
 test('part 3, W1: with the scope\'s defaults a Member creates and changes a collection and may not delete one', () => {
   const member = sessionOfProfile('member');
   assert.equal(allowed(member, 'GET', '/ycode/api/collections'), true);
@@ -297,12 +331,20 @@ test('part 3, W1: r on the forms leaf reads submissions only: webhooks, API keys
     assert.equal(allowed(sessionOfProfile('viewer'), 'GET', pathname), false, `viewer ${pathname}`);
     assert.equal(allowed(sessionOfProfile('manager'), 'GET', pathname), true, `manager ${pathname}`);
   }
-  // Every GET of the forms leaf that r opens is a submissions route.
+  // Every GET of the forms leaf that r opens is a submissions route: the builder's two, and the app's four (part 3, W4:
+  // a site's list, one submission, the site's forms and the unread counts). None of them answers a secret.
   const openToReaders = Object.entries(API_ROUTE_ACCESS)
     .filter(([, rule]) => rule.kind === 'leaf' && rule.leaf === 'webstudio.manage_forms' && (rule.flags?.GET ?? 'r') === 'r')
     .map(([pattern]) => pattern)
     .sort();
-  assert.deepEqual(openToReaders, ['form-submissions', 'form-submissions/[id]']);
+  assert.deepEqual(openToReaders, [
+    'form-submissions',
+    'form-submissions/[id]',
+    'platform/sites/[id]/submissions',
+    'platform/sites/[id]/submissions/[submissionId]',
+    'platform/sites/[id]/submissions/forms',
+    'platform/submissions/unread-count',
+  ]);
   // Their writes keep the flags they had.
   assert.deepEqual(accessFor('/ycode/api/webhooks', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'c' });
   assert.deepEqual(accessFor('/ycode/api/webhooks/w1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'u' });

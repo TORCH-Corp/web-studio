@@ -21,7 +21,10 @@
  *                    AI agent and the MCP clients that edit through it (use_ai)
  *   manage_forms     a form's submissions (part 3, PRD V1.0 "Roles and
  *                    permissions"): the list and one submission (r), its status
- *                    (u), delete (d); a visitor's own POST is anonymous. Also
+ *                    (u), delete (d); a visitor's own POST is anonymous. The
+ *                    app's Submissions API (W4): a site's list, one submission
+ *                    (reading sets it read), the site's forms and the unread
+ *                    counts (r), delete (d). Also
  *                    webhooks, API keys and the integrations, which stay hidden:
  *                    their reads need x, so r gives submissions and nothing else
  *   manage_reports   Traffic, Conversions and the Dashboard's visit numbers
@@ -142,6 +145,13 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   // A site's collections for the app's Collections screen (part 3, W6): content's, like the builder's own list. Siteless
   // (platform/), so it needs no site cookie and takes no editor lock; the write side is the builder's.
   'platform/sites/[id]/collections': content(), // GET (r)
+  // A site's form submissions for the app's Contact form screen (part 3, W4): the forms leaf's, and siteless like the list
+  // of collections, so the app needs no site cookie and a delete takes no editor lock (the proxy skips the lock under
+  // platform/). `submissions/forms` is the site's forms for the filter, a literal that wins over `[submissionId]`.
+  'platform/sites/[id]/submissions': forms(), // GET (r): newest first, spam left out
+  'platform/sites/[id]/submissions/forms': forms(), // GET (r)
+  'platform/sites/[id]/submissions/[submissionId]': forms(), // GET one (r), and it sets it read; DELETE (d)
+  'platform/submissions/unread-count': forms(), // GET (r): the organization's count and each site's, for the Navigator and the Dashboard
   'platform/store-elements/categories': content(), // GET (r): the categories a product grid can list, for the open site (part 2, W4)
   'platform/store-elements/products': content(), // GET (r): the products a product card can pick, for the open site (part 2, W4)
   'platform/templates': sites(), // GET (r): TORCH's templates, the same list for every organization (session 4)
