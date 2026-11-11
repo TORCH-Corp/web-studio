@@ -310,7 +310,7 @@ test('part 3, W1: r on the forms leaf reads submissions only: webhooks, API keys
   assert.deepEqual(accessFor('/ycode/api/apps/airtable/sync', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'u' });
 });
 
-test('part 3, W1: the reports leaf is a leaf of the session, and no route is on it before W9', () => {
+test('part 3, W1 and W9: the reports leaf is a leaf of the session, and the three report routes are on it, for r', () => {
   assert.equal(WEB_STUDIO_LEAF.manageReports, 'webstudio.manage_reports');
   assert.equal(requirementName({ leaf: WEB_STUDIO_LEAF.manageReports, flag: 'r' }), 'webstudio.manage_reports.r');
   // Read at sign-in like the others, and held by the three default profiles: Manager every flag, Member and Viewer r.
@@ -324,8 +324,16 @@ test('part 3, W1: the reports leaf is a leaf of the session, and no route is on 
   assert.equal(allowed(reportsOnly, 'GET', '/ycode/api/collections'), false);
   assert.equal(allowed(reportsOnly, 'GET', '/ycode/api/form-submissions'), false);
   assert.equal(isEditingWrite({ kind: 'leaf', leaf: 'webstudio.manage_reports', flag: 'c' }, 'POST'), false);
-  const onReports = Object.entries(API_ROUTE_ACCESS).filter(([, rule]) => rule.kind === 'leaf' && rule.leaf === 'webstudio.manage_reports').map(([pattern]) => pattern);
-  assert.deepEqual(onReports, []);
+  // Session W9: the Reports API for the app, and nothing else is on the leaf.
+  const onReports = Object.entries(API_ROUTE_ACCESS).filter(([, rule]) => rule.kind === 'leaf' && rule.leaf === 'webstudio.manage_reports').map(([pattern]) => pattern).sort();
+  assert.deepEqual(onReports, ['platform/reports/summary', 'platform/sites/[id]/reports/conversions', 'platform/sites/[id]/reports/traffic']);
+  const site = '3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b';
+  for (const pathname of [`/ycode/api/platform/sites/${site}/reports/traffic`, `/ycode/api/platform/sites/${site}/reports/conversions`, '/ycode/api/platform/reports/summary']) {
+    assert.deepEqual(accessFor(pathname, 'GET', q('period=today')), { kind: 'leaf', leaf: 'webstudio.manage_reports', flag: 'r' }, pathname);
+    // A Viewer reads them; a user with the other four leaves and no reports leaf does not; the reports leaf opens nothing else.
+    assert.equal(allowed(sessionOfProfile('viewer'), 'GET', pathname), true, pathname);
+    assert.equal(allowed(sessionWith({ 'webstudio.manage_sites': { r: true }, 'webstudio.manage_content': { r: true }, 'webstudio.manage_forms': { r: true }, 'webstudio.manage_orders': { r: true } }), 'GET', pathname), false, pathname);
+  }
 });
 
 test('a path under /ycode/api that no route names is unmapped; the preview and templates bridge are gated; other paths are not this map\'s', () => {

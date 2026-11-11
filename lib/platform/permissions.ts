@@ -25,7 +25,9 @@
  *                    webhooks, API keys and the integrations, which stay hidden:
  *                    their reads need x, so r gives submissions and nothing else
  *   manage_reports   Traffic, Conversions and the Dashboard's visit numbers
- *                    (part 3): declared in session W1, its routes come in W9
+ *                    (part 3): declared in session W1; the Reports API for the
+ *                    app (W9): a site's traffic and conversions and the
+ *                    organization's visit summary (r)
  *   manage_orders    the storefront (part 2): its buyer-facing reads are
  *                    anonymous on GET (session W2), the checkout on POST and
  *                    its confirmation read on GET (W3); the Orders API for the
@@ -94,6 +96,7 @@ const sites = leaf(WEB_STUDIO_LEAF.manageSites);
 const content = leaf(WEB_STUDIO_LEAF.manageContent);
 const forms = leaf(WEB_STUDIO_LEAF.manageForms);
 const orders = leaf(WEB_STUDIO_LEAF.manageOrders);
+const reports = leaf(WEB_STUDIO_LEAF.manageReports);
 /** The forms leaf's hidden routes: every read needs x. HEAD runs the GET handler, so it needs x too. */
 const integrations = (flags?: LeafRule['flags']): LeafRule => forms({ GET: 'x', HEAD: 'x', ...flags });
 const isPublic = (reason: string): PublicRule => ({ kind: 'public', reason });
@@ -254,6 +257,12 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/orders/[id]': orders(), // GET one order (r)
   'platform/orders/[id]/confirm': orders({ POST: 'x' }),
   'platform/orders/[id]/cancel': orders({ POST: 'x' }), // { reason }
+
+  // The Reports API for the app (part 3, session W9): reads only, so r for every route. Siteless (platform/): they need no
+  // site cookie and take no editor lock; a site is named by its id and checked against the session's organization.
+  'platform/sites/[id]/reports/traffic': reports(), // GET (r)
+  'platform/sites/[id]/reports/conversions': reports(), // GET (r)
+  'platform/reports/summary': reports(), // GET (r): the organization's sites, for the Dashboard
 
   // Visit counting (part 3, session W7): a published page reports its own view. The route answers only on a site's
   // own host (the builder host 404s), to a request of the same origin, size-capped and rate-limited.
