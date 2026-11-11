@@ -1591,6 +1591,27 @@ default and every translation where it was: the default address read the old lan
   configuration" in `contact-center.test.ts` already holds its own timer since session D1 (`fc694b1`); `pnpm test` exited 0 on the
   feature branch before this session (875 tests) and `contact-center.test.ts` passes on Node 20.17, 22.21 and 24.22 (11 of 11, none
   cancelled). Nothing was changed there.
+- **How it was deployed (11 Nov 2026), and how to roll back.** From the session branch's commit `dfd17dd` (the tree of the squash that
+  follows it; after it only this record changes), the way session 19 did, with no migration and no key.
+  1. *Preconditions, read only:* the running image `web-studio:fe3c500-20261111` (id `c70a12bd2b7c`) healthy, 0 restarts;
+     `git diff --name-only fe3c500 HEAD` lists four paths (this file, `default-language.ts`, its unit test and the new e2e spec) and none
+     under `database/`.
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261111-pre-w12.sql.gz`
+     (1.4 MB, 39 tables, `gunzip -t` passes).
+  3. *Rollback tag:* `docker tag web-studio:fe3c500-20261111 web-studio:fe3c500-pre-w12-20261111`.
+  4. *Sync and build:* `git archive` of the commit into a scratch directory, `rsync -azcn --delete` by checksum listed exactly those four paths
+     (three changed, one new; nothing to delete), the real `rsync`, a second dry run with no real change, `docker compose build web-studio`
+     (about two minutes, started with `nohup` and a log), the image tagged `web-studio:dfd17dd-20261111` (id `bccb6adf6634`).
+  5. *Up:* `docker compose up -d --no-deps web-studio`: healthy within seconds, 0 restarts, "knex migrate:latest: Already up to date", both
+     timer lines in the log, no error line.
+  6. *Check (no `pnpm e2e:server`: it is run at the release, in Task C):* `https://web-studio.torchcorp.com/ycode/api/health` answers
+     `{"status":"ok"}`; the published page `https://demo-company.sites.torchcorp.com/` (and `/ar`) answers 200 with its title and `dir="rtl"`;
+     the new SQL (`UPDATE collection_item_values AS v SET value`) is in the running container's server bundle; 8 live sites besides the
+     templates, as before. The production database was **not** used to try a default-language change: the e2e did that on the test database.
+  *Roll back* with `docker tag web-studio:fe3c500-pre-w12-20261111 web-studio:local` and `cd /root/core-backend && docker compose up -d
+  --no-deps web-studio`. Nothing needs `WS_SKIP_MIGRATE`: the database is the same, and the old image simply moves the pages' text and not the
+  items'. A change of default language made while this image ran has moved items' text; the old image reads the same tables and keeps
+  working. A restore of the dump is not needed for this change.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
