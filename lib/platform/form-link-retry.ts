@@ -27,9 +27,13 @@ export function retryTickSeconds(env: Record<string, string | undefined> = proce
   return Number.isInteger(value) && value >= 1 && value <= 3600 ? value : DEFAULT_TICK_SECONDS;
 }
 
-/** Start the timer; a second call does nothing. A run that fails is logged and the next tick tries again. */
-export function startFormLinkRetry(): void {
-  if (globalForRetry.__webStudioFormLinkRetry) return;
+/**
+ * Start the timer; a second call does nothing. A run that fails is logged and the next tick tries again. The start is
+ * logged once, so a server's log shows that the retry is running and how often it looks. `retry` is for tests; the
+ * result is what stops the timer.
+ */
+export function startFormLinkRetry(retry: typeof retryWaitingLinks = retryWaitingLinks): () => void {
+  if (globalForRetry.__webStudioFormLinkRetry) return () => {};
   const state = { running: false };
   globalForRetry.__webStudioFormLinkRetry = state;
 
@@ -38,7 +42,7 @@ export function startFormLinkRetry(): void {
     if (state.running) return;
     state.running = true;
     try {
-      const { taken, set } = await retryWaitingLinks();
+      const { taken, set } = await retry();
       if (taken > 0) console.info(`[form link] retry: ${set} of ${taken} waiting submissions reached Contact Center`);
     } catch (error) {
       console.error('[form link] the retry run failed; the next tick tries again', error);
@@ -47,6 +51,13 @@ export function startFormLinkRetry(): void {
     }
   };
 
-  const timer = setInterval(() => void tick(), retryTickSeconds() * 1000);
+  const seconds = retryTickSeconds();
+  const timer = setInterval(() => void tick(), seconds * 1000);
   timer.unref?.();
+  console.info(`[form link] retry started: waiting submissions are looked at every ${seconds} seconds`);
+
+  return () => {
+    clearInterval(timer);
+    if (globalForRetry.__webStudioFormLinkRetry === state) delete globalForRetry.__webStudioFormLinkRetry;
+  };
 }

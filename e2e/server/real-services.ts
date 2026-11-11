@@ -16,10 +16,15 @@
  *     the person by phone, so every run reuses one person. The Sales orders a run
  *     makes are cancelled by the run itself, through the Orders API's status route.
  *
+ * Part 3 (session D1) adds, for `forms-and-reports.spec.ts`: `TEST_PROSPECT` (the visitor's own phone, apart
+ * from the buyer's: a person's phone makes no prospect), `markTestProspect` (the run's prospect, set aside and
+ * marked so it can be found and cleaned), `watchHosts` and `EDGE_INJECTED` (the own-host check, shared with the
+ * store spec).
+ *
  * Needs E2E_BOS_EMAIL and E2E_BOS_PASSWORD (playwright.server.config.ts).
  */
 
-import { expect, request, type APIRequestContext } from '@playwright/test';
+import { expect, request, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,9 +34,18 @@ export const AUTH_URL = process.env.E2E_AUTH_URL || 'https://auth.torchcorp.com'
 export const SITES_DOMAIN = process.env.E2E_SITES_DOMAIN || 'sites.torchcorp.com';
 export const PRODUCT_SERVICES_URL = process.env.E2E_PRODUCT_SERVICES_URL || 'https://products-services.torchcorp.com';
 export const SALES_URL = process.env.E2E_SALES_URL || 'https://sales.torchcorp.com';
+export const CONTACT_CENTER_URL = process.env.E2E_CONTACT_CENTER_URL || 'https://contact-center.torchcorp.com';
+export const NOTIFICATIONS_URL = process.env.E2E_NOTIFICATIONS_URL || 'https://notif.torchcorp.com';
 
 /** The buyer of every checkout the server specs make. An Iraqi mobile as a buyer types it; Contact Center holds it as 9647700000099. */
 export const TEST_BUYER = { name: 'E2E Buyer', phone: '0770 000 0099', canonical: '9647700000099' };
+
+/**
+ * The visitor of part 3's contact form: an Iraqi mobile of its own, not the buyer's (checkout makes the buyer a person in
+ * Contact Center, and a phone that is a person's makes no prospect). Contact Center holds it as 9647700000098, and a
+ * second run finds the same prospect by it, so the runs make one prospect, not one each.
+ */
+export const TEST_PROSPECT = { name: 'E2E Web Studio test', phone: '0770 000 0098', canonical: '9647700000098' };
 
 export const STORE_ITEM = {
   sku: 'E2E-WS-STORE-01',
@@ -254,4 +268,45 @@ export async function visitor(host: string, extraHeaders: Record<string, string>
 
 export async function deleteSite(api: APIRequestContext | undefined, site: SiteRecord | undefined): Promise<void> {
   if (api && site) await api.delete(`/ycode/api/platform/sites/${site.id}`);
+}
+
+/**
+ * The one public host the builder's page contacts that the app does not ask for. `web-studio.torchcorp.com` is
+ * proxied by Cloudflare, whose edge adds its Web Analytics beacon (`static.cloudflareinsights.com/beacon.min.js`)
+ * to every HTML answer: the same route read from the origin (127.0.0.1:6030) has no such script, and nothing in the
+ * app or in docker/nginx names it (checked 8 Nov 2026, again at part 3's deployment). The sites domain is DNS only,
+ * so a published page is never touched. Turning the beacon off is Cloudflare's dashboard (Web Analytics) or a
+ * `Cache-Control: no-transform` answer: the owner's call, part 2's OPEN_QUESTIONS 53. Until then a run records it as a
+ * known exception instead of failing, and still fails on any other host.
+ */
+export const EDGE_INJECTED = ['static.cloudflareinsights.com'];
+
+/** Every network host a context contacts (pages, scripts, images, fonts, fetches, websockets), by name and port. */
+export function watchHosts(context: BrowserContext): Set<string> {
+  const hosts = new Set<string>();
+  const note = (raw: string) => {
+    const url = new URL(raw);
+    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) hosts.add(url.host);
+  };
+  context.on('request', (request) => note(request.url()));
+  context.on('page', (page: Page) => page.on('websocket', (socket) => note(socket.url())));
+  return hosts;
+}
+
+/**
+ * Sets the run's prospect aside and marks it, so that it can be found and cleaned: not interested (it leaves the
+ * review inbox, which opens on New and Interested, and stays matched by its phone, so the next run reuses it), its
+ * notes one line that says what it is. The name is the marker for a search (`TEST_PROSPECT.name`); Contact Center
+ * has no delete for a prospect, so a person removes it by hand when the e2e is retired.
+ */
+export async function markTestProspect(token: string, prospectId: string): Promise<void> {
+  const cc = await request.newContext({ baseURL: CONTACT_CENTER_URL, extraHTTPHeaders: { authorization: `Bearer ${token}` } });
+  try {
+    const marked = await cc.patch(`/api/v1/prospects/${prospectId}`, {
+      data: { status: 'NOT_INTERESTED', notes: 'Made by the Web Studio server e2e (code/web-studio, pnpm e2e:server). A test prospect: safe to delete.' },
+    });
+    expect(marked.status(), `marking the test prospect: ${await marked.text()}`).toBe(200);
+  } finally {
+    await cc.dispose();
+  }
 }
