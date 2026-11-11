@@ -1,4 +1,5 @@
 import { getAllApps } from '@/lib/apps/registry';
+import { isHiddenApp } from '@/lib/platform/parts';
 import { getConnectedAppIds } from '@/lib/repositories/appSettingsRepository';
 import { noCache } from '@/lib/api-response';
 
@@ -12,7 +13,8 @@ export const revalidate = 0;
  */
 export async function GET() {
   try {
-    const registeredApps = getAllApps();
+    // The connector apps stay hidden (part 3, session W2): what the screen lists is static export and the maps.
+    const registeredApps = getAllApps().filter((app) => !isHiddenApp(app.id));
     const connectedIds = await getConnectedAppIds();
     const connectedSet = new Set(connectedIds);
 

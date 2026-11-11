@@ -14,6 +14,7 @@ const BASE = '/ycode/api/apps/airtable';
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const;
 
 import { ToastError } from '@/lib/toast-error';
+import { isHiddenApp } from '@/lib/platform/parts';
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -51,6 +52,8 @@ let connectionsFetchPromise: Promise<AirtableConnection[]> | null = null;
 
 /** Fetch connections once and cache; deduplicates concurrent calls */
 export function fetchCachedConnections(): Promise<AirtableConnection[]> {
+  // Airtable is hidden in Web Studio (part 3, session W2): its routes answer 404, so there is no connection to ask for.
+  if (isHiddenApp('airtable')) return Promise.resolve([]);
   if (connectionsFetchPromise) return connectionsFetchPromise;
 
   connectionsFetchPromise = jsonFetch<AirtableConnection[]>(`${BASE}/connections`)

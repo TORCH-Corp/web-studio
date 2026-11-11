@@ -1345,7 +1345,6 @@ const LayerItem: React.FC<{
               metadata: {
                 page_url: typeof window !== 'undefined' ? window.location.href : undefined,
               },
-              email: formSettings?.email_notification,
             }),
           });
 
