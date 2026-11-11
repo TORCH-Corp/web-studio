@@ -103,6 +103,8 @@ test('public and session-only routes, and the anonymous exceptions for visitors'
   assert.deepEqual(accessFor('/ycode/api/store/checkout', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'r' });
   assert.deepEqual(accessFor('/ycode/api/store/orders/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'GET', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/store/orders/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'DELETE', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'd' });
+  // A published page's view (part 3, W7): anonymous; the route itself answers on a site's own host only.
+  assert.deepEqual(accessFor('/ycode/api/visits', 'POST', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/load-more', 'POST', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/i1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'c' });
 });

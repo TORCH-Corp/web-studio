@@ -251,6 +251,10 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/orders/[id]/confirm': orders({ POST: 'x' }),
   'platform/orders/[id]/cancel': orders({ POST: 'x' }), // { reason }
 
+  // Visit counting (part 3, session W7): a published page reports its own view. The route answers only on a site's
+  // own host (the builder host 404s), to a request of the same origin, size-capped and rate-limited.
+  'visits': isPublic('a published page reports its own view, anonymously, on the site\'s own host only'),
+
   // Collections (part 3, session W1): content, next to pages. Read r, create c, change u, delete d, publish u.
   'collections': content(),
   'collections/[id]': content(),
