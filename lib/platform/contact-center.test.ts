@@ -135,6 +135,13 @@ test('a prospect call that is refused, fails, answers badly, is too slow or has 
   }
   const slow = ((_url: string, init: RequestInit) =>
     new Promise((_resolve, reject) => init.signal!.addEventListener('abort', () => reject(init.signal!.reason)))) as unknown as typeof fetch;
-  await assert.rejects(findOrCreateProspect(ORG, prospect, 20, ENV, slow), /not reachable/);
+  // The slow fetch settles only when AbortSignal.timeout fires, and that timer does not keep the event loop alive:
+  // with nothing else pending the runner reports the whole test as cancelled. A timer of the test's own holds the loop open for the call.
+  const keepAlive = setTimeout(() => {}, 5_000);
+  try {
+    await assert.rejects(findOrCreateProspect(ORG, prospect, 20, ENV, slow), /not reachable/);
+  } finally {
+    clearTimeout(keepAlive);
+  }
   await assert.rejects(findOrCreateProspect(ORG, prospect, 3000, {}, answer(200, {})), /CONTACT_CENTER_URL and CONTACT_CENTER_API_KEY are not set/);
 });

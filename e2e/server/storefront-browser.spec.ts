@@ -21,24 +21,13 @@
  * site's host, and no request goes to fonts.gstatic.com.
  */
 
-import { chromium, expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { chromium, expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { draftPages, signInWithToken } from '../helpers';
-import { accessToken, cancelOpenOrders, createSellingSite, deleteSite, ensureStoreItem, STORE_ITEM, TEST_BUYER, type SellingSite } from './real-services';
+import { accessToken, cancelOpenOrders, createSellingSite, deleteSite, EDGE_INJECTED, ensureStoreItem, STORE_ITEM, TEST_BUYER, watchHosts, type SellingSite } from './real-services';
 
 test.describe.configure({ mode: 'serial' });
 
 const RUN = Date.now().toString(36);
-
-/**
- * The one public host the builder's page contacts that the app does not ask for. `web-studio.torchcorp.com` is
- * proxied by Cloudflare, whose edge adds its Web Analytics beacon (`static.cloudflareinsights.com/beacon.min.js`)
- * to every HTML answer: the same route read from the origin (127.0.0.1:6030) has no such script, and nothing in the
- * app or in docker/nginx names it (checked 8 Nov 2026). The sites domain is DNS only, so a published store page is
- * never touched. Turning the beacon off is Cloudflare's dashboard (Web Analytics) or a `Cache-Control: no-transform`
- * answer: the owner's call, OPEN_QUESTIONS 53. Until then the run records it as a known exception instead of
- * failing, and still fails on any other host.
- */
-const EDGE_INJECTED = ['static.cloudflareinsights.com'];
 
 let baseURL: string;
 let builderHost: string;
@@ -60,18 +49,6 @@ async function createPage(slug: string, settings: Record<string, unknown> = {}):
   const response = await api.post('/ycode/api/pages', { data: { name: slug, slug, settings } });
   expect(response.status() < 300, await response.text()).toBe(true);
   return (await response.json()).data.id as string;
-}
-
-/** Every network host a context contacts (pages, scripts, images, fonts, fetches, websockets), by name and port. */
-function watchHosts(context: BrowserContext): Set<string> {
-  const hosts = new Set<string>();
-  const note = (raw: string) => {
-    const url = new URL(raw);
-    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) hosts.add(url.host);
-  };
-  context.on('request', (request) => note(request.url()));
-  context.on('page', (page: Page) => page.on('websocket', (socket) => note(socket.url())));
-  return hosts;
 }
 
 const cartBadge = (page: Page) => page.locator('[data-ws-store="cartIndicator"] .ws-badge').first();

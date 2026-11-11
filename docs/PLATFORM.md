@@ -4,7 +4,9 @@ Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publi
 the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below), then part 2 (storefront and cart,
 on `feature/web-studio-storefront-and-cart`: sessions W1 to W8 and D1 below; **"Part 2 in production (session D1)"** is
 the one place that lists its keys, tables, routes, checkout flow, image cache and how it was deployed; "Part 2 release fixes
-(session 22)" lists the fixes made to it and to ycode's own files after the build).
+(session 22)" lists the fixes made to it and to ycode's own files after the build), then part 3 (contact form, collections and
+analytics, on `feature/web-studio-forms-collections-and-analytics`: sessions W1 to W10 and D1 below; **"Part 3 in production
+(session D1)"** is the one place that lists its keys, tables, timers, how it was deployed and how to roll it back).
 
 ## How the service runs (session 11)
 One container, `web-studio`, in the platform's compose project on the production server
@@ -82,7 +84,8 @@ Organization Setup, Product & Services, Contact Center, Sales and Document Cente
 `catalogue.spec.ts` (with the item's real image), `checkout.spec.ts`, `orders-api.spec.ts` and `storefront-browser.spec.ts` (a
 buyer in a real browser on a published site, and every host the store pages and the builder contact). The local `pnpm e2e`
 leaves `e2e/server` out (`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it
-drops the schema.
+drops the schema. Part 3 (session D1, 11 Nov 2026) adds `forms-and-reports.spec.ts`: five tests against the real Contact Center,
+Notification Center and Organization Setup (see "Part 3 in production"); the whole suite is 42 tests.
 - **What a run uses and leaves** (`e2e/server/real-services.ts`). One login for the whole run (`global-setup.ts` keeps the
   token in `E2E_ACCESS_TOKEN`, in memory; auth-service answers 429 after 20 logins in 15 minutes). One fixed test item,
   SKU `E2E-WS-STORE-01` ("E2E Web Studio test item", 25,000 IQD, the "All - General" leaf category, with one 8 x 8 PNG as its
@@ -1127,8 +1130,8 @@ A new submission raises a Business OS notification to the users who may read sub
 - **Keys.** New: `NOTIFICATION_ENGINE_URL` (`http://notification-engine:6004`) and `NOTIFICATION_ENGINE_API_KEY` (the
   root `.env` variable `NOTIFICATION_ENGINE_API_KEY`, the engine's own `SERVICE_API_KEY`, the name and the source Sales
   and the other services use). Already set, now also used: `ORG_SETUP_URL` and `ORG_SETUP_API_KEY` (the member list and the
-  evaluate are auth-service routes taking the same key) and `WS_APP_ID` (the link). Session 18 sets the two new keys on the
-  server's `web-studio` service and proves them with a real submission.
+  evaluate are auth-service routes taking the same key) and `WS_APP_ID` (the link). Session D1 set the two new keys on the
+  server's `web-studio` service and proved them with a real submission (see "Part 3 in production").
 - **Tests.** `lib/platform/submission-notification.test.ts` (the text, the sender, the link, the holders, the cap, the
   concurrency, every failure), `notification.test.ts` (the call), `org-setup.test.ts` (the member read and the
   evaluate), `e2e/submission-notification.spec.ts` against the stub in `e2e/notification-stub.ts`: one submission, one
@@ -1271,8 +1274,8 @@ A new submission raises a Business OS notification to the users who may read sub
   site's are not counted, another organization's never. The Navigator takes `sites[].count` for the site's Contact form and
   `count` for the module.
 - **Not here** (handoff decision 2): "Mark as unread", "Copy link", the page a submission came from.
-- **Before production.** Session 18 sets `CONTACT_CENTER_APP_ID` in web-studio's environment (the value is in
-  contact-center-service's block of the compose). No migration.
+- **Before production.** `CONTACT_CENTER_APP_ID` in web-studio's environment (the value is in contact-center-service's block
+  of the compose); set by session D1 (see "Part 3 in production"). No migration.
 - **Test.** `lib/platform/submissions-view.test.ts` (the query and its cursor, the sender, the Contact Center marker, the link,
   the forms' names, fields and labels, the detail, the filter's forms), `lib/platform/permissions.test.ts`;
   `e2e/submissions-api.spec.ts` (made by real submissions through the site's submit route against the stub Contact Center: the
@@ -1348,6 +1351,101 @@ A new submission raises a Business OS notification to the users who may read sub
   day the run has not reached is read from the detailed rows; the cart and order steps absent for the site that does not sell;
   a period with no visit; a draft with no numbers; the period's refusals and the 366-day limit; a Viewer reads; 401, 403 without
   `manage_reports` r, 404 for another organization's site.
+
+## Part 3 in production (session D1, 11 Nov 2026)
+Part 3 runs in the same container as parts 1 and 2. What it added, in one place; the sessions above give each piece's rules.
+
+- **Keys.** Four new ones in the compose service `web-studio` on the server (`/root/core-backend/docker-compose.yml`, which is
+  not in this repository), one optional one left unset, and one that is gone. Names only; never a value in a repository file:
+
+  | Key | Set to | Root `.env` variable | Used by |
+  |---|---|---|---|
+  | `CONTACT_CENTER_APP_ID` | Contact Center's catalogue id, the same literal contact-center-service has in the compose | (none) | a submission's deep link into Contact Center (W4) |
+  | `NOTIFICATION_ENGINE_URL` | `http://notification-engine:6004` | (none) | the notification of a new submission (W5) |
+  | `NOTIFICATION_ENGINE_API_KEY` | notification-engine's own `SERVICE_API_KEY` | `NOTIFICATION_ENGINE_API_KEY` | the same |
+  | `WS_VISIT_SALT` | a long random secret of Web Studio's own (`openssl rand -hex 32`, 64 characters) | `WEBSTUDIO_VISIT_SALT` (new, added to the root `.env`) | the visitor key of the visit counting and of the events (W7, W8) |
+  | `WS_FORM_RETRY_TICK_SECONDS` | not set: the retry looks every 30 seconds | (none) | the retry of waiting prospects (W3) |
+  | `WS_PARTS` | **gone**: it was never in the production compose, and no code reads it since W2 | (none) | |
+
+  Already set and now also used: `WS_APP_ID` (the notification's link, `torch://app/<WS_APP_ID>/sites/<site>/contact-form/<submission>`),
+  `ORG_SETUP_URL` and `ORG_SETUP_API_KEY` (the members and the evaluate of the notification), `CONTACT_CENTER_URL` and
+  `CONTACT_CENTER_API_KEY` (the prospect call; the route is contact-center-service's `POST /api/v1/internal/prospects/find-or-create`,
+  on production since 11 Nov 2026). A key that is missing makes that piece say so and do nothing, never guess: no `WS_VISIT_SALT`
+  counts no view or event (the log says so once); no `NOTIFICATION_ENGINE_*` or `WS_APP_ID` sends no notification (the log says why);
+  no `CONTACT_CENTER_APP_ID` leaves the deep link null. **Do not change `WEBSTUDIO_VISIT_SALT` without meaning to:** every
+  visitor starts anew from that moment, and the day's unique visitors are counted again.
+- **Tables.** Four, from three migrations, run at start (knex: "Batch 3 run: 3 migrations", 53 to 56). The plan named three; W8 added the
+  fourth: `platform_form_links` (`20261111000002_torch_form_links.ts`: one row per submission, its Contact Center state; the migration
+  gives every submission that exists a `stored` row, and production had none), `platform_visits` and `platform_visit_days`
+  (`20261111000001_torch_visits.ts`) and `platform_visit_site_days` (`20261111000002_torch_visit_events.ts`: the kind check, the one
+  add-to-cart row a day and the site's daily totals). None is a tenant table, none holds anything of a visitor, and a template
+  copy does not copy them. Two of the migrations share the timestamp `20261111000002`; knex orders them by file name.
+- **The daily run and the retry, running and logged.** Each logs once when the service starts (added in this session, with a unit test):
+  `[visit totals] scheduled: the first run is at <time> (01:00 in Baghdad), then every day` and `[form link] retry started: waiting
+  submissions are looked at every 30 seconds`. The daily run then logs `[visit totals] {"skipped":false,"siteDays":N,"deleted":M}`
+  every day at 22:00 UTC; the retry logs `[form link] retry: S of T waiting submissions reached Contact Center` only for a tick
+  that found a waiting row (and an error line when a run fails). On 11 Nov 2026 the startup lines are in the container's log and the
+  run, made by hand in the container as "Visit events, daily totals" shows, answered `{"skipped":false,"siteDays":0,"deleted":0}` (no
+  day had finished). **Not yet seen on the server:** the first scheduled run (22:00 UTC on 11 Nov) and a retry that found a waiting row;
+  Contact Center was not made to fail on production. The retry's whole path (down, waiting, back, set) is the local `e2e/form-prospects.spec.ts`.
+  Check the first run with `docker logs web-studio 2>&1 | grep 'visit totals'`.
+- **Who holds the new leaf** (read from Organization Setup on 11 Nov 2026, after the scope was registered again at start for the two
+  organizations with Web Studio installed). The system profiles took `webstudio.manage_reports` with the defaults: Entity Admin and
+  Manager every flag, Member and Viewer `r`. **A custom profile took it with every flag off**: the test account's "Entity Admin
+  (copy)" had to be given `r` by hand (done by the owner on 11 Nov, before the report checks). Not touched by this session and still
+  to do by hand before Task C: the Member and Viewer system profiles of TORCH corp hold no `webstudio.manage_forms` flag (`-`), because
+  a leaf that existed already keeps what an administrator set (the section "The permission map for part 3").
+- **How it was deployed (11 Nov 2026), and how to roll back.** From the feature branch's head `11197ce` (the image's tree; the commits
+  after it change only `e2e/` and `docs/`).
+  1. *Preconditions, read only:* the feature branch holds the pull requests 39 to 50 (W1 to W10); contact-center-service answers the
+     prospect route on production (401 without credentials, 400 to the service key with an empty body, nothing created).
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261111-pre-part3.sql.gz`
+     (1.2 MB, 38 tables, 53 migrations, 0 form submissions, 101 sites; `gunzip -t` passes). Copies of the compose and the `.env`:
+     `docker-compose.yml.bak-20261111-part3` and `.env.bak-20261111-webstudio-part3`, in `/root/core-backend`.
+  3. *Rollback tag:* `docker tag <the running image> web-studio:b08952e-pre-part3-20261111` (part 2's image, also still
+     `web-studio:b08952e-20261110`).
+  4. *Migration rehearsal, on a copy of the production schema:* `pg_dump --schema-only` of the production database plus the data of
+     `migrations` and `migrations_lock`, restored into a scratch database on the developer's machine (the server's Docker is not used
+     for a throwaway container: nothing there is removed), `knex migrate:latest` as the entrypoint runs it (53 to 56, the four tables with
+     their constraints and indexes), `migrate:rollback` (back to 53, the tables gone), two synthetic submissions inserted, `migrate:latest`
+     again (both got a `stored` row), and a third `migrate:latest` ("Already up to date").
+  5. *Sync and build:* an `rsync -azcn --delete` by checksum listed exactly the 129 paths of `git diff b08952e..HEAD` (128 sent, 1 deleted),
+     then the real `rsync` of that tree, `docker compose build web-studio` (a few minutes, the service untouched until the next step), the image tagged `web-studio:11197ce-20261111`.
+  6. *Compose and `.env`:* the salt appended to `.env` (a new line, mode 600 unchanged), `CONTACT_CENTER_APP_ID`, `NOTIFICATION_ENGINE_URL`,
+     `NOTIFICATION_ENGINE_API_KEY` and `WS_VISIT_SALT` inserted where `WS_PARTS` was mentioned, `docker compose config --quiet` valid.
+  7. *Up:* `docker compose up -d --no-deps web-studio`: healthy within 15 seconds, 0 restarts, "Batch 3 run: 3 migrations", the two timer
+     lines, the permission scope registered again for two organizations.
+  8. *Check:* `pnpm e2e:server`, 42 tests, all pass (the section "Server e2e").
+  *Roll back* with `docker tag web-studio:b08952e-pre-part3-20261111 web-studio:local`, then either (a) **the safe way**: add `WS_SKIP_MIGRATE:
+  "1"` to the compose service and `cd /root/core-backend && docker compose up -d --no-deps web-studio`: part 2's code ignores the four tables
+  and the keys, and keeps what they hold; take the line out again when part 3 is back; or (b) roll the batch back first with the new
+  image still running (`docker exec web-studio sh -c 'cd /tooling && TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json
+  NODE_NO_WARNINGS=1 node -r ts-node/register -r tsconfig-paths/register node_modules/knex/bin/cli.js migrate:rollback --knexfile knexfile.ts'`),
+  which drops the four tables and every visit and link row in them (rehearsed on the scratch copy). **Without (a) or (b) the previous
+  image does not start**: its migration step finds 56 migrations in the database and only 53 files ("The migration directory is
+  corrupt, the following files are missing", checked on the scratch copy), and the container restarts in a loop. By the same rule
+  part 2's own rollback to part 1's image needed `WS_SKIP_MIGRATE` too, though the section above says no compose line needs undoing (not run). A restore of the dump
+  is only for damaged data. The compose, the `.env` and the rollback tags are on the server only. Not rehearsed: the rollback on the server itself.
+- **The server e2e of part 3** (`e2e/server/forms-and-reports.spec.ts`). Real Contact Center, Notification Center and Organization Setup,
+  no stub, no database access. One site of the test organization, with the builder's own Contact form element added in a real
+  browser, published; then, in order: (1) the session carries `manage_reports` and the hidden webhooks, API keys and apps answer 404
+  to a Manager, the Collections list answers `[]`, `can_change: true`; (2) the builder shows Forms and CMS, offers the Contact form
+  element with the switch on, opens both screens, and its requests go to the builder's host only (plus the one known Cloudflare
+  beacon, unchanged); (3) a browser with a normal user agent (the headless default is left out as a bot) views the page, which is one
+  view (204), sends the form (201), is given no cookie and contacts the site's host only; (4) the submission is in the app's API unread
+  with the state `prospect`, the unread count is 1 for the site, Contact Center holds that prospect (source WEB_FORM, the message in its
+  notes), opening the submission reads it and answers the deep link `torch://app/<CONTACT_CENTER_APP_ID>/prospects/<id>`, and the test user's
+  inbox holds `New form submission` with the link into the Web Studio app; (5) Traffic, Conversions and the summary answer with that one
+  view, one visitor, one form (a site that does not sell has no cart or order step), a custom range and a refused period.
+  **What a run leaves and does:** the test site (soft-deleted), one prospect in Contact Center, found by the name `E2E Web Studio test` and
+  the phone `0770 000 0098`, set aside (not interested) and marked in its notes by the run itself (Contact Center has no delete for a
+  prospect, so a person removes it by hand when the e2e is retired; the next run reuses it); the notification, read by the run; the visit
+  rows of the deleted site. Every run tells the test organization's holders of `webstudio.manage_forms` r (12 people are members there)
+  once, as a real submission does: the site's name is `E2E contact <run>`. The local `pnpm e2e` needs the Playwright browser of this
+  version (`pnpm exec playwright install chromium`).
+- **Found while deploying, not fixed here.** The Member and Viewer profiles of TORCH corp lack `manage_forms` r (above). The first
+  scheduled daily run and a real retry are not yet seen (above). `pnpm test` exited 1 on the feature branch because one test was
+  reported cancelled (part 3 OPEN_QUESTIONS 17c); this session fixed the test, not the code: the call it stands in for was never wrong.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream

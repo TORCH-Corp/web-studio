@@ -73,7 +73,7 @@ export function startVisitTotalsSchedule(run: () => Promise<unknown> = runDaily)
   const schedule: Schedule = { timer: null };
   globalForSchedule.__webStudioVisitTotals = schedule;
 
-  const arm = () => {
+  const arm = (): Date => {
     const at = nextRunAt(new Date());
     // setTimeout holds at most 2^31 ms: a day is far under it.
     schedule.timer = setTimeout(async () => {
@@ -86,8 +86,10 @@ export function startVisitTotalsSchedule(run: () => Promise<unknown> = runDaily)
     }, at.getTime() - Date.now());
     // The timer never keeps the process alive on its own.
     schedule.timer.unref?.();
+    return at;
   };
-  arm();
+  // The first line of the daily run's log: it is the proof, on a server, that the schedule is armed and for when.
+  console.log(`[visit totals] scheduled: the first run is at ${arm().toISOString()} (01:00 in Baghdad), then every day`);
 
   return () => {
     if (schedule.timer) clearTimeout(schedule.timer);

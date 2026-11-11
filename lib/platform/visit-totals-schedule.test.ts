@@ -34,10 +34,12 @@ const settle = async () => {
 
 test('the schedule runs once at each 01:00 and arms the next, and stops when told to', async () => {
   mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse('2026-11-11T10:00:00Z') });
-  mock.method(console, 'log', () => {});
+  const log = mock.method(console, 'log', () => {});
   let runs = 0;
   const stop = startVisitTotalsSchedule(async () => ({ skipped: false, siteDays: ++runs, deleted: 0 }));
   try {
+    // The start is logged once, with the moment of the first run: a server's log shows that the schedule is armed.
+    assert.deepEqual(log.mock.calls.map((call) => call.arguments[0]), ['[visit totals] scheduled: the first run is at 2026-11-11T22:00:00.000Z (01:00 in Baghdad), then every day']);
     // A second start while one is going does nothing: one timer, so one run a day.
     startVisitTotalsSchedule(async () => ({ runs: 'second' }))();
     mock.timers.tick(12 * HOUR - 1);
