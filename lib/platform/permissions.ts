@@ -93,8 +93,8 @@ const sites = leaf(WEB_STUDIO_LEAF.manageSites);
 const content = leaf(WEB_STUDIO_LEAF.manageContent);
 const forms = leaf(WEB_STUDIO_LEAF.manageForms);
 const orders = leaf(WEB_STUDIO_LEAF.manageOrders);
-/** The forms leaf's hidden routes: every read needs x. */
-const integrations = (flags?: LeafRule['flags']): LeafRule => forms({ GET: 'x', ...flags });
+/** The forms leaf's hidden routes: every read needs x. HEAD runs the GET handler, so it needs x too. */
+const integrations = (flags?: LeafRule['flags']): LeafRule => forms({ GET: 'x', HEAD: 'x', ...flags });
 const isPublic = (reason: string): PublicRule => ({ kind: 'public', reason });
 const sessionOnly = (reason: string): SessionRule => ({ kind: 'session', reason });
 
