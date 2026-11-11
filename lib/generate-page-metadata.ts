@@ -22,7 +22,7 @@ import { generateColorVariablesCss } from '@/lib/repositories/colorVariableRepos
 import { buildPageHreflangAlternates, type HreflangAlternate } from '@/lib/hreflang-utils';
 import { getTranslatableKey, getTranslatedAssetId, getTranslatedText } from '@/lib/locale-runtime';
 import { buildAbsolutePageUrl, getSiteBaseUrl } from '@/lib/url-utils';
-import { SEO_DEFAULT_KEYS, storedText } from '@/lib/platform/site-seo';
+import { pageTitle, SEO_DEFAULT_KEYS, storedText } from '@/lib/platform/site-seo';
 import type { ProductSeo } from '@/lib/platform/store-elements/product-seo';
 
 /**
@@ -47,7 +47,11 @@ export interface GlobalPageSettings {
   defaultSeoDescription?: string | null;
   /** URL of the default share image, resolved with the favicon (page metadata is built outside the request) */
   defaultSeoImageUrl?: string | null;
-  /** The site's name (Site settings, ycode's `site_name`): a product page's title ends with it (part 2 release fixes, OPEN_QUESTIONS 45) */
+  /**
+   * The site's name (Site settings, ycode's `site_name`): a product page's title ends with it (part 2 release fixes,
+   * OPEN_QUESTIONS 45), every page names it as og:site_name, and a page with no SEO title and no name is titled with it
+   * (part 3, W10).
+   */
   siteName?: string | null;
 }
 
@@ -329,10 +333,13 @@ export async function generatePageMetadata(
     || options.productSeo?.description
     || (isErrorPage ? undefined : seoSettings.defaultSeoDescription || undefined);
 
-  // Build title - resolve field variables if collection item is available
-  let title = seoTitle || page.name || fallbackTitle || 'Page';
+  // Build title - resolve field variables if collection item is available.
+  // TORCH (part 3, W10): a page with no SEO title and no name takes the site's name before the caller's fallback. An
+  // error page keeps its own fallback ("Page Not Found"): the site's name would say nothing about the response.
+  const titleSiteName = isErrorPage ? null : seoSettings.siteName;
+  let title = pageTitle({ title: seoTitle, pageName: page.name, siteName: titleSiteName, fallbackTitle });
   if (collectionItem && seoTitle) {
-    title = resolveInlineVariables(seoTitle, collectionItem) || page.name || fallbackTitle || 'Page';
+    title = pageTitle({ title: resolveInlineVariables(seoTitle, collectionItem), pageName: page.name, siteName: titleSiteName, fallbackTitle });
   }
   if (isPreview) {
     title = `[Preview] ${title}`;
@@ -434,6 +441,8 @@ export async function generatePageMetadata(
       metadata.openGraph = {
         title,
         description,
+        // TORCH (part 3, W10): every page names its site for a shared link, whatever the page's own SEO fields say.
+        ...(seoSettings.siteName ? { siteName: seoSettings.siteName } : {}),
         ...(pageUrl !== undefined ? { url: pageUrl } : {}),
         ...(imageUrl
           ? {

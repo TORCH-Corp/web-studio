@@ -81,7 +81,7 @@ export interface StoreStrings {
   loadingOrder: string;
   cartTitle: string;
   itemCount: (count: number) => string;
-  /** A line's price for one: "25,000 IQD / pcs", or "25,000 IQD each" for an item with no unit. */
+  /** A line's price for one: "25,000 IQD / Piece", or "25,000 IQD each" for an item with no unit. */
   pricePerUnit: (price: string, unit: string | null) => string;
   removeLine: (name: string) => string;
   remove: string;

@@ -794,6 +794,7 @@ code is `lib/platform/store-elements/`; the ycode files only name the new elemen
   elements `pageLocaleOf(currentLocale, availableLocales)` (`links.ts`): the page's own locale, else the site's default
   one. Links are unchanged: the default locale has no prefix. Not changed: the HTML string path (`layerToHtml`, the
   static export) still has only the page's own locale, so its loading shell reads English on a default-language page.
+  (Checked in part 3, session W10: this does not hold for the static export, see "Carried items" below.)
 - **Test.** `e2e/shop-home.spec.ts` and the unit tests beside the modules (`featured`, `category-cards`, `settings`,
   `links`, `strings`, `html`).
 
@@ -827,10 +828,57 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
   starts with an empty cache).
 - **Not changed:** the static export (`lib/apps/static-export/engine.ts`) still writes Google's URLs into the files
   it exports: an exported site has no platform behind it. Uploaded custom fonts were always the site's own files.
+  (Done in part 3, session W10: the export carries the font files itself, see "Carried items" below.)
 - **Test.** `e2e/published-fonts.spec.ts` (a site with the font: no Google host in the HTML or the headers, the rules
   and the preload on the site's host, the route's refusals, a real browser that contacts one host),
   `lib/platform/published-fonts-url.test.ts`, and on the server `e2e/server/storefront-browser.spec.ts`, whose store
   site now carries the font, so its "only the site's own host" check covers it on production.
+
+
+## Carried items (part 3, session W10, 11 Nov 2026)
+Four small items from parts 1 and 2 (PRD V1.0 "Carried from parts 1 and 2"); all in the fork.
+- **The site's name on a published page** (part 1's OPEN_QUESTIONS 17, notebook decision 12). `generatePageMetadata` adds
+  `og:site_name` (`openGraph.siteName`) from the `site_name` setting, which `fetchGlobalPageSettings` already read for the
+  product page's title; it is written wherever the page's Open Graph tags are: every published page, in every language,
+  whatever its own SEO fields say. A page's title is its SEO title, else its name, else the site's name, else the caller's
+  fallback (`pageTitle` in `lib/platform/site-seo.ts`; before, the fallback came before the site's name was asked).
+  Changing the name in Site settings reaches the pages on the next publish: the global settings are cached under the
+  all-pages and global-settings tags, which every publish refreshes. Not changed: an error page keeps its own title
+  ("Page Not Found", the custom page's name) and has no Open Graph tags, as before; the static export writes its own
+  `<title>` and Open Graph tags (`buildDocument`) and has no site name yet.
+- **The unit's name** (part 2's OPEN_QUESTIONS 68, owner 10 Nov 2026). `unitText` (`store-elements/format.ts`) reads the
+  unit's name ("Each"), not its symbol ("ea"); the symbol stands in only for a unit with no name. The product page used
+  its own symbol-first expression and now calls `unitText` too, so the product page, the cart, the checkout and the
+  confirmation (which already showed Sales' name) read the same word. Organization Setup keeps one name per unit, so
+  Arabic and English show the same word: there is no Arabic unit name to read. A cart a buyer already holds shows the
+  new text without being rebuilt: the line keeps the unit's name and symbol and `unitText` picks.
+- **The export's fonts** (part 2's OPEN_QUESTIONS 63). `exportSite` no longer calls ycode's `fetchGoogleFontsCss`:
+  `exportedGoogleFonts(urls)` (`lib/platform/exported-fonts.ts`) reads each family's stylesheet and its files through the
+  font mirror (`getMirroredCss`, `getMirroredFontFile`), writes the rules with their files at `/studio/fonts/{family}/{version}/{file}`
+  (`toExportedFontCss`, `EXPORTED_FONT_FILES_BASE` in `published-fonts-url.ts`) and returns the files, which the engine adds
+  to the export under the same keys (`studio/fonts/...`, with the other bundled assets). `relativizePaths` makes the two
+  places that name them relative to the page, as it does the other bundled assets: `url(/studio/fonts/...)` in the
+  inlined rules and the `href` of the first heading's preload (`./studio/fonts/...` at the root, `../studio/fonts/...`
+  under `/en`). No exported file names `fonts.googleapis.com`, `fonts.gstatic.com` or a route of the platform. A family
+  whose stylesheet or any file the mirror cannot give is left out whole (so no rule names a missing file) and the engine
+  logs `[Static Export] The font mirror could not give ...`; the export completes without that font, as a published page
+  is served without it, and nothing reads Google instead. Before, a Google failure was swallowed with no log.
+- **The loading shell's language in the export** (part 2's OPEN_QUESTIONS 62): **no change to the code.** The note of
+  session 25 above says the export's HTML string path has only the page's own locale. It does not: the engine builds the
+  default pass's context with the site's default locale (`engine.ts`, `ctx`), and `renderResolved` hands
+  `data.locale ?? ctx.locale` to `layerToHtml`, so an Arabic-first site's root and pages read `dir="rtl" lang="ar"` in the
+  export already (`e2e/static-export.spec.ts` passed on the code of 9 Nov). The routes that do render with only the page's
+  own locale are the collection filter and load-more routes (`locale` stays null there unless the request names a
+  non-default language, so a store element inside a collection item would read English on a default-language page);
+  the item names the export, so they are left, and whether any site puts a store element in a collection item was not
+  checked.
+- **Tests.** `lib/platform/site-seo.test.ts` (the title order), `published-fonts-url.test.ts` (the export's rules and
+  keys), `store-elements/format.test.ts` (the unit's name); e2e: `e2e/site-name.spec.ts` (`og:site_name` once on every
+  page of a two-language site, the title, a rename after a publish), `e2e/static-export.spec.ts` (the shells' language;
+  no Google host in any exported file, the files in the export, named relative to each page, a real woff2 and the
+  heading's preload), `product-page.spec.ts` and `checkout-flow.spec.ts` (the unit's name in English and Arabic).
+  The font case needs the mirror to read the family from Google the first time; where the run has no network it checks
+  only that no file names a Google host.
 
 
 ## Proven

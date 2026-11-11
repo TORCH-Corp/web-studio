@@ -36,6 +36,26 @@ export function toPublishedFontCss(mirroredCss: string): string {
   return mirroredCss.split(`${FONT_MIRROR_BASE}/s/`).join(`${PUBLISHED_FONT_FILES_BASE}/`);
 }
 
+/**
+ * Where an exported static site keeps its font files (part 3, W10; OPEN_QUESTIONS 63 of features/storefront-and-cart):
+ * a folder of the export itself, `{base}/{family}/{version}/{file}`, beside `studio/layouts/assets`. An exported
+ * site has no platform behind it, so the mirror's routes cannot serve it: the export carries the files.
+ */
+export const EXPORTED_FONT_FILES_BASE = '/studio/fonts';
+
+/**
+ * A mirrored stylesheet with its files pointed at the export's own folder, root-relative as a page's own links are:
+ * the export makes each of them relative to the page that carries it (lib/apps/static-export/engine.ts).
+ */
+export function toExportedFontCss(mirroredCss: string): string {
+  return mirroredCss.split(`${FONT_MIRROR_BASE}/s/`).join(`${EXPORTED_FONT_FILES_BASE}/`);
+}
+
+/** The key a mirrored font file (`s/inter/v18/….woff2`) has in the export, the path `toExportedFontCss` gave its rule. */
+export function exportedFontKey(mirrorFilePath: string): string {
+  return `${EXPORTED_FONT_FILES_BASE.slice(1)}/${mirrorFilePath.replace(/^s\//, '')}`;
+}
+
 /** The mirror path (`s/inter/v18/….woff2`) of a file the anonymous route was asked for: a family, a version and a file at least. */
 export function publishedFontFilePath(segments: string[]): string | null {
   return segments.length >= 3 ? `s/${segments.join('/')}` : null;

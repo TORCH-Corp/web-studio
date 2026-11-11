@@ -51,9 +51,11 @@ test('the options of a variant read "Colour: Black · Size: M" in each language,
   assert.equal(optionsText([], 'en'), '');
 });
 
-test('a unit is shown by its symbol, else its name', () => {
-  assert.equal(unitText({ name: 'Piece', symbol: 'pcs' }), 'pcs');
+test('a unit is shown by its name, never its symbol: "Each", not "ea" (OPEN_QUESTIONS 68); the symbol only when the unit has no name', () => {
+  assert.equal(unitText({ name: 'Each', symbol: 'ea' }), 'Each');
+  assert.equal(unitText({ name: 'Piece', symbol: 'pcs' }), 'Piece');
   assert.equal(unitText({ name: 'Piece', symbol: '' }), 'Piece');
   assert.equal(unitText({ name: 'Piece' }), 'Piece');
+  assert.equal(unitText({ name: '', symbol: 'ea' }), 'ea');
   assert.equal(unitText(null), null);
 });

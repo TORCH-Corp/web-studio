@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { rewriteGoogleFontCss } from './font-mirror-url';
-import { googleCssQuery, mirroredFilePaths, PUBLISHED_FONT_FILES_BASE, publishedFontFilePath, toPublishedFontCss } from './published-fonts-url';
+import { EXPORTED_FONT_FILES_BASE, exportedFontKey, googleCssQuery, mirroredFilePaths, PUBLISHED_FONT_FILES_BASE, publishedFontFilePath, toExportedFontCss, toPublishedFontCss } from './published-fonts-url';
 
 /** Google's stylesheet for a family, as fonts.googleapis.com answers a modern browser: one rule per subset. */
 const GOOGLE_CSS = `
@@ -47,4 +47,22 @@ test('the anonymous route reads a request as a mirror path: a family, a version 
   const [first] = mirroredFilePaths(MIRRORED);
   const asked = toPublishedFontCss(MIRRORED).match(new RegExp(`${PUBLISHED_FONT_FILES_BASE}/([^)]+)`))![1];
   assert.equal(publishedFontFilePath(asked.split('/')), first);
+});
+
+test('an exported site\'s font rules point every file at a copy the export carries, and name no Google host and no route of the platform (OPEN_QUESTIONS 63)', () => {
+  const css = toExportedFontCss(MIRRORED);
+  assert.ok(!/gstatic|googleapis/.test(css));
+  assert.ok(!css.includes('/ycode/api/fonts') && !css.includes(PUBLISHED_FONT_FILES_BASE), 'a static host has no platform behind it');
+  assert.equal(css.split(`url(${EXPORTED_FONT_FILES_BASE}/ibmplexsansarabic/v15/`).length - 1, 3);
+  assert.ok(css.includes('unicode-range: U+0600-06FF'), 'the rules are otherwise Google\'s own');
+});
+
+test('each file the sheet names is written into the export under the path its rule names', () => {
+  const keys = mirroredFilePaths(MIRRORED).map(exportedFontKey);
+  assert.deepEqual(keys, [
+    'studio/fonts/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys43PW5fslBEg0.woff2',
+    'studio/fonts/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys93PW5fslB.woff2',
+  ]);
+  const named = Array.from(toExportedFontCss(MIRRORED).matchAll(/url\(\/([^)]+)\)/g), (match) => match[1]);
+  for (const key of keys) assert.ok(named.includes(key), `${key} is named by a rule`);
 });
