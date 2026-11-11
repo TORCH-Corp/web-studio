@@ -13,7 +13,8 @@
  * logged and left out; more members than the cap is logged.
  *
  * The text is English, as Sales's is: no service gives a recipient's language
- * (PRD V1.0 Out of Scope). The notification opens the submission in the Web
+ * (PRD V1.0 Out of Scope). The form is named as the app's list names it (its
+ * custom name, else its id), so the words match what the user opens. The notification opens the submission in the Web
  * Studio app by its own deep link, `torch://app/<WS_APP_ID>/…`, the form the
  * shell opens (Orders uses it for the same app).
  *
@@ -22,9 +23,8 @@
  * done is logged. Kept free of Next imports so it runs under `node --test`.
  */
 
-import { listMemberIds, userHolds } from '@/lib/platform/org-setup';
 import { mapLimit } from '@/lib/platform/map-limit';
-import { sendNotification, type Notification, type NotifyResult } from '@/lib/platform/notification';
+import type { Notification, NotifyResult } from '@/lib/platform/notification';
 
 /** The permission whose `r` flag lets a user read submissions. */
 const FORMS_LEAF = 'webstudio.manage_forms';
@@ -107,24 +107,11 @@ export async function findSubmissionReaders(organizationId: string, ports: Reade
 export interface NotificationPorts {
   /** Web Studio's catalogue app id (WS_APP_ID), for the link. */
   appId: string | undefined;
+  /** The form's name as the app shows it (its custom name, else its id); throws when it could not be read. */
+  formName(siteId: string, formId: string): Promise<string>;
   readers(organizationId: string): Promise<string[]>;
   send(organizationId: string, notification: Notification): Promise<NotifyResult>;
   log: NotificationLog;
-}
-
-/** The ports over Organization Setup and Notification Center, from the environment. */
-export function platformNotificationPorts(env: Record<string, string | undefined> = process.env, log: NotificationLog = consoleLog): NotificationPorts {
-  return {
-    appId: env.WS_APP_ID,
-    readers: (organizationId) =>
-      findSubmissionReaders(organizationId, {
-        listMemberIds: (organization, limit) => listMemberIds(organization, limit, env),
-        holds: (organization, userId, leafKey, flag) => userHolds(organization, userId, leafKey, flag, env),
-        log,
-      }),
-    send: (organizationId, notification) => sendNotification(organizationId, notification, env),
-    log,
-  };
 }
 
 /**
@@ -144,7 +131,14 @@ export async function notifyNewSubmission(
     }
     const userIds = await ports.readers(site.organization_id);
     if (userIds.length === 0) return;
-    const text = submissionNotificationText({ senderName: senderNameOf(submission.payload), formName: String(submission.form_id), siteName: site.name });
+    const formId = String(submission.form_id);
+    let formName = formId;
+    try {
+      formName = await ports.formName(site.id, formId);
+    } catch (error) {
+      ports.log.warn(`Submission ${submission.id}: the name of form ${formId} could not be read, so its id is used: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const text = submissionNotificationText({ senderName: senderNameOf(submission.payload), formName, siteName: site.name });
     const result = await ports.send(site.organization_id, { userIds, ...text, target });
     for (const failure of result.failed) {
       ports.log.warn(`Submission ${submission.id}: the notification was not sent to user ${failure.userId}: ${failure.error}`);

@@ -1107,9 +1107,10 @@ A new submission raises a Business OS notification to the users who may read sub
   submissions ask.
 - **The text.** English, as Sales's is (PRD V1.0 Out of Scope: no service gives a recipient's language). Title
   `New form submission`, body `{sender name} sent {form name} on {site name}.` The sender is the form's `name` field as
-  the visitor typed it ("A visitor" when the form has none), the form name is the form's id as the builder shows it, the
-  site name is the site's. Each is tidied (control characters and runs of spaces become one space) and cut to 80
-  characters with an ellipsis, because the visitor chooses the sender and the form id.
+  the visitor typed it ("A visitor" when the form has none), the form name is the one the app's list shows (`formsOfSite`
+  in `lib/platform/submissions.ts`: the form layer's custom name, else its id; the id again when the name could not be
+  read, which is logged), the site name is the site's. Each is tidied (control characters and runs of spaces become one
+  space) and cut to 80 characters with an ellipsis, because the visitor chooses the sender and the form id.
 - **The link.** `torch://app/<WS_APP_ID>/sites/<site id>/contact-form/<submission id>`, the form the shell opens
   (Orders' `open_in_web_studio` is the same with `/orders/<id>`). **The app's routes for it are not built yet**: session
   12 (A1) gives the Contact form screen `/sites/:id/contact-form` and a submission's full page

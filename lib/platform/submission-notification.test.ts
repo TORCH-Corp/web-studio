@@ -36,6 +36,7 @@ function ports(overrides: Partial<NotificationPorts> = {}): { ports: Notificatio
   const sent: Array<{ organizationId: string; userIds: string[]; title: string; body: string; target: string }> = [];
   const base: NotificationPorts = {
     appId: APP,
+    formName: async (_siteId, formId) => formId,
     readers: async () => [USER_A, USER_B],
     send: async (organizationId, notification) => {
       sent.push({ organizationId, ...notification });
@@ -213,4 +214,32 @@ test('a submission with no name field is told as from "A visitor"', async () => 
   const { ports: p, sent } = ports();
   await notifyNewSubmission({ ...SUBMISSION_ROW, payload: { email: 'sara@example.com' } }, SITE_ROW, p);
   assert.equal(sent[0].body, 'A visitor sent Contact form on Al Noor Trading.');
+});
+
+test('the form is named as the app names it: the port is asked with the site and the form id the visitor sent', async () => {
+  const asked: Array<[string, string]> = [];
+  const { ports: p, sent } = ports({
+    formName: async (siteId, formId) => {
+      asked.push([siteId, formId]);
+      return 'Contact us';
+    },
+  });
+  await notifyNewSubmission(SUBMISSION_ROW, SITE_ROW, p);
+  assert.deepEqual(asked, [[SITE, 'Contact form']]);
+  assert.equal(sent[0].body, 'Sara Ali sent Contact us on Al Noor Trading.');
+});
+
+test('a form name that could not be read falls back to the form id, is logged with the submission, and the notification still goes', async () => {
+  const { ports: p, sent, logged } = ports({
+    formName: async () => {
+      throw new Error('connection terminated');
+    },
+  });
+  await notifyNewSubmission(SUBMISSION_ROW, SITE_ROW, p);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body, 'Sara Ali sent Contact form on Al Noor Trading.');
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0].level, 'warn');
+  assert.match(logged[0].message, new RegExp(SUBMISSION));
+  assert.match(logged[0].message, /connection terminated/);
 });

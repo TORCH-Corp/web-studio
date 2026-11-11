@@ -4,7 +4,8 @@
  *
  * One submission that is not spam: one notification to each holder (the Manager, the Member and the Viewer of
  * e2e/auth-fixtures.ts hold it; the one who manages orders only, and the one with no Web Studio leaf, do not), with
- * the English text and the deep link that opens the submission in the app. Spam sends none. The visitor's answer
+ * the English text and the deep link that opens the submission in the app, naming the form as the app's list does
+ * (its custom name, else its id). Spam sends none. The visitor's answer
  * does not wait for the notification. With Notification Center down, or with Organization Setup down, the
  * submission is still stored and answered.
  */
@@ -12,7 +13,7 @@
 import knex, { type Knex } from 'knex';
 import { expect, request, test, type APIRequestContext } from '@playwright/test';
 import { PEOPLE } from './auth-fixtures';
-import { createSite, publish, signIn, type SiteRecord } from './helpers';
+import { createSite, draftPages, openSite, publish, signIn, type SiteRecord } from './helpers';
 import { WS_APP_ID } from './platform-fixtures';
 import { HONEYPOT_FIELD_NAME } from '../lib/form-spam-settings';
 
@@ -89,6 +90,7 @@ test.beforeAll(async ({ baseURL: configured }) => {
   db = knex({ client: 'pg', connection: process.env.DATABASE_URL_TEST });
   owner = await signIn(baseURL, USER);
   site = await createSite(owner, { name: SITE_NAME, slug: `notify-${RUN}`, languages: ['en'], default_language: 'en' });
+  expect((await openSite(owner, site.id)).status()).toBe(303);
   await publish(owner);
   await down([]);
   await delay(0);
@@ -138,6 +140,25 @@ test('a form without a name field is told as from "A visitor"', async () => {
   await expect.poll(async () => (await notifications()).length).toBe(before + READERS.length);
   const latest = (await notifications()).slice(before);
   for (const call of latest) expect(call.body!.body).toBe(`A visitor sent callback on ${SITE_NAME}.`);
+});
+
+test('a form is told by the name the app shows: its custom name when the builder gave it one', async () => {
+  const page = (await draftPages(owner)).find((row) => row.is_index)!;
+  const got = await owner.get(`/ycode/api/layers?page_id=${page.id}`);
+  expect(got.status(), await got.text()).toBe(200);
+  const layers = (await got.json()).data.layers as Array<{ id: string; children?: unknown[] }>;
+  const body = layers.find((layer) => layer.id === 'body')!;
+  body.children = [
+    ...(body.children ?? []),
+    { id: 'lyr-named-form', name: 'form', customName: 'Contact us', settings: { id: 'named-form' }, attributes: { method: 'POST', action: '' }, children: [] },
+  ];
+  expect((await owner.put(`/ycode/api/layers?page_id=${page.id}`, { data: { layers } })).status()).toBe(200);
+
+  const before = (await notifications()).length;
+  const sent = await submit({ name: 'Noor', phone: '07701234567' }, 'named-form');
+  expect(sent.status).toBe(201);
+  await expect.poll(async () => (await notifications()).length).toBe(before + READERS.length);
+  for (const call of (await notifications()).slice(before)) expect(call.body!.body).toBe(`Noor sent Contact us on ${SITE_NAME}.`);
 });
 
 test('spam is stored for review and tells nobody', async () => {

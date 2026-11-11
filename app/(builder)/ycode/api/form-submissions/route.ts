@@ -11,7 +11,8 @@ import { screenFormSubmission, stripHoneypotField } from '@/lib/form-spam-protec
 import { getClientIp } from '@/lib/request-utils';
 import { linkSubmission } from '@/lib/platform/form-links';
 import { planSubmission } from '@/lib/platform/form-submit';
-import { notifyNewSubmission, platformNotificationPorts } from '@/lib/platform/submission-notification';
+import { notifyNewSubmission } from '@/lib/platform/submission-notification';
+import { platformNotificationPorts } from '@/lib/platform/submission-notification-ports';
 import { countEventOnHost } from '@/lib/platform/visit-events';
 
 // Disable caching for this route
