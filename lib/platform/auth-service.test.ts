@@ -18,6 +18,15 @@ test('a my-permissions map becomes the session\'s flags: webstudio leaves only, 
   assert.ok(hasAnyPermission(perms));
 });
 
+test('part 3, W1: the reports leaf is read at sign-in like the other four', () => {
+  const perms = permissionsFromLeafMap({
+    'webstudio.manage_reports': { c: false, r: true, u: false, d: false, x: false, export: false, use_ai: false },
+    'webstudio.manage_forms': { c: false, r: true, u: false, d: false, x: false, export: false, use_ai: false },
+  });
+  assert.deepEqual(perms, { 'webstudio.manage_forms': ['r'], 'webstudio.manage_reports': ['r'] });
+  assert.ok(hasAnyPermission(perms));
+});
+
 test('a map without webstudio leaves, or with every flag false, gives no permission', () => {
   assert.deepEqual(permissionsFromLeafMap({ 'sales.manage_leads': { c: true, r: true, u: true, d: true, x: true } }), {});
   assert.deepEqual(permissionsFromLeafMap({ 'webstudio.manage_sites': { c: false, r: false, u: false, d: false, x: false } }), {});
