@@ -88,7 +88,7 @@ function isUnavailable(error: unknown): error is Error {
   );
 }
 
-async function place(site: Site, store: StoreRow, input: CheckoutInput, ip: string | null): Promise<CheckoutOutcome> {
+async function place(site: Site, store: StoreRow, input: CheckoutInput, ip: string | null, onCreated?: () => Promise<void>): Promise<CheckoutOutcome> {
   const stored = await storedCheckout(site.id, input.checkout_id);
   if (stored) return { kind: 'placed', code: stored.sales_order_code, created: false };
 
@@ -139,6 +139,9 @@ async function place(site: Site, store: StoreRow, input: CheckoutInput, ip: stri
     return { kind: 'service_unavailable' };
   }
   const recorded = await recordCheckout(site.id, input.checkout_id, order);
+  // Once per Sales order made: here, in the flight that made it, so a second request that waits on the flight
+  // (a double click) and a checkout Sales already had do not count it again (part 3, session W8: the order event).
+  if (order.created) await onCreated?.();
   return { kind: 'placed', code: recorded.sales_order_code, created: order.created };
 }
 
@@ -149,12 +152,23 @@ const flights = () => (globalForFlights.__webStudioCheckoutFlights ??= new Map()
  * Place the order of a checkout. A second request for a checkout in flight
  * waits for the first and gets its outcome. A service that cannot be asked is
  * `service_unavailable`, logged; anything else is thrown.
+ *
+ * `onCreated` runs once, after the order is made and recorded, by the flight
+ * that made it: the request that started the flight supplies it, a request that
+ * waits on the flight does not run its own. It must not throw (the visit event
+ * of lib/platform/visit-events.ts, which never does).
  */
-export async function placeOrder(site: Site, store: StoreRow, input: CheckoutInput, ip: string | null): Promise<CheckoutOutcome> {
+export async function placeOrder(
+  site: Site,
+  store: StoreRow,
+  input: CheckoutInput,
+  ip: string | null,
+  onCreated?: () => Promise<void>,
+): Promise<CheckoutOutcome> {
   const key = `${site.id}:${input.checkout_id}`;
   const running = flights().get(key);
   if (running) return running;
-  const flight = place(site, store, input, ip).catch((error: unknown): CheckoutOutcome => {
+  const flight = place(site, store, input, ip, onCreated).catch((error: unknown): CheckoutOutcome => {
     if (!isUnavailable(error)) throw error;
     console.error(`[checkout] site ${site.id} checkout ${input.checkout_id}: ${error.message}`);
     return { kind: 'service_unavailable' };

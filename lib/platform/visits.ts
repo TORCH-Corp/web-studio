@@ -4,7 +4,7 @@
  * One statement per view in `platform_visits`
  * (database/migrations/20261111000001_torch_visits.ts). The row holds what
  * lib/platform/visit-rules.ts made of the request and nothing of the request
- * itself.
+ * itself. Session W8 adds the events of the same table (`recordEvent`).
  */
 
 import { getKnexClient } from '@/lib/knex-client';
@@ -49,6 +49,41 @@ export async function recordView(view: View): Promise<boolean> {
          AND pages.deleted_at IS NULL AND pages.error_page IS NULL
      )`,
     [view.siteId, view.pageId, view.path, view.at, view.visitorKey, source, view.device, view.pageId, view.siteId],
+  );
+  return (result as { rowCount: number }).rowCount > 0;
+}
+
+/** The three conversion events (database/migrations/20261111000002_torch_visit_events.ts lists the four kinds). */
+export type EventKind = 'add_to_cart' | 'order' | 'form';
+
+export interface VisitEvent {
+  siteId: string;
+  kind: EventKind;
+  at: Date;
+  visitorKey: string;
+  device: VisitDevice;
+}
+
+/**
+ * Store one event of a visitor (session W8). It has no page. It takes the
+ * source of the visitor's first row of the day, as a view reached from the site's
+ * own page does, so an order is an order "from search" when the visitor came from
+ * one; 'direct' when the visitor has no earlier row (their view was not counted).
+ *
+ * An add to cart is one row per visitor and day: a repeat is refused by the
+ * table's unique index and nothing is stored. Orders and form submissions are
+ * every one stored (each is a real order or submission). Returns whether a row
+ * was stored.
+ */
+export async function recordEvent(event: VisitEvent): Promise<boolean> {
+  const knex = await getKnexClient();
+  const result = await knex.raw(
+    `INSERT INTO ${TABLE} (site_id, page_id, path, created_at, visitor_key, source, device, kind)
+     SELECT ?::uuid, NULL, NULL, ?::timestamptz, ?::text,
+       COALESCE((SELECT earlier.source FROM ${TABLE} earlier WHERE earlier.site_id = ? AND earlier.visitor_key = ? ORDER BY earlier.created_at, earlier.id LIMIT 1), 'direct'),
+       ?::text, ?::text
+     ON CONFLICT DO NOTHING`,
+    [event.siteId, event.at, event.visitorKey, event.siteId, event.visitorKey, event.device, event.kind],
   );
   return (result as { rowCount: number }).rowCount > 0;
 }

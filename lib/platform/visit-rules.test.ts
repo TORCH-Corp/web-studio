@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { MAX_VISIT_BYTES, deviceOf, isBot, isPrefetch, normalisePath, parseVisit, sourceOf, visitDay, visitSalt, visitorKey } from './visit-rules';
+import { MAX_VISIT_BYTES, deviceOf, isBot, isPrefetch, normalisePath, parseReport, parseVisit, sourceOf, visitDay, visitSalt, visitorKey } from './visit-rules';
 
 const SALT = 'a-salt-of-the-unit-tests';
 const SITE = '3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b';
@@ -202,4 +202,28 @@ test('the size cap leaves room for the longest path the route accepts', () => {
   const longest = JSON.stringify({ page_id: PAGE, path: `/${'ع'.repeat(500)}`, referrer: `${'a'.repeat(250)}.com` });
   assert.ok(Buffer.byteLength(longest, 'utf8') <= MAX_VISIT_BYTES);
   assert.notEqual(parseVisit(longest), null);
+});
+
+test('a report is a view of a page, or the one event a browser can report: an add to cart (session W8)', () => {
+  assert.deepEqual(parseReport(JSON.stringify({ kind: 'add_to_cart' })), { kind: 'add_to_cart' });
+  // Anything else in an event's body is not read.
+  assert.deepEqual(parseReport(JSON.stringify({ kind: 'add_to_cart', page_id: 'nope', path: 7, name: 'Sara' })), { kind: 'add_to_cart' });
+
+  // A body with no kind is a view, as the page of session W7 sends it; 'view' says so.
+  const view = { kind: 'view', view: { pageId: PAGE, path: '/about', referrerHost: 'www.google.com' } };
+  assert.deepEqual(parseReport(JSON.stringify({ page_id: PAGE, path: '/about/', referrer: 'www.google.com' })), view);
+  assert.deepEqual(parseReport(JSON.stringify({ kind: 'view', page_id: PAGE, path: '/about/', referrer: 'www.google.com' })), view);
+});
+
+test('a browser cannot report an order or a form submission: the server writes those', () => {
+  const view = { page_id: PAGE, path: '/' };
+  for (const kind of ['order', 'form', 'Add_To_Cart', 'add_to_cart ', '', 'whatever', 7, null, ['add_to_cart'], {}]) {
+    assert.equal(parseReport(JSON.stringify({ kind, ...view })), null, JSON.stringify(kind));
+  }
+});
+
+test('a report that is neither is refused', () => {
+  for (const raw of ['', 'not json', '[]', 'null', '"add_to_cart"', JSON.stringify({ kind: 'view' }), JSON.stringify({ kind: 'view', page_id: 'nope', path: '/' })]) {
+    assert.equal(parseReport(raw), null, raw);
+  }
 });
