@@ -3,7 +3,7 @@ import { accessFor, isEditingWrite, requirementName } from '@/lib/platform/permi
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/security-headers-server';
-import { isHiddenBuilderRoute, partsRaised } from '@/lib/platform/parts';
+import { isHiddenBuilderRoute } from '@/lib/platform/parts';
 import { acquireSiteLock } from '@/lib/platform/site-lock';
 import { prefetchYcodePublishedAt } from '@/lib/ycode-html-comment';
 import { internalPathOf, isUnderPublicPrefix } from '@/lib/platform/public-path';
@@ -146,8 +146,9 @@ export async function proxy(request: NextRequest) {
     return withPathname(NextResponse.next(), request, pathname);
   }
 
-  // Screens removed from the builder, and Collections / Forms until WS_PARTS=1 (part 1, session 3).
-  if (isHiddenBuilderRoute(pathname, partsRaised())) {
+  // Screens removed from the builder, and what stays hidden whatever the user's flags: the webhooks, the API keys and the
+  // connector apps, screens and routes alike (part 1, session 3; part 3, session W2). Collections and Forms are shown.
+  if (isHiddenBuilderRoute(pathname)) {
     return new NextResponse('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 

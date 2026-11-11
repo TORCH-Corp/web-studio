@@ -15,13 +15,13 @@ const ORG_A = '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a';
 const ORG_B = '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b';
 const quiet: Log = { info: () => undefined, warn: () => undefined };
 
-test('a registration names the app, the organization and the four-leaf scope', () => {
+test('a registration names the app, the organization and the five-leaf scope', () => {
   const registration = scopeRegistration(APP_ID, ORG_A) as { app_id: string; app_name: string; entity_id: string; scope: { app_id: string; modules: unknown[] } };
   assert.equal(registration.app_id, APP_ID);
   assert.equal(registration.app_name, 'Web Studio');
   assert.equal(registration.entity_id, ORG_A);
   assert.equal(registration.scope.app_id, APP_ID);
-  assert.equal(registration.scope.modules.length, 3);
+  assert.equal(registration.scope.modules.length, 4);
 });
 
 test('app.installed registers the scope for Web Studio installs only, and only with an organization', () => {

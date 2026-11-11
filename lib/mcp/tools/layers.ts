@@ -697,7 +697,6 @@ COMMON USES:
     `Configure how a form layer handles submissions.
 
 success_action: "message" (default) shows the form's alert child; "redirect" sends the visitor to redirect_url.
-email_notification: when enabled, each submission emails the configured address. Requires SMTP set up in site settings.
 redirect_url: used when success_action is "redirect". Accepts an internal path "/thank-you" or an external URL.`,
     {
       page_id: z.string().describe('The page ID'),
@@ -705,13 +704,8 @@ redirect_url: used when success_action is "redirect". Accepts an internal path "
       success_action: z.enum(['message', 'redirect']).optional(),
       redirect_url: z.string().optional()
         .describe('For success_action "redirect": the URL to send the user to.'),
-      email_notification: z.object({
-        enabled: z.boolean(),
-        to: z.string().describe('Email address that receives a notification on each submission'),
-        subject: z.string().optional().describe('Subject line of the notification email'),
-      }).optional(),
     },
-    async ({ page_id, layer_id, success_action, redirect_url, email_notification }) => {
+    async ({ page_id, layer_id, success_action, redirect_url }) => {
       const layers = await getPageLayers(page_id);
       const layer = findLayerById(layers, layer_id);
       if (!layer) {
@@ -723,7 +717,6 @@ redirect_url: used when success_action is "redirect". Accepts an internal path "
         const existingForm = (settings.form || {}) as Record<string, unknown>;
         const nextForm: Record<string, unknown> = { ...existingForm };
         if (success_action !== undefined) nextForm.success_action = success_action;
-        if (email_notification !== undefined) nextForm.email_notification = email_notification;
         if (redirect_url !== undefined) {
           nextForm.redirect_url = { type: 'dynamic_text', data: { content: redirect_url } };
         }

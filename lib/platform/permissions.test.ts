@@ -3,7 +3,10 @@ import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { permissionsFromLeafMap } from './auth-service';
 import { API_ROUTE_ACCESS, accessFor, flagForMethod, isEditingWrite, matchApiRoute, requirementName, mayHoldSiteLock } from './permissions';
+import { hasFlag, type BosSession } from './session';
+import { WEB_STUDIO_LEAF, buildWebStudioScope, scopeLeaves } from './web-studio-scope';
 
 const API_DIR = path.join(__dirname, '..', '..', 'app', '(builder)', 'ycode', 'api');
 
@@ -55,7 +58,7 @@ test('the flag follows the method unless the route says otherwise', () => {
   assert.deepEqual(accessFor('/ycode/api/project/export', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'export' });
   assert.deepEqual(accessFor('/ycode/api/apps/static-export/export', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'export' });
   assert.deepEqual(accessFor('/ycode/api/ai/chat', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'use_ai' });
-  assert.deepEqual(accessFor('/ycode/api/collections/items/delete', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'd' });
+  assert.deepEqual(accessFor('/ycode/api/collections/items/delete', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'd' });
   assert.deepEqual(accessFor('/ycode/api/devtools/reset-db', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_sites', flag: 'd' });
 });
 
@@ -100,8 +103,10 @@ test('public and session-only routes, and the anonymous exceptions for visitors'
   assert.deepEqual(accessFor('/ycode/api/store/checkout', 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'r' });
   assert.deepEqual(accessFor('/ycode/api/store/orders/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'GET', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/store/orders/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b', 'DELETE', q()), { kind: 'leaf', leaf: 'webstudio.manage_orders', flag: 'd' });
+  // A published page's view (part 3, W7): anonymous; the route itself answers on a site's own host only.
+  assert.deepEqual(accessFor('/ycode/api/visits', 'POST', q()), { kind: 'public' });
   assert.deepEqual(accessFor('/ycode/api/collections/c1/items/load-more', 'POST', q()), { kind: 'public' });
-  assert.deepEqual(accessFor('/ycode/api/collections/c1/items/i1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'c' });
+  assert.deepEqual(accessFor('/ycode/api/collections/c1/items/i1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'c' });
 });
 
 test('the Orders API (part 2, W8): r to list and read, x to confirm and cancel, on the orders leaf', () => {
@@ -119,6 +124,258 @@ test('the Orders API (part 2, W8): r to list and read, x to confirm and cancel, 
   assert.equal(matchApiRoute(`/ycode/api/platform/orders/${ORDER}/deliver`), null);
   // Orders are not the open site's content: no editor lock.
   assert.equal(isEditingWrite(accessFor(`/ycode/api/platform/orders/${ORDER}/confirm`, 'POST', q())!, 'POST'), false);
+});
+
+/** A session with the flags a profile holds, read the way the callback reads them at sign-in. */
+function sessionWith(leafMap: Record<string, Record<string, boolean>>): BosSession {
+  return { sub: 'u', email: 'u@example.com', name: 'U', org: 'o', perms: permissionsFromLeafMap(leafMap), iat: 0, exp: 0 };
+}
+
+/** The session of a new organization's Manager, Member or Viewer: the defaults the published scope carries. */
+function sessionOfProfile(profile: 'manager' | 'member' | 'viewer'): BosSession {
+  const leaves = scopeLeaves(buildWebStudioScope('de4944b6-b43a-4cc5-96fe-c1d38852b61d'));
+  return sessionWith(Object.fromEntries(leaves.map((leaf) => [leaf.leaf_key, leaf.system_role_defaults[profile]])));
+}
+
+/** What the proxy decides: public and session-only requests pass, a leaf request needs its flag. */
+function allowed(session: BosSession, method: string, pathname: string): boolean {
+  const decision = accessFor(pathname, method, q());
+  assert.ok(decision && decision.kind !== 'unmapped', `${method} ${pathname} is mapped`);
+  return decision.kind !== 'leaf' || hasFlag(session, decision.leaf, decision.flag);
+}
+
+test('part 3, W1: every collections route is on the content leaf, with the flag its verb needs', () => {
+  const C = '/ycode/api/collections';
+  const content = (flag: string) => ({ kind: 'leaf', leaf: 'webstudio.manage_content', flag });
+  const expected: Array<[string, string, string]> = [
+    // Read.
+    ['GET', C, 'r'],
+    ['GET', `${C}/c1`, 'r'],
+    ['GET', `${C}/c1/usage`, 'r'],
+    ['GET', `${C}/c1/fields`, 'r'],
+    ['GET', `${C}/c1/fields/f1`, 'r'],
+    ['GET', `${C}/c1/fields/f1/usage`, 'r'],
+    ['GET', `${C}/fields`, 'r'],
+    ['GET', `${C}/c1/items`, 'r'],
+    ['GET', `${C}/c1/items/i1`, 'r'],
+    ['GET', `${C}/c1/items/i1/values`, 'r'],
+    ['GET', `${C}/c1/items/published`, 'r'],
+    ['GET', `${C}/c1/items/unpublished`, 'r'],
+    ['GET', `${C}/import/imp1/status`, 'r'],
+    ['POST', `${C}/items/batch`, 'r'],
+    ['POST', `${C}/items/slugs`, 'r'],
+    // Create.
+    ['POST', C, 'c'],
+    ['POST', `${C}/sample`, 'c'],
+    ['POST', `${C}/c1/fields`, 'c'],
+    ['POST', `${C}/c1/items`, 'c'],
+    ['POST', `${C}/c1/items/i1/duplicate`, 'c'],
+    ['POST', `${C}/c1/import`, 'c'],
+    ['POST', `${C}/import/process`, 'c'],
+    // Change.
+    ['PUT', `${C}/c1`, 'u'],
+    ['PUT', `${C}/reorder`, 'u'],
+    ['PUT', `${C}/c1/fields/f1`, 'u'],
+    ['PUT', `${C}/c1/fields/reorder`, 'u'],
+    ['PUT', `${C}/c1/items/i1`, 'u'],
+    ['PUT', `${C}/c1/items/i1/status`, 'u'],
+    ['PUT', `${C}/c1/items/i1/values`, 'u'],
+    ['POST', `${C}/c1/items/reorder`, 'u'],
+    // Publish.
+    ['POST', `${C}/c1/publish`, 'u'],
+    // Delete.
+    ['DELETE', `${C}/c1`, 'd'],
+    ['DELETE', `${C}/c1/fields/f1`, 'd'],
+    ['DELETE', `${C}/c1/items/i1`, 'd'],
+    ['POST', `${C}/items/delete`, 'd'],
+  ];
+  for (const [method, pathname, flag] of expected) assert.deepEqual(accessFor(pathname, method, q()), content(flag), `${method} ${pathname}`);
+
+  // No collections route is left on another leaf: a session route (not the public API under v1/) is content's.
+  for (const [pattern, rule] of Object.entries(API_ROUTE_ACCESS)) {
+    if (!pattern.startsWith('collections')) continue;
+    assert.equal(rule.kind === 'leaf' && rule.leaf, 'webstudio.manage_content', pattern);
+  }
+  // A published page's visitor still filters and pages a collection without a session.
+  assert.deepEqual(accessFor(`${C}/c1/items/filter`, 'POST', q()), { kind: 'public' });
+  assert.deepEqual(accessFor(`${C}/c1/items/load-more`, 'POST', q()), { kind: 'public' });
+  // A collection write changes the open site, so it waits for the editor lock like a page write.
+  assert.equal(isEditingWrite(accessFor(C, 'POST', q())!, 'POST'), true);
+  assert.equal(isEditingWrite(accessFor(`${C}/c1/publish`, 'POST', q())!, 'POST'), true);
+});
+
+test('part 3, W6: the app\'s list of a site\'s collections is content r: a Viewer reads it, the forms and sites leaves do not', () => {
+  const list = '/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/collections';
+  assert.equal(matchApiRoute(list), 'platform/sites/[id]/collections');
+  assert.deepEqual(accessFor(list, 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'r' });
+  // It is a read, never an editing write: no editor lock is asked for.
+  assert.equal(isEditingWrite(accessFor(list, 'GET', q())!, 'GET'), false);
+  // The write side stays the builder's: this route has no write verb the map would let through as anything but c, u or d on content.
+  assert.deepEqual(accessFor(list, 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'c' });
+
+  assert.equal(allowed(sessionOfProfile('viewer'), 'GET', list), true);
+  assert.equal(allowed(sessionOfProfile('member'), 'GET', list), true);
+  const every = { c: true, r: true, u: true, d: true, x: true, export: true, use_ai: true };
+  assert.equal(allowed(sessionWith({ 'webstudio.manage_sites': every, 'webstudio.manage_forms': every }), 'GET', list), false);
+});
+
+test('part 3, W1: form submissions stay on the forms leaf: r to list and read, u for a status, d to delete, a visitor\'s POST anonymous', () => {
+  const forms = (flag: string) => ({ kind: 'leaf', leaf: 'webstudio.manage_forms', flag });
+  assert.deepEqual(accessFor('/ycode/api/form-submissions', 'GET', q('form_id=contact')), forms('r'));
+  assert.deepEqual(accessFor('/ycode/api/form-submissions/s1', 'GET', q()), forms('r'));
+  assert.deepEqual(accessFor('/ycode/api/form-submissions/s1', 'PUT', q()), forms('u'));
+  assert.deepEqual(accessFor('/ycode/api/form-submissions/s1', 'DELETE', q()), forms('d'));
+  assert.deepEqual(accessFor('/ycode/api/form-submissions', 'DELETE', q()), forms('d'));
+  assert.deepEqual(accessFor('/ycode/api/form-submissions', 'POST', q()), { kind: 'public' });
+  // Only the list route's POST is the visitor's: a POST on one submission is not anonymous.
+  assert.deepEqual(accessFor('/ycode/api/form-submissions/s1', 'POST', q()), forms('c'));
+});
+
+test('part 3, W4: the app\'s submissions routes are forms r to read and d to delete, and a Member and a Viewer may not delete', () => {
+  const S = '/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b';
+  const ONE = '5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a';
+  const forms = (flag: string) => ({ kind: 'leaf', leaf: 'webstudio.manage_forms', flag });
+
+  assert.equal(matchApiRoute(`${S}/submissions`), 'platform/sites/[id]/submissions');
+  assert.equal(matchApiRoute(`${S}/submissions/${ONE}`), 'platform/sites/[id]/submissions/[submissionId]');
+  // The word "forms" is the list of the site's forms, not a submission with that id.
+  assert.equal(matchApiRoute(`${S}/submissions/forms`), 'platform/sites/[id]/submissions/forms');
+  assert.equal(matchApiRoute('/ycode/api/platform/submissions/unread-count'), 'platform/submissions/unread-count');
+
+  assert.deepEqual(accessFor(`${S}/submissions`, 'GET', q('unread=true')), forms('r'));
+  assert.deepEqual(accessFor(`${S}/submissions/${ONE}`, 'GET', q()), forms('r'));
+  assert.deepEqual(accessFor(`${S}/submissions/${ONE}`, 'DELETE', q()), forms('d'));
+  assert.deepEqual(accessFor(`${S}/submissions/forms`, 'GET', q()), forms('r'));
+  assert.deepEqual(accessFor('/ycode/api/platform/submissions/unread-count', 'GET', q()), forms('r'));
+  // A write verb nobody built is still a write flag, never a read.
+  assert.deepEqual(accessFor(`${S}/submissions/${ONE}`, 'PUT', q()), forms('u'));
+  assert.deepEqual(accessFor(`${S}/submissions`, 'POST', q()), forms('c'));
+
+  for (const profile of ['member', 'viewer'] as const) {
+    const person = sessionOfProfile(profile);
+    for (const pathname of [`${S}/submissions`, `${S}/submissions/${ONE}`, `${S}/submissions/forms`, '/ycode/api/platform/submissions/unread-count']) {
+      assert.equal(allowed(person, 'GET', pathname), true, `${profile} ${pathname}`);
+    }
+    assert.equal(allowed(person, 'DELETE', `${S}/submissions/${ONE}`), false, profile);
+  }
+  const manager = sessionOfProfile('manager');
+  assert.equal(allowed(manager, 'DELETE', `${S}/submissions/${ONE}`), true);
+  // The sites and content leaves are not the forms leaf.
+  const every = { c: true, r: true, u: true, d: true, x: true, export: true, use_ai: true };
+  assert.equal(allowed(sessionWith({ 'webstudio.manage_sites': every, 'webstudio.manage_content': every }), 'GET', `${S}/submissions`), false);
+});
+
+test('part 3, W1: with the scope\'s defaults a Member creates and changes a collection and may not delete one', () => {
+  const member = sessionOfProfile('member');
+  assert.equal(allowed(member, 'GET', '/ycode/api/collections'), true);
+  assert.equal(allowed(member, 'POST', '/ycode/api/collections'), true);
+  assert.equal(allowed(member, 'POST', '/ycode/api/collections/c1/items'), true);
+  assert.equal(allowed(member, 'PUT', '/ycode/api/collections/c1/items/i1'), true);
+  assert.equal(allowed(member, 'POST', '/ycode/api/collections/c1/publish'), true);
+  assert.equal(allowed(member, 'DELETE', '/ycode/api/collections/c1'), false);
+  assert.equal(allowed(member, 'POST', '/ycode/api/collections/items/delete'), false);
+  // Submissions: read, not changed or deleted.
+  assert.equal(allowed(member, 'GET', '/ycode/api/form-submissions'), true);
+  assert.equal(allowed(member, 'GET', '/ycode/api/form-submissions/s1'), true);
+  assert.equal(allowed(member, 'PUT', '/ycode/api/form-submissions/s1'), false);
+  assert.equal(allowed(member, 'DELETE', '/ycode/api/form-submissions/s1'), false);
+});
+
+test('part 3, W1: with the scope\'s defaults a Viewer reads collections and submissions and changes neither', () => {
+  const viewer = sessionOfProfile('viewer');
+  for (const pathname of ['/ycode/api/collections', '/ycode/api/collections/c1', '/ycode/api/collections/c1/items', '/ycode/api/collections/c1/items/i1', '/ycode/api/form-submissions', '/ycode/api/form-submissions/s1']) {
+    assert.equal(allowed(viewer, 'GET', pathname), true, pathname);
+  }
+  assert.equal(allowed(viewer, 'POST', '/ycode/api/collections/items/batch'), true); // a read that uses POST
+  const writes: Array<[string, string]> = [
+    ['POST', '/ycode/api/collections'],
+    ['PUT', '/ycode/api/collections/c1'],
+    ['DELETE', '/ycode/api/collections/c1'],
+    ['POST', '/ycode/api/collections/c1/publish'],
+    ['POST', '/ycode/api/collections/c1/fields'],
+    ['POST', '/ycode/api/collections/c1/items'],
+    ['PUT', '/ycode/api/collections/c1/items/i1'],
+    ['PUT', '/ycode/api/collections/c1/items/i1/status'],
+    ['POST', '/ycode/api/collections/c1/items/reorder'],
+    ['POST', '/ycode/api/collections/items/delete'],
+    ['POST', '/ycode/api/collections/c1/import'],
+    ['PUT', '/ycode/api/form-submissions/s1'],
+    ['DELETE', '/ycode/api/form-submissions/s1'],
+    ['DELETE', '/ycode/api/form-submissions'],
+  ];
+  for (const [method, pathname] of writes) assert.equal(allowed(viewer, method, pathname), false, `${method} ${pathname}`);
+});
+
+test('part 3, W1: the forms leaf alone no longer reaches collections, and the content leaf alone does not reach submissions', () => {
+  const every = { c: true, r: true, u: true, d: true, x: true, export: true, use_ai: true };
+  const formsOnly = sessionWith({ 'webstudio.manage_forms': every });
+  for (const [method, pathname] of [['GET', '/ycode/api/collections'], ['GET', '/ycode/api/collections/c1/items'], ['POST', '/ycode/api/collections'], ['PUT', '/ycode/api/collections/c1'], ['DELETE', '/ycode/api/collections/c1'], ['POST', '/ycode/api/collections/items/batch']]) {
+    assert.equal(allowed(formsOnly, method, pathname), false, `${method} ${pathname}`);
+  }
+  assert.equal(allowed(formsOnly, 'GET', '/ycode/api/form-submissions'), true);
+  assert.equal(allowed(formsOnly, 'PUT', '/ycode/api/form-submissions/s1'), true);
+  assert.equal(allowed(formsOnly, 'DELETE', '/ycode/api/form-submissions/s1'), true);
+
+  const contentOnly = sessionWith({ 'webstudio.manage_content': every });
+  assert.equal(allowed(contentOnly, 'DELETE', '/ycode/api/collections/c1'), true);
+  assert.equal(allowed(contentOnly, 'GET', '/ycode/api/form-submissions'), false);
+  assert.equal(allowed(contentOnly, 'DELETE', '/ycode/api/form-submissions/s1'), false);
+});
+
+test('part 3, W1: r on the forms leaf reads submissions only: webhooks, API keys and the integrations need x to read', () => {
+  const hiddenReads = ['/ycode/api/webhooks', '/ycode/api/webhooks/w1', '/ycode/api/webhooks/w1/deliveries', '/ycode/api/api-keys', '/ycode/api/apps/airtable/connections', '/ycode/api/apps/airtable/bases', '/ycode/api/apps/webflow/imports', '/ycode/api/apps/webflow/sites', '/ycode/api/apps/mailerlite/groups'];
+  for (const pathname of hiddenReads) {
+    assert.deepEqual(accessFor(pathname, 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'x' }, pathname);
+    assert.deepEqual(accessFor(pathname, 'HEAD', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'x' }, `HEAD ${pathname}`);
+    assert.equal(allowed(sessionOfProfile('member'), 'GET', pathname), false, `member ${pathname}`);
+    assert.equal(allowed(sessionOfProfile('viewer'), 'GET', pathname), false, `viewer ${pathname}`);
+    assert.equal(allowed(sessionOfProfile('manager'), 'GET', pathname), true, `manager ${pathname}`);
+  }
+  // Every GET of the forms leaf that r opens is a submissions route: the builder's two, and the app's four (part 3, W4:
+  // a site's list, one submission, the site's forms and the unread counts). None of them answers a secret.
+  const openToReaders = Object.entries(API_ROUTE_ACCESS)
+    .filter(([, rule]) => rule.kind === 'leaf' && rule.leaf === 'webstudio.manage_forms' && (rule.flags?.GET ?? 'r') === 'r')
+    .map(([pattern]) => pattern)
+    .sort();
+  assert.deepEqual(openToReaders, [
+    'form-submissions',
+    'form-submissions/[id]',
+    'platform/sites/[id]/submissions',
+    'platform/sites/[id]/submissions/[submissionId]',
+    'platform/sites/[id]/submissions/forms',
+    'platform/submissions/unread-count',
+  ]);
+  // Their writes keep the flags they had.
+  assert.deepEqual(accessFor('/ycode/api/webhooks', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'c' });
+  assert.deepEqual(accessFor('/ycode/api/webhooks/w1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'u' });
+  assert.deepEqual(accessFor('/ycode/api/api-keys/k1', 'DELETE', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'd' });
+  assert.deepEqual(accessFor('/ycode/api/apps/airtable/sync', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'u' });
+});
+
+test('part 3, W1 and W9: the reports leaf is a leaf of the session, and the three report routes are on it, for r', () => {
+  assert.equal(WEB_STUDIO_LEAF.manageReports, 'webstudio.manage_reports');
+  assert.equal(requirementName({ leaf: WEB_STUDIO_LEAF.manageReports, flag: 'r' }), 'webstudio.manage_reports.r');
+  // Read at sign-in like the others, and held by the three default profiles: Manager every flag, Member and Viewer r.
+  assert.deepEqual(sessionOfProfile('manager').perms['webstudio.manage_reports'], ['c', 'r', 'u', 'd', 'x', 'export', 'use_ai']);
+  assert.deepEqual(sessionOfProfile('member').perms['webstudio.manage_reports'], ['r']);
+  assert.deepEqual(sessionOfProfile('viewer').perms['webstudio.manage_reports'], ['r']);
+  assert.equal(hasFlag(sessionOfProfile('viewer'), 'webstudio.manage_reports', 'r'), true);
+  assert.equal(hasFlag(sessionWith({ 'webstudio.manage_content': { r: true } }), 'webstudio.manage_reports', 'r'), false);
+  // Holding it gives nothing else: reports are not content, and it never takes the editor lock.
+  const reportsOnly = sessionWith({ 'webstudio.manage_reports': { c: true, r: true, u: true, d: true, x: true, export: true, use_ai: true } });
+  assert.equal(allowed(reportsOnly, 'GET', '/ycode/api/collections'), false);
+  assert.equal(allowed(reportsOnly, 'GET', '/ycode/api/form-submissions'), false);
+  assert.equal(isEditingWrite({ kind: 'leaf', leaf: 'webstudio.manage_reports', flag: 'c' }, 'POST'), false);
+  // Session W9: the Reports API for the app, and nothing else is on the leaf.
+  const onReports = Object.entries(API_ROUTE_ACCESS).filter(([, rule]) => rule.kind === 'leaf' && rule.leaf === 'webstudio.manage_reports').map(([pattern]) => pattern).sort();
+  assert.deepEqual(onReports, ['platform/reports/summary', 'platform/sites/[id]/reports/conversions', 'platform/sites/[id]/reports/traffic']);
+  const site = '3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b';
+  for (const pathname of [`/ycode/api/platform/sites/${site}/reports/traffic`, `/ycode/api/platform/sites/${site}/reports/conversions`, '/ycode/api/platform/reports/summary']) {
+    assert.deepEqual(accessFor(pathname, 'GET', q('period=today')), { kind: 'leaf', leaf: 'webstudio.manage_reports', flag: 'r' }, pathname);
+    // A Viewer reads them; a user with the other four leaves and no reports leaf does not; the reports leaf opens nothing else.
+    assert.equal(allowed(sessionOfProfile('viewer'), 'GET', pathname), true, pathname);
+    assert.equal(allowed(sessionWith({ 'webstudio.manage_sites': { r: true }, 'webstudio.manage_content': { r: true }, 'webstudio.manage_forms': { r: true }, 'webstudio.manage_orders': { r: true } }), 'GET', pathname), false, pathname);
+  }
 });
 
 test('a path under /ycode/api that no route names is unmapped; the preview and templates bridge are gated; other paths are not this map\'s', () => {

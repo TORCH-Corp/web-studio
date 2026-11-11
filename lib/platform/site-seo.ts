@@ -18,3 +18,18 @@ export const SEO_DEFAULT_KEYS = {
 export function storedText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
+
+/**
+ * A published page's `<title>` (part 3, session W10; part 1's OPEN_QUESTIONS 17, notebook decision 12): what the page
+ * says of itself comes first, its SEO title and then its name; the site's name is the last resort before the caller's
+ * own fallback ("Home", the slug) and "Page", so a page with neither is titled with the site and not with a guess.
+ * A value that is empty or only spaces counts as not set.
+ */
+export function pageTitle(input: {
+  title?: string | null;
+  pageName?: string | null;
+  siteName?: string | null;
+  fallbackTitle?: string;
+}): string {
+  return storedText(input.title) ?? storedText(input.pageName) ?? storedText(input.siteName) ?? storedText(input.fallbackTitle) ?? 'Page';
+}

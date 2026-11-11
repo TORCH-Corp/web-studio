@@ -269,7 +269,7 @@ test('a buyer adds two items and a variant, reviews the cart, changes a quantity
     await expect(cartEl(page).locator('.ws-line .ws-line-name')).toHaveText(['Desk lamp', 'Garden hose', 'Linen shirt']);
     await expect(cartEl(page).locator('.ws-muted').first()).toHaveText('3 items');
     await expect(lineOf(page, 'Linen shirt').locator('.ws-line-opts')).toHaveText('Size: Small · Colour: White');
-    await expect(lineOf(page, 'Desk lamp').locator('.ws-line-unit')).toHaveText('25,000 IQD / pcs');
+    await expect(lineOf(page, 'Desk lamp').locator('.ws-line-unit')).toHaveText('25,000 IQD / Piece');
     await expect(lineOf(page, 'Linen shirt').locator('.ws-line-total')).toHaveText('35,000 IQD');
     await expect(summaryRow(cartEl(page), 'Subtotal')).toHaveText('75,000 IQD');
     await expect(summaryRow(cartEl(page), 'Delivery fee')).toHaveText(money(fee));
@@ -297,7 +297,7 @@ test('a buyer adds two items and a variant, reviews the cart, changes a quantity
     await expect(page).toHaveURL('/checkout');
     const side = checkoutEl(page).locator('.ws-co-side');
     await expect(side.locator('.ws-mini .ws-mini-name')).toHaveText(['Desk lamp', 'Linen shirt']);
-    await expect(side.locator('.ws-mini').first().locator('.ws-line-unit')).toHaveText('2 × 25,000 IQD / pcs');
+    await expect(side.locator('.ws-mini').first().locator('.ws-line-unit')).toHaveText('2 × 25,000 IQD / Piece');
     await expect(summaryRow(side, 'Total')).toHaveText(money(85000 + fee));
     await expect(placeOrder(page)).toHaveText(`Place order · ${money(85000 + fee)}`);
     await expect(checkoutEl(page).getByText('Cash on delivery')).toBeVisible();
@@ -617,7 +617,7 @@ test('the cart reads the catalogue when it opens: a new price replaces the old a
 
     await page.goto('/cart');
     const lamp = lineOf(page, 'Desk lamp');
-    await expect(lamp.locator('.ws-line-unit')).toHaveText('27,500 IQD / pcs');
+    await expect(lamp.locator('.ws-line-unit')).toHaveText('27,500 IQD / Piece');
     await expect(lamp.locator('[data-line-state="price-updated"]')).toHaveText('Price updated · was 25,000 IQD');
     await expect(lamp.locator('.ws-line-total')).toHaveText('27,500 IQD');
     const hose = lineOf(page, 'Garden hose');
@@ -713,7 +713,7 @@ test('in Arabic the pages, the city names, the field errors and the confirmation
     await expect(cartEl(page).getByRole('heading', { level: 1 })).toHaveText('سلة التسوق');
     // The count after the number is the invariant singular, also for one (OPEN_QUESTIONS 51).
     await expect(cartEl(page).locator('.ws-muted').first()).toHaveText('1 قطعة');
-    await expect(lineOf(page, 'مصباح مكتب').locator('.ws-line-unit')).toHaveText('25,000 د.ع / pcs');
+    await expect(lineOf(page, 'مصباح مكتب').locator('.ws-line-unit')).toHaveText('25,000 د.ع / Piece');
     await expect(summaryRow(cartEl(page), 'المجموع الفرعي')).toHaveText('25,000 د.ع');
     await expect(summaryRow(cartEl(page), 'رسوم التوصيل')).toHaveText(`${fee.toLocaleString('en-US')} د.ع`);
     await cartEl(page).getByRole('link', { name: 'إتمام الطلب' }).click();

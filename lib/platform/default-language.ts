@@ -16,6 +16,13 @@
  * A translation moves only when it was really applied: a key ycode's injector does
  * not handle (a component instance override, for one) keeps its row, and the
  * source keeps its text, which is what that language showed before.
+ *
+ * The text of collection items follows the same rule (OPEN_QUESTIONS 24c): an item's
+ * values are the default language's text and its other languages are `cms`
+ * translations. The rule is `swapCmsSource` (`template-collections.ts`), which the
+ * template copy runs on the rows it is about to insert; `planCmsSwap` runs that same
+ * function on a copy of a site's draft rows and reports what it changed, and
+ * `swapSiteSourceLanguage` writes it in the same transaction as the pages'.
  */
 
 import { randomUUID } from 'crypto';
@@ -24,6 +31,7 @@ import { generateComponentContentHash, generatePageLayersHash, generatePageMetad
 import { getKnexClient } from '@/lib/knex-client';
 import { extractComponentTranslatableItems, extractFolderTranslatableItems, extractPageTranslatableItems, injectTranslatedText } from '@/lib/localisation-utils';
 import { getTranslatableKey } from '@/lib/locale-runtime';
+import { rehashItems, swapCmsSource, type CollectionTableRows } from '@/lib/platform/template-collections';
 import type { Component, Layer, Page, Translation } from '@/types';
 
 type Row = Record<string, unknown>;
@@ -205,6 +213,50 @@ export function applySourceSwap(rows: SourceRows, plan: SourceSwapPlan, fromLoca
   rows.translations.splice(0, rows.translations.length, ...kept);
 }
 
+/** The draft rows of a site's collections the items' swap reads (the cms translations of the two languages included). */
+export type CmsRows = Pick<CollectionTableRows, 'collection_fields' | 'collection_items' | 'collection_item_values' | 'translations'>;
+
+/** What `swapCmsSource` changed in a site's draft rows. */
+export interface CmsSwapPlan {
+  /** value row id → the text it now holds */
+  values: Map<string, string>;
+  /** item id → its content hash after the swap, for the items whose values changed: ycode keeps it equal to the hash of the item's values */
+  itemHashes: Map<string, string>;
+  /** ids of the new default's translation rows now held by the item values */
+  moved: string[];
+  /** translation rows for the old default language to insert, or (same id) to bring up to date; empty when it leaves the site */
+  written: Row[];
+}
+
+/**
+ * What the items' values and cms translations become when `toLocaleId` replaces `fromLocaleId` as the default.
+ * It is `swapCmsSource`, the rule the template copy applies, run on a copy of the rows: the rows it is given
+ * are not touched. `keepFrom` is false when the old default leaves the site.
+ */
+export function planCmsSwap(rows: CmsRows, toLocaleId: string, fromLocaleId: string, keepFrom: boolean): CmsSwapPlan {
+  const work = structuredClone(rows);
+  const valueBefore = new Map(work.collection_item_values.map((row) => [row.id as string, row.value]));
+  const translationBefore = new Map(work.translations.map((row) => [row.id as string, JSON.stringify(row)]));
+
+  swapCmsSource(work, toLocaleId, fromLocaleId, keepFrom);
+
+  const plan: CmsSwapPlan = { values: new Map(), itemHashes: new Map(), moved: [], written: [] };
+  const changedItems = new Set<unknown>();
+  for (const row of work.collection_item_values) {
+    if (row.value === valueBefore.get(row.id as string)) continue;
+    plan.values.set(row.id as string, row.value as string);
+    changedItems.add(row.item_id);
+  }
+  const items = work.collection_items.filter((item) => changedItems.has(item.id));
+  rehashItems(items, work.collection_item_values);
+  for (const item of items) plan.itemHashes.set(item.id as string, item.content_hash as string);
+
+  const after = new Set(work.translations.map((row) => row.id as string));
+  plan.moved = [...translationBefore.keys()].filter((id) => !after.has(id));
+  plan.written = work.translations.filter((row) => translationBefore.get(row.id as string) !== JSON.stringify(row));
+  return plan;
+}
+
 /**
  * Makes `to` a site's default language: swaps the draft source to it and moves the
  * default flag, in one transaction, so the text and the flag never disagree (Site
@@ -223,6 +275,18 @@ export async function swapSiteSourceLanguage(siteId: string, from: { id: string 
     };
     const plan = planSourceSwap(rows, to.id, keepFrom);
     await writePlan(trx, siteId, rows, plan, from.id);
+
+    // The items' text, in the same transaction: a site with no item translated into the new default has nothing to read.
+    const cmsTranslations = rows.translations.filter((row) => row.source_type === 'cms');
+    if (cmsTranslations.some((row) => row.locale_id === to.id && !row.deleted_at)) {
+      const cms: CmsRows = {
+        collection_fields: await draft('collection_fields'),
+        collection_items: await draft('collection_items'),
+        collection_item_values: await draft('collection_item_values'),
+        translations: cmsTranslations,
+      };
+      await writeCmsPlan(trx, siteId, planCmsSwap(cms, to.id, from.id, keepFrom), from.id);
+    }
     // The flag, as ycode's setDefaultLocale moves it: drafts only; publish carries it.
     const now = new Date().toISOString();
     await trx('locales').where({ tenant_id: siteId, is_published: false, is_default: true }).update({ is_default: false, updated_at: now });
@@ -261,5 +325,61 @@ async function writePlan(trx: Knex.Transaction, siteId: string, rows: SourceRows
       .insert({ id: randomUUID(), tenant_id: siteId, locale_id: fromLocaleId, ...out, is_completed: true, is_published: false, deleted_at: null, created_at: now, updated_at: now })
       .onConflict(['tenant_id', 'locale_id', 'source_type', 'source_id', 'content_key', 'is_published'])
       .merge({ content_type: out.content_type, content_value: out.content_value, is_completed: true, deleted_at: null, updated_at: now });
+  }
+}
+
+/** Pieces of a list, so no statement carries more bound values than Postgres allows. */
+function* chunks<T>(list: T[], size: number): Generator<T[]> {
+  for (let start = 0; start < list.length; start += size) yield list.slice(start, start + size);
+}
+
+/**
+ * Writes what `planCmsSwap` planned, on drafts only (the published rows follow at the next publish): the items' new
+ * values and their hashes (ycode recomputes an item's hash whenever one of its values changes, and publish compares it
+ * with the published item's), the new default's translation rows that the values now hold are deleted, and the old
+ * default's text is stored as its translation, a row that is already there (a deleted one included) being brought back
+ * rather than doubled.
+ */
+async function writeCmsPlan(trx: Knex.Transaction, siteId: string, plan: CmsSwapPlan, fromLocaleId: string): Promise<void> {
+  const now = new Date().toISOString();
+
+  for (const batch of chunks([...plan.values], 500)) {
+    await trx.raw(
+      `UPDATE collection_item_values AS v SET value = d.value, updated_at = ?
+         FROM jsonb_to_recordset(?::jsonb) AS d(id uuid, value text)
+        WHERE v.id = d.id AND v.tenant_id = ? AND v.is_published = false`,
+      [now, JSON.stringify(batch.map(([id, value]) => ({ id, value }))), siteId],
+    );
+  }
+  for (const batch of chunks([...plan.itemHashes], 500)) {
+    await trx.raw(
+      `UPDATE collection_items AS i SET content_hash = d.content_hash, updated_at = ?
+         FROM jsonb_to_recordset(?::jsonb) AS d(id uuid, content_hash text)
+        WHERE i.id = d.id AND i.tenant_id = ? AND i.is_published = false`,
+      [now, JSON.stringify(batch.map(([id, content_hash]) => ({ id, content_hash }))), siteId],
+    );
+  }
+  for (const batch of chunks(plan.moved, 500)) {
+    await trx('translations').where({ tenant_id: siteId, is_published: false }).whereIn('id', batch).update({ deleted_at: now, updated_at: now });
+  }
+  for (const batch of chunks(plan.written, 500)) {
+    await trx('translations')
+      .insert(batch.map((row) => ({
+        id: row.id,
+        tenant_id: siteId,
+        locale_id: fromLocaleId,
+        source_type: row.source_type,
+        source_id: row.source_id,
+        content_key: row.content_key,
+        content_type: row.content_type,
+        content_value: row.content_value,
+        is_completed: true,
+        is_published: false,
+        deleted_at: null,
+        created_at: now,
+        updated_at: now,
+      })))
+      .onConflict(['tenant_id', 'locale_id', 'source_type', 'source_id', 'content_key', 'is_published'])
+      .merge(['content_type', 'content_value', 'is_completed', 'deleted_at', 'updated_at']);
   }
 }

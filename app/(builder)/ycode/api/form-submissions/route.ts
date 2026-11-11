@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import {
   getAllFormSubmissions,
   getFormSummaries,
@@ -6,13 +6,14 @@ import {
   deleteFormSubmissionsByFormId,
   bulkDeleteFormSubmissions,
 } from '@/lib/repositories/formSubmissionRepository';
-import { dispatchFormSubmittedEvent } from '@/lib/services/webhookService';
-import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
-import { sendFormSubmissionEmail, extractReplyToEmail } from '@/lib/services/emailService';
-import { processAppIntegrations } from '@/lib/apps/integration-service';
 import { noCache } from '@/lib/api-response';
 import { screenFormSubmission, stripHoneypotField } from '@/lib/form-spam-protection';
 import { getClientIp } from '@/lib/request-utils';
+import { linkSubmission } from '@/lib/platform/form-links';
+import { planSubmission } from '@/lib/platform/form-submit';
+import { notifyNewSubmission } from '@/lib/platform/submission-notification';
+import { platformNotificationPorts } from '@/lib/platform/submission-notification-ports';
+import { countEventOnHost } from '@/lib/platform/visit-events';
 
 // Disable caching for this route
 export const dynamic = 'force-dynamic';
@@ -58,6 +59,10 @@ export async function GET(request: NextRequest) {
  * - form_id: string (required)
  * - payload: object (required)
  * - metadata: object (optional - IP, user agent, etc.)
+ * - layer_id, locale: the form layer's id and the page's language (TORCH, session W3)
+ *
+ * 400 { code: 'invalid_fields', fields: { name?, phone? } } when the form creates a prospect
+ * and the name or the phone breaks its rule (lib/platform/form-submit.ts)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -96,6 +101,13 @@ export async function POST(request: NextRequest) {
 
     const isSpam = verdict.outcome === 'spam';
 
+    // TORCH (part 3, session W3): whether this form creates a prospect is read from the published form, never
+    // from the body; with the switch on, a name or a phone that breaks its rule is refused before anything is stored.
+    const plan = await planSubmission(body, payload, isSpam);
+    if (!plan.ok) {
+      return NextResponse.json({ error: 'Some fields need correcting', code: 'invalid_fields', fields: plan.fields }, { status: 400 });
+    }
+
     const submission = await createFormSubmission({
       form_id: body.form_id,
       payload,
@@ -103,53 +115,29 @@ export async function POST(request: NextRequest) {
       status: isSpam ? 'spam' : 'new',
     });
 
-    // Spam is stored for review but never notified, so bots stay silent.
-    // The response still reports success so they don't retry.
-    if (isSpam) {
-      return NextResponse.json(
-        { data: submission, message: 'Form submitted successfully' },
-        { status: 201 }
-      );
+    // The submission is stored, so the visitor's answer is a success whatever becomes of its link: Contact Center
+    // is given a short time (lib/platform/form-links.ts), and a link that could not be written is logged.
+    if (plan.site) {
+      try {
+        await linkSubmission(plan.site, { id: submission.id, spam: isSpam }, plan.prospect);
+      } catch (error) {
+        console.error(`[POST /ycode/api/form-submissions] submission ${submission.id}: its Contact Center link was not written`, error);
+      }
     }
 
-    // Dispatch webhook event (fire and forget). c0 port: the request's
-    // organization is carried into the background work explicitly, because
-    // headers() is gone once the response has been sent.
-    const tenantId = await getTenantIdFromHeaders();
-    const dispatch = () => dispatchFormSubmittedEvent({
-      form_id: body.form_id,
-      submission_id: submission.id,
-      fields: payload,
-      metadata,
-    });
-    void (tenantId ? runWithTenantId(tenantId, dispatch) : dispatch());
+    // One 'form' event for the visitor behind this request, for a submission that is not spam (part 3, session W8).
+    // Never fails the submission: it is already stored.
+    if (!isSpam) await countEventOnHost(request, 'form', 'POST /ycode/api/form-submissions');
 
-    // Send email notification if enabled (fire and forget)
-    if (body.email?.enabled && body.email?.to) {
-      // Extract reply-to email from form payload (first email field found)
-      const replyTo = extractReplyToEmail(payload);
+    // The holders of read on the forms permission are told in Business OS (part 3, session W5), for a submission
+    // that is not spam. It runs after the answer is sent, so the visitor never waits for it, and it never throws:
+    // what could not be done is logged (lib/platform/submission-notification.ts).
+    const notifiedSite = plan.site;
+    if (!isSpam && notifiedSite) after(() => notifyNewSubmission(submission, notifiedSite, platformNotificationPorts()));
 
-      const email = () => sendFormSubmissionEmail(
-        body.email!.to,
-        body.email!.subject || `New form submission: ${body.form_id}`,
-        {
-          formId: body.form_id,
-          submissionId: submission.id,
-          payload,
-          metadata: {
-            ...metadata,
-            submitted_at: submission.created_at,
-          },
-          replyTo,
-        }
-      );
-      void (tenantId ? runWithTenantId(tenantId, email) : email());
-    }
-
-    // Process app integrations (fire and forget)
-    const integrations = () => processAppIntegrations(body.form_id, submission.id, payload);
-    void (tenantId ? runWithTenantId(tenantId, integrations) : integrations());
-
+    // Nothing else happens when a submission arrives: ycode's email, its webhooks and the app integrations
+    // (Airtable, MailerLite) are out of Web Studio (part 3, PRD V1.0 Out-of-Scope; session W2). Spam is
+    // stored for review, and the answer is the same so that bots stay silent and do not retry.
     return NextResponse.json(
       { data: submission, message: 'Form submitted successfully' },
       { status: 201 }

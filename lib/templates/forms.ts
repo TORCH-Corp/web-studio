@@ -985,3 +985,47 @@ export const formTemplates: Record<string, BlockTemplate> = {
     }
   },
 };
+
+/**
+ * TORCH (part 3, session W3; PRD V1.0 "Forms"): the ready contact form. The
+ * Form element with a phone field after the name, and "Create a prospect in
+ * Contact Center" on: name and phone required (the switch needs both), email
+ * and message optional. Made from the Form element's own layers, so its look
+ * is the Form element's.
+ */
+function contactFormTemplate(form: BlockTemplate): BlockTemplate {
+  const template = form.template as any;
+  const [errorAlert, successAlert, nameGroup, emailGroup, messageGroup, submit] = template.children as any[];
+
+  const field = (group: any, label: string | null, attributes: Record<string, unknown>, settingsId?: string) => {
+    const [labelLayer, input] = group.children;
+    const { required: _required, ...kept } = input.attributes;
+    return {
+      ...group,
+      children: [
+        label ? { ...labelLayer, variables: { text: { type: 'dynamic_rich_text', data: { content: getTiptapTextContent(label) } } } } : labelLayer,
+        { ...input, attributes: { ...kept, ...attributes }, settings: settingsId ? { ...input.settings, id: settingsId } : input.settings },
+      ],
+    };
+  };
+
+  return {
+    icon: 'form',
+    name: 'Contact form',
+    template: {
+      ...template,
+      settings: { ...template.settings, form: { create_prospect: true } },
+      children: [
+        errorAlert,
+        successAlert,
+        nameGroup,
+        field(nameGroup, 'Phone', { type: 'tel', name: 'phone', placeholder: 'Phone', required: true }, 'phone'),
+        field(emailGroup, null, {}),
+        field(messageGroup, null, {}),
+        submit,
+      ],
+    },
+  };
+}
+
+formTemplates.contactForm = contactFormTemplate(formTemplates.form);

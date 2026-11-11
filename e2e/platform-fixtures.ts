@@ -17,10 +17,14 @@ export const PRODUCT_SERVICES_KEY = 'e2e-product-services-key';
 /** Session W3: the keys the stub's Contact Center and Sales take (each service's own SERVICE_API_KEY). */
 export const CONTACT_CENTER_KEY = 'e2e-contact-center-key';
 export const SALES_KEY = 'e2e-sales-key';
+/** Part 3, session W5: the key the stub's Notification Center takes (notification-engine's own SERVICE_API_KEY). */
+export const NOTIFICATION_KEY = 'e2e-notification-key';
 
 /** Session W8: the catalogue ids of Sales and of Web Studio, which the Orders API's deep links name (SALES_APP_ID, WS_APP_ID). */
 export const SALES_APP_ID = '6c6c6c6c-6c6c-4c6c-8c6c-6c6c6c6c6c6c';
 export const WS_APP_ID = '7d7d7d7d-7d7d-4d7d-8d7d-7d7d7d7d7d7d';
+/** Part 3, W4: Contact Center's catalogue id, which a submission's deep link names (CONTACT_CENTER_APP_ID). */
+export const CONTACT_CENTER_APP_ID = '8e8e8e8e-8e8e-4e8e-8e8e-8e8e8e8e8e8e';
 
 /** store-settings.spec.ts's organization and a second one, whose branches and categories must never show. */
 export const STORE_ORG = '05050505-0505-4505-8505-050505050505';

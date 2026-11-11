@@ -38,6 +38,7 @@ import { transformLayerIdsForInstance } from '@/lib/resolve-components';
 import { FormHoneypotField } from '@/components/FormHoneypotField';
 import { PublishedStoreElement } from '@/lib/platform/store-elements/StoreElement';
 import { pageLocaleOf } from '@/lib/platform/store-elements/links';
+import { pageLocale, prospectFieldsHold, showRefusedFields } from '@/lib/platform/form-prospect-page';
 import { isStoreElement } from '@/lib/platform/store-elements/settings';
 import type { StorePageContext } from '@/lib/platform/store-elements/pages';
 
@@ -1335,17 +1336,21 @@ const LayerItem: React.FC<{
           }
         });
 
+        // TORCH (part 3, session W3): a form that creates a prospect checks its name and phone before it is sent.
+        if (formSettings?.create_prospect === true && !prospectFieldsHold(form, payload, pageLocaleOf(currentLocale, availableLocales)?.code)) return;
+
         try {
           const response = await fetch('/studio/api/form-submissions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               form_id: formId || 'unnamed-form',
+              layer_id: layer.id,
+              locale: pageLocale(pageLocaleOf(currentLocale, availableLocales)?.code),
               payload,
               metadata: {
                 page_url: typeof window !== 'undefined' ? window.location.href : undefined,
               },
-              email: formSettings?.email_notification,
             }),
           });
 
@@ -1358,6 +1363,9 @@ const LayerItem: React.FC<{
           // Hide both alerts first
           if (errorAlert) errorAlert.style.display = 'none';
           if (successAlert) successAlert.style.display = 'none';
+
+          // TORCH (W3): the server refused the name or the phone; its message is on the field.
+          if (showRefusedFields(form, response.status, result)) return;
 
           if (response.ok) {
             // Success handling

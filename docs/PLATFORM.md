@@ -4,7 +4,10 @@ Applies to ycode v1.38.1 (commit 2be0729) on `feature/web-studio-sites-and-publi
 the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11 below), then part 2 (storefront and cart,
 on `feature/web-studio-storefront-and-cart`: sessions W1 to W8 and D1 below; **"Part 2 in production (session D1)"** is
 the one place that lists its keys, tables, routes, checkout flow, image cache and how it was deployed; "Part 2 release fixes
-(session 22)" lists the fixes made to it and to ycode's own files after the build).
+(session 22)" lists the fixes made to it and to ycode's own files after the build), then part 3 (contact form, collections and
+analytics, on `feature/web-studio-forms-collections-and-analytics`: sessions W1 to W11 and D1 below; **"Part 3 in production
+(session D1)"** is the one place that lists its keys, tables, timers, how it was deployed and how to roll it back; **"Template
+collections (session W11)"** is how a site made from a template gets the template's collections).
 
 ## How the service runs (session 11)
 One container, `web-studio`, in the platform's compose project on the production server
@@ -82,7 +85,10 @@ Organization Setup, Product & Services, Contact Center, Sales and Document Cente
 `catalogue.spec.ts` (with the item's real image), `checkout.spec.ts`, `orders-api.spec.ts` and `storefront-browser.spec.ts` (a
 buyer in a real browser on a published site, and every host the store pages and the builder contact). The local `pnpm e2e`
 leaves `e2e/server` out (`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it
-drops the schema.
+drops the schema. Part 3 (session D1, 11 Nov 2026) adds `forms-and-reports.spec.ts`: five tests against the real Contact Center,
+Notification Center and Organization Setup (see "Part 3 in production"); session W11 adds `template-collections.spec.ts` (three tests: a
+site made from a test template that carries a collection shows it, and a site is made from each of TORCH's real templates; see "Template
+collections"); the whole suite is 45 tests.
 - **What a run uses and leaves** (`e2e/server/real-services.ts`). One login for the whole run (`global-setup.ts` keeps the
   token in `E2E_ACCESS_TOKEN`, in memory; auth-service answers 429 after 20 logins in 15 minutes). One fixed test item,
   SKU `E2E-WS-STORE-01` ("E2E Web Studio test item", 25,000 IQD, the "All - General" leaf category, with one 8 x 8 PNG as its
@@ -104,7 +110,7 @@ drops the schema.
   JSON-path filters, count/head, upsert, the 4 RPCs). `lib/supabase-server.ts` returns it.
 - **Business OS session.** `lib/platform/session.ts` verifies an HS256 session cookie
   (`bos_session`) carrying user, organization and Web Studio permission flags
-  (`webstudio.manage_sites / manage_content / manage_forms / manage_orders`).
+  (`webstudio.manage_sites / manage_content / manage_forms / manage_orders / manage_reports`).
   `proxy.ts`, `lib/supabase-auth.ts`, the browser client and the auth store read it.
   The cookie is minted from the shell's access token (session 2, below).
 - **Per site (session 1; c0 was per organization).** Migration
@@ -190,7 +196,6 @@ The production values are in the compose service `web-studio` (secrets from the 
     WS_DOMAIN_CHECK=on   # `off` accepts any host name as a custom host, with no check against verified domains
     PAGE_AUTH_SECRET=<signs the password-protected page cookies; Web Studio's own>
     ALLOW_DEV_LOGIN=false   # absent in production; true only on a dev box: POST /ycode/api/auth/dev-login
-    WS_PARTS=1   # absent in production: shows Collections and Forms (parts 2 and 3)
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4); on the server "TORCH corp"
     ORG_SETUP_URL=http://auth-service:6001   # Organization Setup (served by auth-service): the branches (W1), the day's rate and unit names (W2)
     ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # ${AUTH_INTERNAL_SERVICE_API_KEY} in the root .env; the internal routes take the service key (and x-entity-id for the rate and units); Sales holds the same key
@@ -201,6 +206,9 @@ The production values are in the compose service `web-studio` (secrets from the 
     SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
     SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
     SALES_APP_ID=<Sales's catalogue app id>   # ${SALES_APP_ID} in the root .env; the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
+    CONTACT_CENTER_APP_ID=<Contact Center's catalogue app id>   # the same value contact-center-service has in the compose; a submission's deep link into Contact Center (part 3, W4): torch://app/<this>/prospects/<id> or .../contacts/persons/<id>; unset: links.open_in_contact_center is null
+    WS_VISIT_SALT=<a long random secret of Web Studio's own>   # the salt of the visitor key (part 3, W7; the events and totals of W8 use it too); at least 16 characters; unset: no view or event is counted, and the log says so once
+    WS_FORM_RETRY_TICK_SECONDS=30   # optional (part 3, W3): how often the waiting form links are looked at; 30 when unset. Not the delay between a submission's attempts
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -794,6 +802,7 @@ code is `lib/platform/store-elements/`; the ycode files only name the new elemen
   elements `pageLocaleOf(currentLocale, availableLocales)` (`links.ts`): the page's own locale, else the site's default
   one. Links are unchanged: the default locale has no prefix. Not changed: the HTML string path (`layerToHtml`, the
   static export) still has only the page's own locale, so its loading shell reads English on a default-language page.
+  (Checked in part 3, session W10: this does not hold for the static export, see "Carried items" below.)
 - **Test.** `e2e/shop-home.spec.ts` and the unit tests beside the modules (`featured`, `category-cards`, `settings`,
   `links`, `strings`, `html`).
 
@@ -827,11 +836,782 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
   starts with an empty cache).
 - **Not changed:** the static export (`lib/apps/static-export/engine.ts`) still writes Google's URLs into the files
   it exports: an exported site has no platform behind it. Uploaded custom fonts were always the site's own files.
+  (Done in part 3, session W10: the export carries the font files itself, see "Carried items" below.)
 - **Test.** `e2e/published-fonts.spec.ts` (a site with the font: no Google host in the HTML or the headers, the rules
   and the preload on the site's host, the route's refusals, a real browser that contacts one host),
   `lib/platform/published-fonts-url.test.ts`, and on the server `e2e/server/storefront-browser.spec.ts`, whose store
   site now carries the font, so its "only the site's own host" check covers it on production.
 
+
+## The permission map for part 3 (part 3, session W1)
+- **What changed** (PRD V1.0 of part 3, "Roles and permissions"; notebook decisions 18 and 20c). No screen changed, and
+  Collections and Forms were still hidden behind `WS_PARTS` (session W2, the next section, shows them with no flag).
+- **Collections are content.** Every `collections/...` route in `lib/platform/permissions.ts` is on `webstudio.manage_content`,
+  mapped like pages: read `r` (the two lookups that use POST, `items/batch` and `items/slugs`, too), create `c` (a collection,
+  a field, an item, a duplicate, the sample, an import), change `u` (PUT, the reorders, an item's status), publish `u`,
+  delete `d` (`items/delete` too). A visitor's `items/filter` and `items/load-more` stay anonymous on POST. A collection
+  write still waits for the site's editor lock. The public API under `v1/` keeps its own API-key credential.
+- **Submissions are the forms leaf.** `form-submissions` and `form-submissions/[id]` stay on `webstudio.manage_forms`: `r`
+  to list and read, `u` to change a status, `d` to delete (one, several, or a form's); the visitor's POST stays anonymous.
+  Webhooks, API keys and the integrations stay on the forms leaf too, and stay hidden; their reads need `x` (they return a
+  webhook's secret and a connection's settings), so the `r` a Member or Viewer now holds opens submissions and nothing else.
+- **A fifth leaf, `webstudio.manage_reports`,** for Traffic, Conversions and the Dashboard's visit numbers: in
+  `permission-scope.json` (module Reports), `WEB_STUDIO_LEAF.manageReports` and the session's `WebStudioLeaf`. The callback
+  reads it from `GET /authz/my-permissions?namespace=webstudio` with the others (`WEB_STUDIO_LEAVES`), and
+  `GET /ycode/api/auth/session` returns its flags in `permissions`. Session W9 (the Reports API, below) puts its three routes on it. No leaf was renamed
+  or removed; the matrix names of two leaves follow what they now cover ("Pages, collections and publishing",
+  "Form submissions").
+- **Defaults.** Manager every flag on the five leaves. Member and Viewer gain `r` on `manage_forms` and `r` on
+  `manage_reports`; `manage_content` (Member c r u, Viewer r), `manage_sites` and `manage_orders` are unchanged.
+- **Existing profiles are not rewritten.** The scope is published again at every start, but a profile that already exists
+  keeps the grants an administrator set on the leaves it already has: an existing Member or Viewer gets `r` on
+  `manage_forms` by hand in Organization Setup, and an existing profile that held only `manage_forms` loses collections
+  until it is given `manage_content`. A leaf that is new to the scope is merged in by auth-service
+  (`mergeWithScopeDiff`): `manage_reports` reaches an existing system profile with the defaults above and a custom
+  profile with every flag off, so only a custom profile needs it by hand.
+- **Tests.** `permissions.test.ts` (every collections route and its flag; the Member, the Viewer and a forms-only user,
+  from the scope's own defaults), `web-studio-scope.test.ts` (five leaves, the defaults), `auth-service.test.ts` (the leaf
+  at sign-in), `e2e/session.spec.ts` (the same through the proxy, and the session's answer).
+
+## Forms and Collections shown (part 3, session W2)
+Forms and Collections are on the port for every site, with no flag. PRD V1.0 "Forms" and "Collections"; the app's own
+screens for them are sessions W3 to W6 and A1 to A3.
+
+- **No `WS_PARTS`.** `lib/platform/parts.ts` no longer reads the environment, `hooks/use-ws-parts.tsx` and the
+  layout's provider are deleted, and the element library lists the Form element always. The header's CMS and Forms
+  buttons are drawn from the user's flags, not from a role guess: CMS needs `webstudio.manage_content` `r`, Forms
+  needs `webstudio.manage_forms` `r` and a role that may edit (`lib/platform/use-flag.ts`, `useHasFlag`, from the flags
+  the session cookie carries). A profile that existed before part 3 holds no forms flag until an administrator sets it,
+  so its designer would otherwise see a button that leads to 403s. The server answers the same 403 either way.
+- **What stays hidden, whatever the user's flags** (PRD Out-of-Scope; `REMOVED_ROUTES`, `HIDDEN_ROUTES`,
+  `HIDDEN_API_ROUTES` and `HIDDEN_APP_IDS` in `lib/platform/parts.ts`). `proxy.ts` answers 404 before it looks at the
+  session, for the `/ycode` and the public `/studio` names alike: the webhooks screen and routes (`integrations/webhooks`,
+  `api/webhooks`), the API keys screen ("Web Studio API", `integrations/api`) and routes (`api/api-keys`), and every route of
+  the Airtable, MailerLite and Webflow apps and of the three placeholders (Mailchimp, Zapier, Make). The Integrations
+  screen keeps Apps (Static HTML Export, Mapbox, Google Map) and MCP; `GET /ycode/api/apps` lists those three only; the
+  Airtable client asks for no connection (`lib/apps/airtable/client.ts`), so the CMS does not call a 404 on every open. The
+  public API under `/ycode/api/v1` is not hidden: it only answers a request that carries an API key, and no key can be made.
+  The permission map keeps its entries for the hidden routes (the route test needs a rule per file).
+- **The email setting of a form** is gone from the form's settings panel (`FormSettings.tsx`: only Success and
+  Redirect stay), from the MCP tool `update_form_settings`, and from the body both renderers post. A form layer that
+  already carries `email_notification` keeps the data and nothing reads it. Settings > Email stays as ycode ships it (it
+  now configures nothing a form uses: see the pull request's notes).
+- **The submit route does one thing: it stores.** `POST /ycode/api/form-submissions` (the `/studio` name from a published
+  page) screens the post (same origin, payload caps, honeypot, rate limit per site and address), strips the honeypot's field,
+  stores the row with its metadata (the address, the user agent, the page) and answers 201 with the row. It no longer sends
+  ycode's email, dispatches the `form.submitted` webhook, or runs the app integrations; a bot's post is stored as `spam` and
+  answered the same. Publishing still calls `dispatchSitePublishedEvent`, which finds no webhook.
+- **A form in Arabic and English.** A form's texts (labels, the button, the success and the error message) are ordinary text
+  layers: the localization screen lists them and the page uses a translation once it is marked complete (an incomplete one
+  is a draft and never shown, ycode's rule). The page's `lang` and `dir` follow the locale, so labels, the success message and
+  the error message come out in the page's language and direction. Not translatable in ycode: an input's placeholder
+  (the Form element's three fields carry one that repeats the label: it stays English on an Arabic page until the user clears
+  it; OPEN_QUESTIONS, part 3), and the honeypot's own label, which no person or screen reader reaches.
+- **A collection's items on a page** show through a Collection element bound to the collection (its Settings > CMS), and on
+  a dynamic page ("CMS page": slug `*`, `settings.cms` names the collection and its slug field) at `/{slug}` and
+  `/{locale}/{slug}`. An item's words in Arabic are the localization screen's translations of the item
+  (`source_type cms`, `field:key:{key}` or `field:id:{id}` for a field the user added). A new item's manual position is 0
+  (ycode's own default), so a list with no sort shows the newest first; the builder's reorder sets positions.
+- **Tests.** `e2e/forms.spec.ts` (the Form element, the Forms screen and the missing email block; the Forms button for a
+  user with and without the forms flag; a visitor on an English page and on an Arabic page, each in its own language and
+  direction; the row for that site only, and another site's own rows apart; the rate limit refusing a visitor with the error
+  message in Arabic; the honeypot's spam row; a post from another origin refused; no webhook called), `e2e/collections.spec.ts`
+  (a collection with two added fields and two items made in the builder; a list bound in the builder; an item page; both
+  items on the list and each on its page, in both languages; a second site with none; the editor lock and a reader), and
+  `e2e/offline.spec.ts` (Collections and Forms open; the hidden screens and routes answer 404, `/studio` too; Apps lists
+  three apps). `lib/platform/parts.test.ts` pins the hidden set against the app registry.
+
+## Carried items (part 3, session W10, 11 Nov 2026)
+Four small items from parts 1 and 2 (PRD V1.0 "Carried from parts 1 and 2"); all in the fork.
+- **The site's name on a published page** (part 1's OPEN_QUESTIONS 17, notebook decision 12). `generatePageMetadata` adds
+  `og:site_name` (`openGraph.siteName`) from the `site_name` setting, which `fetchGlobalPageSettings` already read for the
+  product page's title; it is written wherever the page's Open Graph tags are: every published page, in every language,
+  whatever its own SEO fields say. A page's title is its SEO title, else its name, else the site's name, else the caller's
+  fallback (`pageTitle` in `lib/platform/site-seo.ts`; before, the fallback came before the site's name was asked).
+  Changing the name in Site settings reaches the pages on the next publish: the global settings are cached under the
+  all-pages and global-settings tags, which every publish refreshes. Not changed: an error page keeps its own title
+  ("Page Not Found", the custom page's name) and has no Open Graph tags, as before; the static export writes its own
+  `<title>` and Open Graph tags (`buildDocument`) and has no site name yet.
+- **The unit's name** (part 2's OPEN_QUESTIONS 68, owner 10 Nov 2026). `unitText` (`store-elements/format.ts`) reads the
+  unit's name ("Each"), not its symbol ("ea"); the symbol stands in only for a unit with no name. The product page used
+  its own symbol-first expression and now calls `unitText` too, so the product page, the cart, the checkout and the
+  confirmation (which already showed Sales' name) read the same word. Organization Setup keeps one name per unit, so
+  Arabic and English show the same word: there is no Arabic unit name to read. A cart a buyer already holds shows the
+  new text without being rebuilt: the line keeps the unit's name and symbol and `unitText` picks.
+- **The export's fonts** (part 2's OPEN_QUESTIONS 63). `exportSite` no longer calls ycode's `fetchGoogleFontsCss`:
+  `exportedGoogleFonts(urls)` (`lib/platform/exported-fonts.ts`) reads each family's stylesheet and its files through the
+  font mirror (`getMirroredCss`, `getMirroredFontFile`), writes the rules with their files at `/studio/fonts/{family}/{version}/{file}`
+  (`toExportedFontCss`, `EXPORTED_FONT_FILES_BASE` in `published-fonts-url.ts`) and returns the files, which the engine adds
+  to the export under the same keys (`studio/fonts/...`, with the other bundled assets). `relativizePaths` makes the two
+  places that name them relative to the page, as it does the other bundled assets: `url(/studio/fonts/...)` in the
+  inlined rules and the `href` of the first heading's preload (`./studio/fonts/...` at the root, `../studio/fonts/...`
+  under `/en`). No exported file names `fonts.googleapis.com`, `fonts.gstatic.com` or a route of the platform. A family
+  whose stylesheet or any file the mirror cannot give is left out whole (so no rule names a missing file) and the engine
+  logs `[Static Export] The font mirror could not give ...`; the export completes without that font, as a published page
+  is served without it, and nothing reads Google instead. Before, a Google failure was swallowed with no log.
+- **The loading shell's language in the export** (part 2's OPEN_QUESTIONS 62): **no change to the code.** The note of
+  session 25 above says the export's HTML string path has only the page's own locale. It does not: the engine builds the
+  default pass's context with the site's default locale (`engine.ts`, `ctx`), and `renderResolved` hands
+  `data.locale ?? ctx.locale` to `layerToHtml`, so an Arabic-first site's root and pages read `dir="rtl" lang="ar"` in the
+  export already (`e2e/static-export.spec.ts` passed on the code of 9 Nov). The routes that do render with only the page's
+  own locale are the collection filter and load-more routes (`locale` stays null there unless the request names a
+  non-default language, so a store element inside a collection item would read English on a default-language page);
+  the item names the export, so they are left, and whether any site puts a store element in a collection item was not
+  checked.
+- **Tests.** `lib/platform/site-seo.test.ts` (the title order), `published-fonts-url.test.ts` (the export's rules and
+  keys), `store-elements/format.test.ts` (the unit's name); e2e: `e2e/site-name.spec.ts` (`og:site_name` once on every
+  page of a two-language site, the title, a rename after a publish), `e2e/static-export.spec.ts` (the shells' language;
+  no Google host in any exported file, the files in the export, named relative to each page, a real woff2 and the
+  heading's preload), `product-page.spec.ts` and `checkout-flow.spec.ts` (the unit's name in English and Arabic).
+  The font case needs the mirror to read the family from Google the first time; where the run has no network it checks
+  only that no file names a Google host.
+
+## Visit counting (part 3, session W7)
+- **How a view reaches the server.** The published page tells its own host: `lib/platform/VisitBeacon.tsx`, a client
+  component that renders nothing, mounted by `components/PageRenderer.tsx` (one line) on a published page that is not an
+  error page, sends one `POST /studio/api/visits` after the page has loaded (`fetch` with `keepalive`, a relative address,
+  `lib/platform/visit-client.ts`), and again when the visitor moves to another page without a full load. The reason: a
+  published page is served from the cache (`revalidate = false`), so the server does not run when it is viewed and cannot
+  count it while rendering; a script after load delays nothing; a relative address cannot leave the site's host; and with
+  scripts off nothing is sent and nothing is counted. The canvas and the preview render drafts, so they never mount it. A
+  page the browser prerendered waits for `prerenderingchange`. No cookie is set and nothing is read from or written to the
+  browser's storage.
+- **The route.** `POST /ycode/api/visits` (public name `/studio/api/visits`), `{ page_id, path, referrer }`, where
+  `referrer` is the host of `document.referrer` only. Anonymous, in the proxy's map as public; the site comes from the host
+  alone, so the builder host, a template and an unknown host answer 404 `site_not_found`. Same origin only (403
+  `cross_origin`), a 2 KB body (413 `too_large`), `invalid_body` 400, and 600 requests per ten minutes per site and IP
+  (429 `rate_limited`; in memory, `lib/platform/visit-limit.ts`: the form route's ten a window is a number one reader
+  passes, so the route has its own). Everything else is 204, counted or not.
+- **Not counted** (204, no row): a known bot by its user agent (`isBot`, a program-driven browser included, so the e2e's
+  headless browsers are not visitors), a request with a prefetch header, a request that carries a valid `bos_session`
+  (an editor where his session reaches the published host), a page id that is not a published, non-error page of the
+  host's site, a request with no client address, and a view whose insert failed (logged; "the count never fails a page").
+- **The visitor key.** `visitorKey` in `lib/platform/visit-rules.ts`: HMAC-SHA-256, keyed with `WS_VISIT_SALT`, of the
+  site id, the day, the client IP (`getClientIp`, nginx's `X-Real-IP`) and the user agent. The day is the platform's day
+  in Baghdad (`VISIT_TIME_ZONE`, `visitDay`), so the totals of W8 must use the same day. Changing the salt starts every
+  visitor anew from that moment.
+- **Source and device.** `sourceOf`: no referrer `direct`; a search engine `search`; a social network or messenger
+  (their short links and Android apps included) `social`; any other host `referral` ("another site"). A view reached from
+  the site's own host takes the source of the visitor's first row of the day (one statement, `lib/platform/visits.ts`),
+  `direct` when there is none. `deviceOf`: `phone`, `tablet`, `desktop`; an iPad asking for the desktop site says it is a
+  Mac and counts as a desktop.
+- **Tables** (`20261111000001_torch_visits.ts`, direct knex, not tenant tables, not copied from a template).
+  `platform_visits`: `site_id`, `page_id`, `path` (decoded, no query, no trailing slash), `created_at`, `visitor_key`,
+  `source`, `device`, `kind` (`view`; the events of W8 below may have no page: the page columns are required for a view
+  only). `platform_visit_days`: `site_id`, `day`, `path`, `source`, `device`, `views`, `visitors`, primary key on the
+  first five; the daily run of W8 fills it. No IP address, user agent, referrer, name or country anywhere.
+- **Not done here.** The static export's pages carry no beacon: an exported site is on a host with no Web Studio behind
+  it. The events, the totals and the 90-day clean-up are W8's (next section); the reports are W9's.
+- **Test.** `lib/platform/visit-rules.test.ts`, `visit-limit.test.ts`, `visit-client.test.ts`; `e2e/visits.spec.ts`
+  (three views of two pages from two visitors; a bot, a prefetch, an editor, the preview, an error page and scripts off
+  give none; a real browser contacts its own host only and gets no cookie; the refusals; a failing insert; the limit).
+
+## Collections API for the app (part 3, session W6)
+- **The route.** `GET /ycode/api/platform/sites/{id}/collections`, `webstudio.manage_content` `r` in the proxy's map. It is
+  under `platform/`, so it needs a session and no site cookie, and it takes no editor lock: the app reads a site's
+  collections without opening the site, as it reads the site's images. A site of another organization, an unknown id and
+  an id that is not a uuid are 404; no session 401; a user without the content leaf 403 `{ required:
+  'webstudio.manage_content.r' }`. Logic in `lib/platform/collections.ts`, the route file's comment gives the answer's shape.
+- **The answer.** `{ data: [{ id, name, item_count, last_change, builder_path }], can_change }`, in the builder's own
+  order (`order`, then newest first). One statement (direct knex on `tenant_id`, the way `lib/platform/templates.ts` reads
+  a site's content): the site's draft collections that are not deleted, each with a left join on its draft items.
+  - `item_count` is the items that are not deleted.
+  - `last_change` is the later of the collection's `updated_at` and the latest `updated_at` of its items, as an ISO date.
+    No person: the fork records none (plan decision 20a). An item's edit moves only the item's date, and a rename only the
+    collection's, so the date is the latest of both. **A deleted item's date counts**: ycode's soft delete sets
+    `updated_at`, and removing an item is a change to the collection, though the item is no longer counted.
+  - `builder_path` is `/ycode/collections/{id}`, the builder's route for the collection (`app/(builder)/ycode/collections/[id]`).
+  - `can_change` is whether the session holds `webstudio.manage_content` `u`, from the sign-in snapshot like the editor
+    lock's own rule (`mayHoldSiteLock`): the app shows "Open in builder" when it is true and the read-only note when it is not.
+    It tells the screen what to draw; the builder itself refuses a reader's writes (403, and 423 while another user holds the lock).
+- **Opening the builder on a collection is session A2's.** The app opens a site's builder at
+  `{service}/ycode/api/auth/callback?token=…&site=…`, which always redirects to `/ycode`; it takes no target. Carrying
+  `builder_path` into the opened builder needs either a target the callback accepts (limited to paths under `/ycode/`, so it
+  is not an open redirect) or the app's webview navigating to it once the callback has set the cookies. Neither is built here
+  (out of this session's bounds); the builder route itself is whole and reads the site from the `ws_site` cookie.
+- **Not here.** Creating, renaming and deleting a collection, its fields and its items are the builder's, and stay on the
+  `collections/...` routes (session W1's map). No paging: a site has a handful of collections and the builder lists them all.
+- **Test.** `lib/platform/collections.test.ts` (the row: the count as a number, the later of two dates, no items, a
+  missing date) and `lib/platform/permissions.test.ts`; `e2e/collections-api.spec.ts` (two collections with items give the
+  counts and the path; a deleted collection is not listed and a deleted item not counted; editing an item, adding one,
+  deleting one and renaming the collection each move the date of that collection and no other's; another site's
+  collections are not listed; a Viewer reads the list with `can_change: false`, a create-only user too, a Member gets
+  `true`; 401, 403 and 404).
+
+
+## The prospect switch and the Contact Center link (part 3, session W3)
+
+A form can send its submissions to Contact Center, and each submission knows what became of it (PRD V1.0 "Forms",
+"Prospects").
+
+- **The switch.** `settings.form.create_prospect` on the form layer, next to the success action; "Create a prospect
+  in Contact Center" in the form's settings (`FormSettings.tsx`). Off for the Form element; on for the new
+  **Contact form** element (`lib/templates/forms.ts`, `contactForm`: the Form element with a phone field; name and
+  phone required, email and message optional).
+- **The rule.** `lib/platform/form-prospect.ts`, with nothing of Next or the database in it. While the switch is on
+  the form holds an input named `name` and an input named `phone`, both required. The builder refuses a change that
+  takes one away (removed, moved out, renamed, made optional) and a switch-on for a form that lacks one, with a
+  toast that says why. The rule sits once, around the pages store's `set`
+  (`lib/platform/form-prospect-guard.ts`; two lines in `stores/usePagesStore.ts`), so ycode's actions are
+  untouched. A form that is new to the tree or was already out of order (a paste, a page as it loads) is let
+  through, so a page is never locked. A form inside a **component** is edited in the component store, which has
+  no guard: the server's check below is what holds there.
+- **The phone.** Checkout's rule (`canonicalIraqiMobile`): an Iraqi mobile with or without the country code. The
+  page checks before it sends and shows the message on the field with the browser's own validation bubble, in the
+  page's language (`lib/platform/form-prospect-page.ts`, called by the two renderers); the server checks again and
+  answers `400 { code: 'invalid_fields', fields: { name?, phone? } }`, storing nothing.
+- **Where the switch is read.** `POST /ycode/api/form-submissions` reads it from the site's **published** layers
+  (pages and components) by the form id and the layer id the body names (`publishedSwitch` in
+  `lib/platform/form-links.ts`, `planSubmission` in `lib/platform/form-submit.ts`). Nothing in the body turns it on
+  or off. Form ids are not unique, so the layer id tells two forms with one id apart; a body that names no
+  published layer is read by the form id alone and is on when any published form with that id is on.
+- **The link.** `platform_form_links` (`20261111000002_torch_form_links.ts`): one row per submission, direct knex:
+  `submission_id` (primary key, goes with the submission), `site_id`, `state`, `contact_center_id`, `attempts`,
+  `last_attempt_at`, `created_at`. The migration gives every existing submission a `stored` row.
+
+  | state | when |
+  |---|---|
+  | `stored` | the switch is off, or the submission is spam: Contact Center is not asked |
+  | `waiting` | the switch is on and Contact Center has not answered |
+  | `prospect` | Contact Center answered with a prospect (new, or the one that already holds the phone) |
+  | `contact` | the phone is a contact's; no prospect is made |
+
+- **The call.** `findOrCreateProspect` in `lib/platform/contact-center.ts`: `POST
+  /api/v1/internal/prospects/find-or-create { name, phone (964…), email?, notes?, origin: 'web_form' }`, the
+  message as the notes. The visitor's request gives it 3 seconds (`FIRST_ATTEMPT_TIMEOUT_MS`); the answer to the
+  visitor is a success once the submission is stored, whatever Contact Center does.
+- **The retry.** A timer in the server process, started from `instrumentation.ts`
+  (`lib/platform/form-link-retry.ts`), every `WS_FORM_RETRY_TICK_SECONDS` (30). Each run takes up to 20 waiting
+  rows of live sites whose delay has passed and asks again with the submission's stored fields. The delay between
+  a row's attempts doubles from one minute to six hours and stays there until Contact Center answers
+  (`retryDelaySeconds`). A row is taken by counting its attempt under `FOR UPDATE SKIP LOCKED`, so a second process
+  would share the rows, not repeat them. What waits is in the table, so a restart loses nothing. The service has no
+  job queue; a queue, a cron container or a cron route called from outside would each add a piece to deploy and
+  watch for one small job.
+- **Before production.** Contact Center's route (torch-core-backend, session 1 of part 3) deployed;
+  `CONTACT_CENTER_URL` and `CONTACT_CENTER_API_KEY` are part 2's.
+- **Tests.** `lib/platform/form-prospect.test.ts` (the four states, the required-field rule, the fields, the
+  delay), `contact-center.test.ts` (the call), `e2e/form-prospects.spec.ts` (the builder, the page, the stub
+  Contact Center up and down, the retry).
+
+## The notification of a new submission (part 3, session W5)
+
+A new submission raises a Business OS notification to the users who may read submissions (PRD V1.0 "Notification").
+
+- **When.** `POST /ycode/api/form-submissions`, after the submission is stored, for a submission that is not spam. The
+  call is made in Next's `after()`, so the visitor's answer is sent first and never waits for it, and nothing in it
+  throws: what could not be done is logged with the submission's id (`[web-studio submission notification] …`).
+  Spam, and a request that resolves to no site, tell nobody.
+- **Who.** The members of the site's organization for whom auth-service's evaluate answers true for
+  `webstudio.manage_forms` flag `r` (`findSubmissionReaders` in `lib/platform/submission-notification.ts`), chosen the way
+  sales-service chooses for a storefront order (`storefrontOrderRecipients`): the organization's first 200 members
+  (`RECIPIENT_CAP`, one `POST /api/internal/people/members`, `listMemberIds` in `lib/platform/org-setup.ts`), each asked
+  with `POST /api/internal/authz/evaluate` (`userHolds`), five at a time. No service lists the holders of a flag or a
+  site's members, so the holders are the organization's, not the site's. More than 200 members is logged and the rest
+  are not asked; a member whose check failed is logged and left out; a failed members read tells nobody and is logged.
+  There is no cache of the answers (Sales keeps one for 60 seconds): a contact form's rate limit bounds how many
+  submissions ask.
+- **The text.** English, as Sales's is (PRD V1.0 Out of Scope: no service gives a recipient's language). Title
+  `New form submission`, body `{sender name} sent {form name} on {site name}.` The sender is the form's `name` field as
+  the visitor typed it ("A visitor" when the form has none), the form name is the one the app's list shows (`formsOfSite`
+  in `lib/platform/submissions.ts`: the form layer's custom name, else its id; the id again when the name could not be
+  read, which is logged), the site name is the site's. Each is tidied (control characters and runs of spaces become one
+  space) and cut to 80 characters with an ellipsis, because the visitor chooses the sender and the form id.
+- **The link.** `torch://app/<WS_APP_ID>/sites/<site id>/contact-form/<submission id>`, the form the shell opens
+  (Orders' `open_in_web_studio` is the same with `/orders/<id>`). **The app's routes for it are not built yet**: session
+  12 (A1) gives the Contact form screen `/sites/:id/contact-form` and a submission's full page
+  `/sites/:id/contact-form/:submissionId`, and session 14 (A3) opens that page; they must use this path, or this one
+  line (`submissionLink`) changes. Without `WS_APP_ID` the notification has no link the shell can open, so it is not sent and
+  the log says why.
+- **The client.** `lib/platform/notification.ts`, hand-written: `POST /api/notifications { recipientUserId,
+  channels: ['IN_APP'], title, body, category: 'TRANSACTIONAL', actionUrl, metadata: { sourceEntityId } }` with
+  `x-service-api-key`, `x-entity-id` (the organization) and `x-sender-app: web-studio`, one call per user, five at a time,
+  none retried (a retry could tell a user twice). A user the service refused is in the result with the reason and is logged;
+  the others are told. Checked on 11 Nov 2026 against the live specs of auth-service and notification-engine
+  (`/api/internal/people/members` and `/api/internal/authz/evaluate`: `x-service-api-key`, bodies and answers as the code
+  reads them; `/api/notifications`: answers 401 with or without the trailing slash).
+- **Keys.** New: `NOTIFICATION_ENGINE_URL` (`http://notification-engine:6004`) and `NOTIFICATION_ENGINE_API_KEY` (the
+  root `.env` variable `NOTIFICATION_ENGINE_API_KEY`, the engine's own `SERVICE_API_KEY`, the name and the source Sales
+  and the other services use). Already set, now also used: `ORG_SETUP_URL` and `ORG_SETUP_API_KEY` (the member list and the
+  evaluate are auth-service routes taking the same key) and `WS_APP_ID` (the link). Session D1 set the two new keys on the
+  server's `web-studio` service and proved them with a real submission (see "Part 3 in production").
+- **Tests.** `lib/platform/submission-notification.test.ts` (the text, the sender, the link, the holders, the cap, the
+  concurrency, every failure), `notification.test.ts` (the call), `org-setup.test.ts` (the member read and the
+  evaluate), `e2e/submission-notification.spec.ts` against the stub in `e2e/notification-stub.ts`: one submission, one
+  notification to each of the three stubbed holders and none to the two who do not hold the flag; spam sends none and asks
+  nobody; the answer is back in under two seconds while the stub takes three; with Notification Center down, and with
+  Organization Setup down, the submission is still stored and answered.
+
+## Visit events, daily totals and the 90-day clean-up (part 3, session W8)
+- **Four kinds in `platform_visits`.** `view` (session W7) and three events of the same visitor: `add_to_cart`, `order`,
+  `form`. An event has no page (`page_id` and `path` null). Each carries the visitor key that visitor's page view has that
+  day: the same `visitorKey` of the same site, day, client IP and user agent, worked out by the request that causes it
+  (`lib/platform/visit-events.ts`, `visitorOf`), and the source of the visitor's first row of the day, `direct` when there
+  is none (`recordEvent` in `lib/platform/visits.ts`; the device is the request's own). The same rules as a view decide
+  whether it is counted: a known bot, a prefetch, a request that carries a valid `bos_session`, a request with no client
+  address and a missing `WS_VISIT_SALT` count nothing (the salt message is logged once per process and now says "no view or
+  event"). A failure to store is logged and never touches what the visitor did: the order, the submission and the page go
+  on (`countEvent` never throws).
+- **Where each is written.**
+  - `add_to_cart`: the store's add to cart (`lib/platform/store-elements/add-to-cart.ts`, the one place every card, grid
+    and product page ends in) calls `reportAddToCart()` (`lib/platform/visit-client.ts`): one `POST /studio/api/visits`
+    with `{ kind: 'add_to_cart' }` to the page's own host, nothing else in the body, no cookie, no storage. It reports only
+    where a counted page is connected: `VisitBeacon` connects its `window` while it is mounted (a published page, never the
+    canvas or the preview) and disconnects on unmount, so an add to cart in the builder reports nothing. The route
+    (`parseReport` in `lib/platform/visit-rules.ts`) reads a view as before (no `kind`, or `kind: 'view'`) or exactly
+    `{ kind: 'add_to_cart' }`; **any other kind, `order` and `form` included, is 400 `invalid_body`**: those two are the
+    server's to write, never a browser's word. The row is one per visitor and day: a partial unique index
+    (`platform_visits_cart_once_index`, on the visitor key, which is already per site and day) refuses a repeat, so the
+    page sends on every add and a bot's hundred leave one row. The add to cart is not checked against the store: a site
+    that does not sell has the row, and the Conversions report shows form submissions only for it (PRD).
+  - `order`: `POST /ycode/api/store/checkout` passes `placeOrder` a callback that `place` runs once, after the Sales order
+    is created and recorded (`order.created`): **not** for a replayed checkout (200, its order already existed), a refused
+    item (422), a Sales or other service that could not be asked (503), the honeypot (201 with no order), and **not twice
+    for a double click**: a second request for a checkout in flight waits on the first's flight and gets its outcome
+    (`created: true` as well), so the event is written by the flight that made the order, not by each response. It is every
+    order: a visitor who orders twice has two rows.
+  - `form`: `POST /ycode/api/form-submissions` writes one when the submission is stored with status `new`: spam (the
+    honeypot) is stored for review as before and is not a conversion, and a refused post (403, 400) writes nothing. The
+    site comes from the request's host (`countEventOnHost`); the builder host and a host of no site count nothing.
+- **Which number each total holds** (`lib/platform/visit-totals.ts`, the comment at its top):
+  `visitors` is visitors with at least one counted view that day, each once; `views` is every view; `cartVisitors`,
+  `orderVisitors` and `formVisitors` are visitors, each once however many times; `orders` and `forms` are the true number
+  of Sales orders created and forms stored. An event does not make its visitor a `visitor`: an add to cart, an order or a
+  form whose view was not counted (refused as too frequent, or sent before the salt was set) is in its own column only, so
+  a share of visitors can in principle pass 100 %; W9's reports clamp what they show.
+- **Tables** (`20261111000002_torch_visit_events.ts`). `platform_visits` gets a check on `kind` (the four) and the unique
+  index above. `platform_visit_site_days`: `site_id`, `day`, `visitors`, `cart_visitors`, `order_visitors`, `orders`,
+  `form_visitors`, `forms`, primary key `(site_id, day)`, numbers only. It is also the record that a day is totalled.
+  `platform_visit_days` (W7) now holds the page rows: views and visitors per site, day, page path, source and device.
+  Neither totals table is ever deleted from; both go with their site.
+- **The daily run** (`lib/platform/visit-totals-run.ts`; the numbers are `totalsOfDay`, unit-tested on a fixture of three
+  days). One transaction, behind an advisory lock (a second run at the same moment answers `skipped: true`): (1) every
+  finished day (before today, in the platform's day, Baghdad) of every site that has detailed rows and **no row in
+  `platform_visit_site_days`** is read, totalled and written (its site row and its page rows, inserts that ignore a
+  conflict), so a day is totalled once, the first run after it ends, and running again changes nothing; a backlog of
+  missed days is caught up in the same run; (2) detailed rows older than 90 days (`RETENTION_DAYS`) are deleted, only
+  those whose day has its site row, so a day the run could not total is never lost. The day boundary is the database's
+  `AT TIME ZONE 'Asia/Baghdad'`, the same zone `visitDay` gives the visitor key. A row written for a finished day after
+  that day was totalled is not in the totals: the scheduled run is at 01:00, an hour after the day ends, and a row is
+  written within a second of its request.
+- **How it runs.** The service starts a timer (`startVisitTotalsSchedule`, called from `instrumentation.ts`): at 01:00
+  Baghdad time (22:00 UTC the evening before) every day, logged as `[visit totals] {"skipped":false,"siteDays":N,"deleted":M}`;
+  a failed run is logged and the next day's run totals the days it missed. By hand, and for the e2e: `pnpm visits:totals`
+  (`scripts/visit-totals.ts`, `DATABASE_URL`), the last line of its output is the same JSON; in the container, the way the
+  template seed runs: `docker exec web-studio sh -c 'cd /tooling && TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json
+  node -r ts-node/register -r tsconfig-paths/register scripts/visit-totals.ts'`. It needs no new environment key: the salt
+  of W7 is the only one the events use. A server with several processes is safe (the lock).
+- **Rollback.** The migration's `down` drops `platform_visit_site_days`, the unique index and the kind check. The
+  totals are never read to serve a page, so nothing else depends on them; a rolled-back image simply stops adding events and
+  totals (the detailed rows then stay until the run is back).
+- **Test.** `lib/platform/visit-totals.test.ts` (the three-day fixture), `visit-totals-schedule.test.ts` (the next run,
+  and the timer under mocked time: once a day, armed again after a failure), `visit-rules.test.ts` (`parseReport`), `visit-client.test.ts` (the report and where it does nothing);
+  `e2e/visit-events.spec.ts`: a visitor who views, adds to the cart twice and orders is one cart visitor and one order under
+  one key; a refused item, Sales down and a replayed checkout write no order; a form gives one event, spam and refusals none;
+  a browser cannot report an order or a form; the product card's button in a real browser reports once however many times
+  it is pressed; the new table holds numbers only; the daily run totals every finished day once (the day boundary at
+  midnight in Baghdad included), twice over changes nothing, and a row of 91 days ago is gone while its total stays.
+
+## Submissions API for the app (part 3, session W4)
+- **The routes.** All under `platform/`: a session and no site cookie, and **no editor lock**, so the app reads and deletes
+  without opening the site and a delete never answers 423 while another editor holds the lock (the proxy skips the lock
+  under `/ycode/api/platform/`; `e2e/submissions-api.spec.ts` has an editor hold the lock and a second Manager delete).
+  All are `webstudio.manage_forms`: `r` reads, `d` deletes. A site of another organization, an unknown id and an id that is
+  not a uuid are 404; no session 401; no forms leaf 403 `{ required: 'webstudio.manage_forms.r' }` (or `.d`). The site is
+  checked before the query, so a stranger learns nothing from a bad query.
+
+  | Route | Answers |
+  |---|---|
+  | `GET sites/{id}/submissions?form_id=&unread=&cursor=&limit=` | the site's submissions, newest first, spam left out |
+  | `GET sites/{id}/submissions/{submissionId}` | one submission with every field; **reading it sets it read** |
+  | `DELETE sites/{id}/submissions/{submissionId}` | `{ data: { id } }`; the submission and its link row |
+  | `GET sites/{id}/submissions/forms` | `{ data: [{ id, name }] }`: the site's forms, for the list's filter |
+  | `GET submissions/unread-count` | `{ data: { count, sites: [{ id, count }] } }`: the organization's and each live site's (0 when none) |
+
+  Logic in `lib/platform/submissions.ts` (the database), the shapes and rules in `lib/platform/submissions-view.ts` (pure,
+  unit-tested), the shape of each answer in its route file's comment.
+- **The list.** A row is `{ id, date, form: { id, name }, sender: { name, phone }, unread, contact_center: { state, kind, id } }`
+  and the page `{ data, next_cursor }`. `sender` is the payload's `name` and `phone` fields, trimmed; null for a form that has
+  none (the app shows "Not given"). `unread` is the status `new`. `contact_center` is `platform_form_links` (W3): `state`
+  `stored` | `waiting` | `prospect` | `contact`, and for the last two `kind` and `id` name the Contact Center record (null
+  otherwise); a submission with no link row reads `stored`. `date` is `created_at` as an ISO date. `form_id` filters by form;
+  `unread=true` is the unread, `unread=false` the read, absent both; the two combine. Any other query key, a bad value or a
+  `limit` outside 1 to 100 (25 by default) is 400 naming the parameter; a cursor this route did not give is 400
+  `{ code: 'invalid_cursor' }`.
+- **Paging.** Keyset, on `(created_at, id)` newest first, `limit + 1` rows read to know whether there is a next page. The
+  cursor is opaque (base64url of `{ at, id }`) and `at` is the date **as text to the microsecond** (`to_char(... AT TIME ZONE
+  'UTC', '...US')`): a JavaScript date has milliseconds, so two submissions in one millisecond would be skipped or repeated at a
+  page edge. A cursor is only decoded when it has exactly those two keys, a timestamp of that shape and a uuid, and the
+  values go to the database as parameters.
+- **The detail.** The row, and `fields: [{ name, label, value }]`, and `links: { open_in_contact_center }`. The fields are what
+  the visitor sent: the form's fields in the form's order with the form's labels, then what the form does not have (a field
+  removed since, or one invented) in the payload's order under its own name; a field of the form that was not sent is not
+  listed. The payload is jsonb, which keeps no order of its own, so the order can only come from the form. `value` is text, or
+  a list of text for a field sent more than once; the payload is free JSON (the submit route takes any object), so a number or
+  a nested value is made into text.
+- **The link.** `torch://app/<CONTACT_CENTER_APP_ID>/prospects/{id}` for a prospect and
+  `torch://app/<CONTACT_CENTER_APP_ID>/contacts/persons/{id}` for a contact, the same shape the Orders API gives for Sales and
+  Contact Center's own routes (`Contact-Center/src/app/App.tsx`: `prospects/:id`, `contacts/persons/:id`). A contact here is a
+  person: the route of C1 answers `contact` for a person who holds the phone. Null while the state is `waiting` or `stored`,
+  and null without `CONTACT_CENTER_APP_ID` (then the app cannot offer "Open in Contact Center"; the log says so once, as the
+  Orders API's does).
+- **Forms and their names.** ycode has no form name and no field label of its own: a form is the form layer's `settings.id`
+  (what the page sends as `form_id`, `unnamed-form` when it has none) and its fields are inputs. They are read from the site's
+  layers, the pages' and the components' (a form in a component is stored there), published and draft, by one jsonpath
+  statement like W3's. **A form's name is its layer's own name in the layers panel (`customName`), else its id** (open
+  question). Published layers lead and name the form, the draft adds what it has more; two layers with one id are one form
+  (the submit route stores the id only); a password form never submits here and is left out. A field's label is the text of
+  the nearest `label` wrapper around its input (the Form element's own layout), else the text of a label that names it with
+  `for`, else its placeholder, else its name. A form that no layer holds any more keeps its submissions and is listed under its
+  id.
+- **What is never answered.** The stored `metadata` (IP address, user agent, referrer, the page's URL) is not selected, and the
+  record type that the row and the detail are made from has no such field. `e2e/submissions-api.spec.ts` posts with a marker
+  user agent and address and finds neither in any answer. (The builder's own `/ycode/api/form-submissions` still answers the
+  whole row with its `metadata`, to any user who holds `manage_forms` `r`, which since W1 includes the Member and the Viewer.
+  Noted in the pull request.)
+- **Spam** is stored for review and is not a submission of the app: it is not listed, counted, read or deleted here (404).
+- **Delete.** One statement on the site's id; the link row goes with it through the table's foreign key (`ON DELETE CASCADE`).
+  Contact Center is never called: the prospect or contact a submission became stays there (the e2e compares the stub's call
+  log before and after).
+- **Unread count.** One statement over the organization's live sites with a left join on their `new` submissions: a deleted
+  site's are not counted, another organization's never. The Navigator takes `sites[].count` for the site's Contact form and
+  `count` for the module.
+- **Not here** (handoff decision 2): "Mark as unread", "Copy link", the page a submission came from.
+- **Before production.** `CONTACT_CENTER_APP_ID` in web-studio's environment (the value is in contact-center-service's block
+  of the compose); set by session D1 (see "Part 3 in production"). No migration.
+- **Test.** `lib/platform/submissions-view.test.ts` (the query and its cursor, the sender, the Contact Center marker, the link,
+  the forms' names, fields and labels, the detail, the filter's forms), `lib/platform/permissions.test.ts`;
+  `e2e/submissions-api.spec.ts` (made by real submissions through the site's submit route against the stub Contact Center: the
+  four link states, a spam one and a form no layer holds; the list newest first and by cursor, both filters alone and together,
+  400s; the forms; the count by site and organization; the detail marks it read and the count drops; the deep link; no IP or user
+  agent; delete as a Manager with the link row gone and Contact Center untouched; 403 on delete for a Member and a Viewer who
+  can read; 401 and 403; another site, another organization, spam and unknown ids 404 with nothing changed; the editor lock;
+  a deleted site's count).
+
+## Reports API for the app (part 3, session W9)
+- **Three reads, all `webstudio.manage_reports` r** (`lib/platform/permissions.ts`, siteless under `platform/`: no site cookie,
+  no editor lock). Manager, Member and Viewer hold it by default (session W1); a user without it is 403 with
+  `required: 'webstudio.manage_reports.r'`, no session is 401, and a site of another organization, one that does not exist
+  or an id that is no id is 404 (`getSiteForOrganization`; the site is checked before the period, so a stranger is never
+  told 400).
+  - `GET /ycode/api/platform/sites/{id}/reports/traffic`: `{ data: { period, no_data, views, visitors_per_day, series, pages,
+    sources, devices } }`. `series` has one `{ day, views, visitors }` for every day of the period, oldest first, a day with
+    no visit with zeros; `visitors_per_day` is the average over the period's days (each day's own value is in the series);
+    `pages` is `{ total, top }`: `total` counts the pages viewed, `top` the 6 most viewed (the handoff's "Top 6 of 38") by views
+    then path, each `{ path, name, views, share }`, `name` being the page's name in the builder or `null` when no page has that
+    path now; `sources` is all four (`direct`, `search`, `social`, `referral`, which is "another site") and `devices` all three
+    (`phone`, `desktop`, `tablet`), always in that order, with `views` and `share`. No countries.
+  - `GET /ycode/api/platform/sites/{id}/reports/conversions`: `{ data: { period, no_data, sells, steps } }`
+    with `steps` in the funnel's order, each `{ step, count, share }`: `visitors`, `cart`, `orders`, `forms`. A site that does not
+    sell has `sells: false` and only `visitors` and `forms`: the cart and orders steps are **absent**, whatever the site holds of them
+    (a site that does not sell can hold `add_to_cart` rows, W8).
+  - `GET /ycode/api/platform/reports/summary`: `{ data: { period, no_data, total: { views, visitors_per_day }, sites } }`,
+    `sites` being the organization's live sites oldest first (the order of All sites) with `{ id, name, status, views,
+    visitors_per_day, views_by_day }`; `views_by_day` is `[{ day, views }]`, one per day, for the Dashboard's small chart. A site
+    that was never published (`status: 'draft'`, no `published_at`) has `views`, `visitors_per_day` and `views_by_day` all `null`,
+    not zero, is not read and adds nothing to the total. An organization with no site answers `sites: []` and `no_data: true`.
+- **The period.** `?period=today|last_7_days|last_30_days`, or `?from=YYYY-MM-DD&to=YYYY-MM-DD`: one kind, never both,
+  never neither. The days are the platform's (Baghdad, `visitDay`), both ends counted; the last 7 days end today and count it. A
+  range is real days, `from` not after `to`, `to` not after today, and at most **366** days ("one year"). Anything else is 400
+  `{ error, code: 'invalid_period' }` with what to change. The answer's `period` is `{ key, from, to, days }`, `key` being
+  `today`, `last_7_days`, `last_30_days` or `custom`, so the app shows the days it read. (`lib/platform/report-period.ts`.)
+- **No data is not an error.** A period with nothing to show answers 200 with `no_data: true`, zeros, empty lists and (for
+  Traffic and the summary) the zero-filled series. "Nothing to show" is: no view (Traffic); no shown step with a count
+  (Conversions, so a site that does not sell looks at its two steps only); no view and no visitor in any site (summary).
+  In Conversions a share is `null` when there are no visitors to divide by.
+- **Which number is which** (the daily totals', `lib/platform/visit-totals.ts`). A visitor is counted once a day, so there is no
+  "visitors in the period": `visitors_per_day` is the visitors of every day added up over the number of days of the period, days
+  nobody visited included, to one decimal (8 visitor-days over 7 days is 1.1). In Conversions `visitors` is those visitor-days
+  added up, `cart` the visitors who added to the cart (once a day each), `orders` the orders placed (every one: a visitor who
+  orders twice is two) and `forms` the form submissions that were not spam. A **share of visitors** is the count over the
+  visitors, one decimal, **clamped to 100**: an order or a form whose visitor's view was not counted (a refused view, a missing
+  salt) is in its own count only, so the count can pass the visitors. The **shares of a whole list** (sources, devices, all pages)
+  are percentages with one decimal that add up to exactly 100.0 (the largest remainders get the tenths left over, the earlier one
+  on a tie: `sharesOf` in `lib/platform/report-numbers.ts`); the top pages' shares are of **all** the views, so the six shown
+  add up to less than 100 when there are more pages.
+- **Where a day is read from.** The days up to the site's **latest totalled day** (`platform_visit_site_days`) come from the
+  totals (`platform_visit_site_days` and `platform_visit_days`); the days after it come from the detailed rows
+  (`platform_visits`), made into numbers by `totalsOfDay`, the function the daily run uses. That is today, which is never in the
+  totals, and a finished day the run has not reached yet (the hour after midnight, 00:00 to 01:00 Baghdad, or a run that
+  failed). A day is never read from both, so nothing is counted twice; the detailed rows are gone after 90 days, so a range
+  over 90 days is read from the totals alone. The rule needs no new table or column and no environment key. (`lib/platform/reports.ts`.)
+- **The page names** come from the site's own pages (the draft rows that are not deleted and are not error pages), because the
+  totals keep a path and not a page id: each page's path is built the way the builder builds it (`buildSlugPath`), a dynamic
+  page names every path its collection makes, and a path that begins with one of the site's language codes (`/ar/about`) is
+  the page without it. A page deleted since the visit, or whose slug changed, has `name: null` and the app shows the path.
+  Not translated: the name is the builder's. (`lib/platform/report-pages.ts`.)
+- **Left out** (plan decisions): countries, the busiest day and a table view of the chart (handoff decision 3), export, revenue.
+  The answers carry nothing of a visitor: no key, no address.
+- **One side effect.** Conversions reads whether the site sells through `storeOf` (as the published site and Orders do), which
+  makes the site's store row with its defaults on the first read of any site: the same idempotent insert the Store settings
+  screen does. Nothing else a report does writes.
+- **Test.** `lib/platform/report-period.test.ts`, `report-numbers.test.ts` (shares that add up for any counts, the average, the
+  series, the three reports) and `report-pages.test.ts` (folders, index pages, dynamic pages, language codes);
+  `permissions.test.ts` (the three routes on the leaf, a Viewer reads, a user with the other four leaves does not);
+  `e2e/reports-api.spec.ts` on a fixture of visits and events for a selling site, a site that does not sell and a draft: the
+  numbers of the three routes with every figure written out by hand; the shares add up; the finished days' detailed rows are
+  deleted after the daily run, so their numbers can only come from the totals, and today's rows are never totalled; a finished
+  day the run has not reached is read from the detailed rows; the cart and order steps absent for the site that does not sell;
+  a period with no visit; a draft with no numbers; the period's refusals and the 366-day limit; a Viewer reads; 401, 403 without
+  `manage_reports` r, 404 for another organization's site.
+
+## Part 3 in production (session D1, 11 Nov 2026)
+Part 3 runs in the same container as parts 1 and 2. What it added, in one place; the sessions above give each piece's rules.
+
+- **Keys.** Four new ones in the compose service `web-studio` on the server (`/root/core-backend/docker-compose.yml`, which is
+  not in this repository), one optional one left unset, and one that is gone. Names only; never a value in a repository file:
+
+  | Key | Set to | Root `.env` variable | Used by |
+  |---|---|---|---|
+  | `CONTACT_CENTER_APP_ID` | Contact Center's catalogue id, the same literal contact-center-service has in the compose | (none) | a submission's deep link into Contact Center (W4) |
+  | `NOTIFICATION_ENGINE_URL` | `http://notification-engine:6004` | (none) | the notification of a new submission (W5) |
+  | `NOTIFICATION_ENGINE_API_KEY` | notification-engine's own `SERVICE_API_KEY` | `NOTIFICATION_ENGINE_API_KEY` | the same |
+  | `WS_VISIT_SALT` | a long random secret of Web Studio's own (`openssl rand -hex 32`, 64 characters) | `WEBSTUDIO_VISIT_SALT` (new, added to the root `.env`) | the visitor key of the visit counting and of the events (W7, W8) |
+  | `WS_FORM_RETRY_TICK_SECONDS` | not set: the retry looks every 30 seconds | (none) | the retry of waiting prospects (W3) |
+  | `WS_PARTS` | **gone**: it was never in the production compose, and no code reads it since W2 | (none) | |
+
+  Already set and now also used: `WS_APP_ID` (the notification's link, `torch://app/<WS_APP_ID>/sites/<site>/contact-form/<submission>`),
+  `ORG_SETUP_URL` and `ORG_SETUP_API_KEY` (the members and the evaluate of the notification), `CONTACT_CENTER_URL` and
+  `CONTACT_CENTER_API_KEY` (the prospect call; the route is contact-center-service's `POST /api/v1/internal/prospects/find-or-create`,
+  on production since 11 Nov 2026). A key that is missing makes that piece say so and do nothing, never guess: no `WS_VISIT_SALT`
+  counts no view or event (the log says so once); no `NOTIFICATION_ENGINE_*` or `WS_APP_ID` sends no notification (the log says why);
+  no `CONTACT_CENTER_APP_ID` leaves the deep link null. **Do not change `WEBSTUDIO_VISIT_SALT` without meaning to:** every
+  visitor starts anew from that moment, and the day's unique visitors are counted again.
+- **Tables.** Four, from three migrations, run at start (knex: "Batch 3 run: 3 migrations", 53 to 56). The plan named three; W8 added the
+  fourth: `platform_form_links` (`20261111000002_torch_form_links.ts`: one row per submission, its Contact Center state; the migration
+  gives every submission that exists a `stored` row, and production had none), `platform_visits` and `platform_visit_days`
+  (`20261111000001_torch_visits.ts`) and `platform_visit_site_days` (`20261111000002_torch_visit_events.ts`: the kind check, the one
+  add-to-cart row a day and the site's daily totals). None is a tenant table, none holds anything of a visitor, and a template
+  copy does not copy them. Two of the migrations share the timestamp `20261111000002`; knex orders them by file name.
+- **The daily run and the retry, running and logged.** Each logs once when the service starts (added in this session, with a unit test):
+  `[visit totals] scheduled: the first run is at <time> (01:00 in Baghdad), then every day` and `[form link] retry started: waiting
+  submissions are looked at every 30 seconds`. The daily run then logs `[visit totals] {"skipped":false,"siteDays":N,"deleted":M}`
+  every day at 22:00 UTC; the retry logs `[form link] retry: S of T waiting submissions reached Contact Center` only for a tick
+  that found a waiting row (and an error line when a run fails). On 11 Nov 2026 the startup lines are in the container's log and the
+  run, made by hand in the container as "Visit events, daily totals" shows, answered `{"skipped":false,"siteDays":0,"deleted":0}` (no
+  day had finished). **Not yet seen on the server:** the first scheduled run (22:00 UTC on 11 Nov) and a retry that found a waiting row;
+  Contact Center was not made to fail on production. The retry's whole path (down, waiting, back, set) is the local `e2e/form-prospects.spec.ts`.
+  Check the first run with `docker logs web-studio 2>&1 | grep 'visit totals'`.
+- **Who holds the new leaf** (read from Organization Setup on 11 Nov 2026, after the scope was registered again at start for the two
+  organizations with Web Studio installed). The system profiles took `webstudio.manage_reports` with the defaults: Entity Admin and
+  Manager every flag, Member and Viewer `r`. **A custom profile took it with every flag off**: the test account's "Entity Admin
+  (copy)" had to be given `r` by hand (done by the owner on 11 Nov, before the report checks). Not touched by this session and still
+  to do by hand before Task C: the Member and Viewer system profiles of TORCH corp hold no `webstudio.manage_forms` flag (`-`), because
+  a leaf that existed already keeps what an administrator set (the section "The permission map for part 3").
+- **How it was deployed (11 Nov 2026), and how to roll back.** From the feature branch's head `11197ce` (the image's tree; the commits
+  after it change only `e2e/` and `docs/`).
+  1. *Preconditions, read only:* the feature branch holds the pull requests 39 to 50 (W1 to W10); contact-center-service answers the
+     prospect route on production (401 without credentials, 400 to the service key with an empty body, nothing created).
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261111-pre-part3.sql.gz`
+     (1.2 MB, 38 tables, 53 migrations, 0 form submissions, 101 sites; `gunzip -t` passes). Copies of the compose and the `.env`:
+     `docker-compose.yml.bak-20261111-part3` and `.env.bak-20261111-webstudio-part3`, in `/root/core-backend`.
+  3. *Rollback tag:* `docker tag <the running image> web-studio:b08952e-pre-part3-20261111` (part 2's image, also still
+     `web-studio:b08952e-20261110`).
+  4. *Migration rehearsal, on a copy of the production schema:* `pg_dump --schema-only` of the production database plus the data of
+     `migrations` and `migrations_lock`, restored into a scratch database on the developer's machine (the server's Docker is not used
+     for a throwaway container: nothing there is removed), `knex migrate:latest` as the entrypoint runs it (53 to 56, the four tables with
+     their constraints and indexes), `migrate:rollback` (back to 53, the tables gone), two synthetic submissions inserted, `migrate:latest`
+     again (both got a `stored` row), and a third `migrate:latest` ("Already up to date").
+  5. *Sync and build:* an `rsync -azcn --delete` by checksum listed exactly the 129 paths of `git diff b08952e..HEAD` (128 sent, 1 deleted),
+     then the real `rsync` of that tree, `docker compose build web-studio` (a few minutes, the service untouched until the next step), the image tagged `web-studio:11197ce-20261111`.
+  6. *Compose and `.env`:* the salt appended to `.env` (a new line, mode 600 unchanged), `CONTACT_CENTER_APP_ID`, `NOTIFICATION_ENGINE_URL`,
+     `NOTIFICATION_ENGINE_API_KEY` and `WS_VISIT_SALT` inserted where `WS_PARTS` was mentioned, `docker compose config --quiet` valid.
+  7. *Up:* `docker compose up -d --no-deps web-studio`: healthy within 15 seconds, 0 restarts, "Batch 3 run: 3 migrations", the two timer
+     lines, the permission scope registered again for two organizations.
+  8. *Check:* `pnpm e2e:server`, 42 tests, all pass (the section "Server e2e").
+  *Roll back* with `docker tag web-studio:b08952e-pre-part3-20261111 web-studio:local`, then either (a) **the safe way**: add `WS_SKIP_MIGRATE:
+  "1"` to the compose service and `cd /root/core-backend && docker compose up -d --no-deps web-studio`: part 2's code ignores the four tables
+  and the keys, and keeps what they hold; take the line out again when part 3 is back; or (b) roll the batch back first with the new
+  image still running (`docker exec web-studio sh -c 'cd /tooling && TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json
+  NODE_NO_WARNINGS=1 node -r ts-node/register -r tsconfig-paths/register node_modules/knex/bin/cli.js migrate:rollback --knexfile knexfile.ts'`),
+  which drops the four tables and every visit and link row in them (rehearsed on the scratch copy). **Without (a) or (b) the previous
+  image does not start**: its migration step finds 56 migrations in the database and only 53 files ("The migration directory is
+  corrupt, the following files are missing", checked on the scratch copy), and the container restarts in a loop. By the same rule
+  part 2's own rollback to part 1's image needed `WS_SKIP_MIGRATE` too, though the section above says no compose line needs undoing (not run). A restore of the dump
+  is only for damaged data. The compose, the `.env` and the rollback tags are on the server only. Not rehearsed: the rollback on the server itself.
+- **The server e2e of part 3** (`e2e/server/forms-and-reports.spec.ts`). Real Contact Center, Notification Center and Organization Setup,
+  no stub, no database access. One site of the test organization, with the builder's own Contact form element added in a real
+  browser, published; then, in order: (1) the session carries `manage_reports` and the hidden webhooks, API keys and apps answer 404
+  to a Manager, the Collections list answers `[]`, `can_change: true`; (2) the builder shows Forms and CMS, offers the Contact form
+  element with the switch on, opens both screens, and its requests go to the builder's host only (plus the one known Cloudflare
+  beacon, unchanged); (3) a browser with a normal user agent (the headless default is left out as a bot) views the page, which is one
+  view (204), sends the form (201), is given no cookie and contacts the site's host only; (4) the submission is in the app's API unread
+  with the state `prospect`, the unread count is 1 for the site, Contact Center holds that prospect (source WEB_FORM, the message in its
+  notes), opening the submission reads it and answers the deep link `torch://app/<CONTACT_CENTER_APP_ID>/prospects/<id>`, and the test user's
+  inbox holds `New form submission` with the link into the Web Studio app; (5) Traffic, Conversions and the summary answer with that one
+  view, one visitor, one form (a site that does not sell has no cart or order step), a custom range and a refused period.
+  **What a run leaves and does:** the test site (soft-deleted), one prospect in Contact Center, found by the name `E2E Web Studio test` and
+  the phone `0770 000 0098`, set aside (not interested) and marked in its notes by the run itself (Contact Center has no delete for a
+  prospect, so a person removes it by hand when the e2e is retired; the next run reuses it); the notification, read by the run; the visit
+  rows of the deleted site. Every run tells the test organization's holders of `webstudio.manage_forms` r (12 people are members there)
+  once, as a real submission does: the site's name is `E2E contact <run>`. The local `pnpm e2e` needs the Playwright browser of this
+  version (`pnpm exec playwright install chromium`).
+- **Found while deploying, not fixed here.** The Member and Viewer profiles of TORCH corp lack `manage_forms` r (above). The first
+  scheduled daily run and a real retry are not yet seen (above). `pnpm test` exited 1 on the feature branch because one test was
+  reported cancelled (part 3 OPEN_QUESTIONS 17c); this session fixed the test, not the code: the call it stands in for was never wrong.
+
+## Template collections (part 3, session W11)
+A site made from a template gets the template's collections (PRD V1.0 "Collections": the company-site template carries three
+ready collections with sample items in Arabic and English; part 3 open question 9, answered by the owner on 11 Nov 2026).
+`lib/platform/template-copy.ts` copies, in the transaction that provisions the site, the draft rows of `collections`,
+`collection_fields`, `collection_items`, `collection_item_values` and the CMS translations of the items (`translations` with
+`source_type = 'cms'`, which the copy already carried, with the template's item ids, before this session). The pure parts are in
+`lib/platform/template-collections.ts` (tested without a database, `template-collections.test.ts`), the error class in
+`template-copy-error.ts`. No migration.
+- **What is copied, and what is not.** Draft rows only, as for pages: the new site publishes them at its first publish. Rows
+  whose parent is not live stay behind with it (`dropOrphans`): the fields, items and values of a soft-deleted collection, the
+  values of a soft-deleted field, and the translations of an item or a field that is soft-deleted. ycode's delete routes
+  soft-delete these together (an item's translations with the item, a collection's with the collection), so such rows exist
+  only after a cascade that failed part way (the collection delete logs the error and goes on); the filter keeps them out of
+  the copy. The copy logs one line when it leaves something behind:
+  `[template copy] left behind, whose collection, item or field is not live: ...`. Not
+  copied: the published twins, the CSV import jobs (`collection_imports`), form submissions and visit data (they are not
+  tenant content of a template and no table of the copy names them).
+- **Ids.** Every copied row gets a new id and `remapIds` replaces every id of the map wherever it stands in a row, as for the
+  pages: a Collection element's source (`variables.collection.id`, its `sort_by`, `source_field_id` and filters), field
+  variables (`field_id` and the `relationships` list of a reference), a CMS page's `settings.cms`, a link to an item
+  (`link.page.collection_item_id`), an option source (`settings.optionsSource`), a reference field
+  (`reference_collection_id`), a count field's `data.count`, a collection's `sorting.field`, the values of reference fields
+  (an item id, or a JSON list of them), the ids inside a rich text or link value, and the keys of the items' translations
+  (`source_id`, and `field:id:{field}` for a field that has no key). **`collections.uuid` is a second identifier with a global
+  UNIQUE constraint** (ycode's template export maps it too): each copied collection gets a new one, registered in the map.
+  An item's `content_hash` covers its values' field ids, so it is computed again from the new values (`rehashItems`).
+- **A pointer that cannot be followed.** After the map, before any file is copied (`checkPointers`), no copied row may point at an
+  id of the template. Two checks, both over every copied table: (1) any id, anywhere in a row's text, that is a collection,
+  a collection's `uuid`, a field or an item of the template that was **not** copied (deleted, or only a published twin); (2) any
+  value, at a key where ycode keeps the id of a collection, a field or an item (`collection_id`, `collectionId`,
+  `reference_collection_id`, `referenceCollectionId`, `slug_field_id`, `field_id`, `fieldId`, `sortFieldId`, `source_field_id`,
+  `sort_by`, `collection_item_id`, `defaultItemId`, the lists `defaultItemIds` and `relationships`, and `variables.collection.id`),
+  that is an id and is not one of the new site's. A keyword or an empty value is not a pointer (`manual`, `current-collection`,
+  `''`). The values of reference fields are read as item ids, those of rich text and link fields as JSON. The first one found
+  fails the copy with a `TemplatePointerError` (a `TemplateCopyError`): *"The template cannot be copied: page_layers row {id}
+  points at {id} at layers[0].children[0].variables.collection.id, which is no collection, field or item of the template"* (or
+  *"which the template has but did not copy (it is deleted or not live)"*). The sites route answers 500 with that message, the
+  transaction rolls back and no site, row or file is left. What it cannot see: an id of a row that no longer exists anywhere,
+  inside free text at a place that is not one of those keys (a filter's `value` list is read only through the reference-field
+  rule above); it is left as it is, as for pages. **A template with a stale pointer cannot make sites until its builder fixes it**
+  (the Collection element or link that names a deleted collection); the message names the row and the place. The existing
+  templates were checked (11 Nov 2026) against the draft rows of every live site on production, the four seeded templates
+  included: no pointer fails.
+- **Assets** are handled as the page assets of a template are: every asset of the template and its files are copied whether
+  a page or an item uses them, the asset ids inside item values (an image field's value, a rich text's image) follow the map,
+  and the template's site id inside a file URL becomes the new site's. A value that names an asset the template no longer has
+  is left as it is, as a layer's is.
+- **The default language.** ycode keeps the default language's text in the item's values and the other languages in
+  translations, so when the new site's default is not the template's the items follow, as the pages do (OPEN_QUESTIONS 24,
+  `default-language.ts`): `swapCmsSource` makes every completed, non-blank translation of a text or rich text field into
+  the new default the item's value, and the value it replaces becomes a translation into the template's default language
+  (none when that language was not asked for). An incomplete translation is not applied and stays where it is: ycode marks
+  a translation incomplete when its item's value changes, so a template item whose English text was edited after its Arabic
+  was written needs the Arabic completed again in the template's translation screen before an Arabic-first site shows it.
+  Site settings' "make this language the default" runs the same rule on a site's draft rows: see "The default language
+  and the items" below.
+- **Not touched.** A site made before this session and a blank site (the blank template runs the blank seed, not the copy);
+  the Collections screens and routes; the template's own rows.
+- **Tests.** Unit: `lib/platform/template-collections.test.ts` (the id map over the shapes above, the orphans, the swap, the
+  pointer errors, the hashes), `template-copy.test.ts` (the table list and its order). e2e: `e2e/template-collections.spec.ts`
+  (a template with People, with a list page, an item page, a link, a select and a photo, and Posts, whose Author refers to
+  People; items with Arabic translations and a deleted one; a site made from it shows both collections on its published pages
+  and each person on her own page, in both languages; Arabic as the default; independence both ways; no template id in any
+  row of the site; a site made before and a blank site have none; a stale pointer refuses the copy by name and leaves no
+  site), and on the server `e2e/server/template-collections.spec.ts` (the test account's organization is the templates
+  organization, so the run makes its own template there; it is a row in every organization's Templates list for the minutes
+  the run takes, and is deleted with the site).
+- **How it was deployed (11 Nov 2026), and how to roll back.** From the session branch's commit `fe3c500` (the tree of the squash
+  that follows it; after it only this record changes), the way "Part 3 in production" did, with no migration and no key.
+  1. *Preconditions, read only:* the feature branch was at `fc694b1` (sessions 1 to 18); `git diff --name-only fc694b1 HEAD -- database`
+     is empty; the running image `web-studio:11197ce-20261111` (id `782304224cff`) was healthy, 56 migrations, 12 live sites, no collection.
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261111-pre-w11.sql.gz`
+     (1.3 MB, `gunzip -t` passes).
+  3. *Rollback tag:* `docker tag web-studio:11197ce-20261111 web-studio:11197ce-pre-w11-20261111`.
+  4. *Sync and build:* `git archive` of the commit into a scratch directory, `rsync -azcn --delete` by checksum listed exactly the nine paths
+     of `git diff --name-only 11197ce HEAD` (four changed, five new: the two specs, the unit test, `template-collections.ts`,
+     `template-copy-error.ts`; nothing to delete), the real `rsync`, a second dry run with no real change, then `docker compose build
+     web-studio` (about a minute), the image tagged `web-studio:fe3c500-20261111` (id `c70a12bd2b7c`).
+  5. *Up:* `docker compose up -d --no-deps web-studio`: healthy within a few seconds, 0 restarts, "knex migrate:latest: Already up to date", both
+     timer lines in the log.
+  6. *Check:* `pnpm e2e:server`, 45 tests, all pass (the 42 of session D1 and the three of `template-collections.spec.ts`); no `template copy`
+     or error line in the log afterwards; 12 live sites and 4 live templates, as before.
+  *Roll back* with `docker tag web-studio:11197ce-pre-w11-20261111 web-studio:local` and `cd /root/core-backend && docker compose up -d
+  --no-deps web-studio`. Nothing needs `WS_SKIP_MIGRATE`: the database is the same. A site made from a template with collections after this
+  deploy keeps them when the old image runs: its Collections screens read the same tables. A restore of the dump is not needed for this change.
+  What the server e2e leaves: the test template and the sites made from it and from the real templates, soft-deleted (a soft-deleted site keeps
+  its rows, two collections among them); nothing else.
+
+## The default language and the items (part 3, session W12, 11 Nov 2026)
+
+Open question 24c (found by session 19, owner's answer of 11 Nov 2026): Site settings' "make this language the default"
+(`PATCH /ycode/api/platform/sites/{id}/settings` with another `default_language`, `swapSiteSourceLanguage`) moved the text of pages,
+components and folders but never an item's, so a site with collections that changed its default kept the items' values in the old
+default and every translation where it was: the default address read the old language and the other address read the new one.
+
+- **The rule is session 19's, not a second one.** `planCmsSwap` (`lib/platform/default-language.ts`) runs `swapCmsSource`
+  (`template-collections.ts`, the function the template copy runs on the rows it is about to insert) on a copy of the site's draft
+  rows and reports what it changed: the values that changed, the content hash of each item they belong to, the new default's
+  translation rows that the values now hold, and the translation rows to write for the old default. It touches none of the rows it
+  is given. For every **text** and **rich text** field of every item, a completed, non-blank translation into the new default becomes
+  the value, and the value it replaces becomes the translation into the old default (`text`, or `richtext` for a rich text field), a
+  row the old default already has for that field (a deleted one too) being brought back and not doubled. An item value with an
+  incomplete translation, a blank one or none keeps its text, and the unfinished translation stays where it was: nothing is lost,
+  as for a page's text. An image, a number, a reference and every other type is not text and is left alone. When the old default
+  leaves the site in the same change, nothing is written for it (as for a page).
+- **Slugs move too.** An item's slug and its name are text fields like the others: a slug with a completed translation in the new
+  default becomes the item's address at the default address, and the old slug becomes the old language's translation. After the next
+  publish the page of an item whose slug is translated is at `/hala-ar` (Arabic default) and `/en/hala-saad`, and the address it had
+  before, `/hala-saad`, answers 404 (a page's slug follows the same rule). An item whose slug is not translated keeps its address in both
+  languages.
+- **One transaction.** `swapSiteSourceLanguage` reads the draft pages, layers, components, folders, fields, items, values and the two
+  languages' translations, plans both swaps, writes the pages' (as before), then the items' (`writeCmsPlan`), then moves the default
+  flag, in one knex transaction: a failure anywhere, the flag's own update included, changes nothing (the e2e makes the last write
+  fail with a trigger and compares every row afterwards). The values and the hashes are written with one `UPDATE ... FROM
+  jsonb_to_recordset` per 500 rows (a site with thousands of items is a few statements, not tens of thousands), the moved
+  translations are soft-deleted and the old default's translations upserted on the unique key, 500 rows to a statement. A site
+  with no item translated into the new default reads no collection table at all.
+- **Hashes.** ycode keeps an item's `content_hash` equal to the hash of its values (`setValues` recomputes it) and publish compares
+  it with the published item's; the swap rehashes (`rehashItems`) the items whose values it changed.
+- **Drafts only, and what a visitor sees until the next publish.** Only draft rows are written; the published values, hashes,
+  translations and the published default flag are not touched, so **until the next publish every address reads exactly as it did before
+  the change** (the e2e reads the home page, `/ar` and the item pages between the change and the publish: the old state, not a mix).
+  Publish carries the new values, the new translations and the new flag together, and from then on the default address reads the new
+  language. Not looked at: a partial publish of one page or one item between the change and a full publish.
+- **Not changed.** `swapCmsSource` and the template copy; the Collections screens and routes; Site settings' layout. The 'default
+  language' control, its confirmation for a removed language and the pages' swap behave as before.
+- **Tests.** Unit, `lib/platform/default-language.test.ts` (8 new cases over `planCmsSwap`: an item with a completed translation,
+  with an incomplete one and with none, a field translated and another not, a blank translation and the old default leaving the site,
+  a deleted row of the old default brought back, the hashes, no input row touched, an empty site). e2e,
+  `e2e/default-language-items.spec.ts` (6 tests: a site with a collection of five items, English default, Arabic translations
+  (a rich text Bio, a translated address, an incomplete name, an item with no Arabic); the default moves to Arabic and then back, the
+  rows after the round trip equal the first state (rich text byte for byte), a visitor reads the first state until the next publish, the
+  default address, `/en`, the list and the item pages read as above after it, draft and published hashes equal the hash of the
+  values, and a change that fails on its last write changes nothing). Nine one-line breaks, each failing the intended test: the
+  items' write outside the transaction, no hash write, moved translations not deleted, the old default's row not brought back, the old
+  default's text not stored, no value written (e2e); the plan working on the caller's rows, no rehash, `moved` counting every
+  translation (unit).
+- **`pnpm test` and open question 17c.** The case "a prospect call that is refused, fails, answers badly, is too slow or has no
+  configuration" in `contact-center.test.ts` already holds its own timer since session D1 (`fc694b1`); `pnpm test` exited 0 on the
+  feature branch before this session (875 tests) and `contact-center.test.ts` passes on Node 20.17, 22.21 and 24.22 (11 of 11, none
+  cancelled). Nothing was changed there.
+- **How it was deployed (11 Nov 2026), and how to roll back.** From the session branch's commit `dfd17dd` (the tree of the squash that
+  follows it; after it only this record changes), the way session 19 did, with no migration and no key.
+  1. *Preconditions, read only:* the running image `web-studio:fe3c500-20261111` (id `c70a12bd2b7c`) healthy, 0 restarts;
+     `git diff --name-only fe3c500 HEAD` lists four paths (this file, `default-language.ts`, its unit test and the new e2e spec) and none
+     under `database/`.
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261111-pre-w12.sql.gz`
+     (1.4 MB, 39 tables, `gunzip -t` passes).
+  3. *Rollback tag:* `docker tag web-studio:fe3c500-20261111 web-studio:fe3c500-pre-w12-20261111`.
+  4. *Sync and build:* `git archive` of the commit into a scratch directory, `rsync -azcn --delete` by checksum listed exactly those four paths
+     (three changed, one new; nothing to delete), the real `rsync`, a second dry run with no real change, `docker compose build web-studio`
+     (about two minutes, started with `nohup` and a log), the image tagged `web-studio:dfd17dd-20261111` (id `bccb6adf6634`).
+  5. *Up:* `docker compose up -d --no-deps web-studio`: healthy within seconds, 0 restarts, "knex migrate:latest: Already up to date", both
+     timer lines in the log, no error line.
+  6. *Check (no `pnpm e2e:server`: it is run at the release, in Task C):* `https://web-studio.torchcorp.com/ycode/api/health` answers
+     `{"status":"ok"}`; the published page `https://demo-company.sites.torchcorp.com/` (and `/ar`) answers 200 with its title and `dir="rtl"`;
+     the new SQL (`UPDATE collection_item_values AS v SET value`) is in the running container's server bundle; 8 live sites besides the
+     templates, as before. The production database was **not** used to try a default-language change: the e2e did that on the test database.
+  *Roll back* with `docker tag web-studio:fe3c500-pre-w12-20261111 web-studio:local` and `cd /root/core-backend && docker compose up -d
+  --no-deps web-studio`. Nothing needs `WS_SKIP_MIGRATE`: the database is the same, and the old image simply moves the pages' text and not the
+  items'. A change of default language made while this image ran has moved items' text; the old image reads the same tables and keeps
+  working. A restore of the dump is not needed for this change.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
@@ -914,10 +1694,10 @@ Sales: none draft, none confirmed. `POST
 - **Removed screens** (404 from `proxy.ts`, files deleted): settings/users, profile,
   accept-invite, welcome (the Supabase setup wizard), with their API stubs and the invite
   button. A server without `DATABASE_URL` shows a message instead of redirecting to the wizard.
-- **`WS_PARTS=1`** (server env, read by `lib/platform/parts.ts`) shows Collections and Forms.
-  Unset, `/ycode/collections*` and `/ycode/forms*` answer 404, the header has no CMS and
-  Forms buttons, and the element library has no Form element. The `collection` and `filter`
-  elements and the API routes stay (the pages and the builder's stores use them).
+- **`WS_PARTS=1`** (server env, read by `lib/platform/parts.ts`) showed Collections and Forms.
+  Unset, `/ycode/collections*` and `/ycode/forms*` answered 404, the header had no CMS and
+  Forms buttons, and the element library had no Form element. The flag is gone since part 3,
+  session W2: both are always shown ("Forms and Collections shown", above).
 - `e2e/offline.spec.ts` is the done-when check.
 
 ## Session 2: session and permissions
@@ -957,7 +1737,8 @@ Sales: none draft, none confirmed. `POST
   revert, status u; static and project export `export`; the AI agent and MCP tokens
   `use_ai`; devtools reset d). manage_sites: the sites API; manage_content: the builder's
   data; manage_forms: collections, forms, webhooks, API keys, integrations (part 3);
-  manage_orders: no route yet (part 2). Public routes have their own credential; a few are
+  manage_orders: no route yet (part 2). (Part 3, session W1, moved collections to manage_content and added
+  manage_reports: see "The permission map for part 3".) Public routes have their own credential; a few are
   anonymous by design for visitors (a form submission, a published page's filter, the
   published error page). `proxy.ts` answers 401 with no session, 403 with
   `{error, required: 'webstudio.manage_sites.c'}` without the flag, and 404 for a path

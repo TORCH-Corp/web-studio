@@ -13,12 +13,12 @@ import { buildDocumentSeoLinks } from '@/lib/document-seo-links'
 import {
   buildCustomFontsCss,
   buildFontClassesCss,
-  fetchGoogleFontsCss,
   getCustomFontPreloads,
   getGoogleFontLinks,
 } from '@/lib/font-utils'
 import type { FontPreload } from '@/lib/font-utils'
 import { getLcpFontPreloads } from '@/lib/font-preload'
+import { exportedGoogleFonts, type ExportedFontFile } from '@/lib/platform/exported-fonts'
 import { generateColorVariablesCss } from '@/lib/repositories/colorVariableRepository'
 import { getAssetById } from '@/lib/repositories/assetRepository'
 import { getPublishedFonts } from '@/lib/repositories/fontRepository'
@@ -39,7 +39,7 @@ import {
   type LocaleContext,
 } from './resolver'
 import type { ExportJob } from './types'
-import { contentTypeFor, type OutputFile, type Writer } from './writers/types'
+import { contentTypeFor, mediaContentType, type OutputFile, type Writer } from './writers/types'
 import { createGithubWriter } from './writers/github'
 import { createLocalWriter } from './writers/local'
 import { createS3Writer } from './writers/s3'
@@ -54,15 +54,19 @@ import { createS3Writer } from './writers/s3'
  *   `services/training/index.html`   → `../../`
  *
  * Handles both bundled asset paths and internal page links.
+ *
+ * TORCH (part 3, W10): the export's font files (`studio/fonts/...`) are named by the @font-face rules inlined in each
+ * page, as `url(/studio/fonts/...)`, and by the preloaded heading font's `href`.
  */
-const ABSOLUTE_ASSET_RE = /(?<=["'\s,=])\/(?=a\/[A-Za-z0-9]{22}\/|(?:ycode|studio)\/layouts\/assets\/|swiper-minimal\.css|vendor\/swiper-bundle\.min\.js)/g
+const ABSOLUTE_ASSET_RE = /(?<=["'\s,=])\/(?=a\/[A-Za-z0-9]{22}\/|(?:ycode|studio)\/layouts\/assets\/|studio\/fonts\/|swiper-minimal\.css|vendor\/swiper-bundle\.min\.js)/g
+const EXPORTED_FONT_URL_RE = /(?<=url\()\/(?=studio\/fonts\/)/g
 const INTERNAL_LINK_RE = /href="\/([^"]*?)"/g
 
 function relativizePaths(html: string, outputKey: string): string {
   const depth = outputKey.split('/').length - 1
   const prefix = depth === 0 ? './' : '../'.repeat(depth)
 
-  let result = html.replace(ABSOLUTE_ASSET_RE, prefix)
+  let result = html.replace(ABSOLUTE_ASSET_RE, prefix).replace(EXPORTED_FONT_URL_RE, prefix)
 
   result = result.replace(INTERNAL_LINK_RE, (_match, path: string) => {
     if (/^a\/[A-Za-z0-9]{22}\//.test(path)) return `href="${prefix}${path}"`
@@ -203,12 +207,21 @@ export async function exportSite(presetJobId?: string): Promise<ExportJob> {
     // ---- Font CSS (Google inlined @font-face + custom @font-face + class rules)
     let fontsCss = ''
     let googleCss = ''
+    let googleFontFiles: ExportedFontFile[] = []
     let fontPreloads: FontPreload[] = []
     if (fonts.length > 0) {
       const googleLinks = getGoogleFontLinks(fonts)
-      googleCss = googleLinks.length > 0
-        ? await fetchGoogleFontsCss(googleLinks).catch(() => '')
-        : ''
+      if (googleLinks.length > 0) {
+        // TORCH (part 3, W10; OPEN_QUESTIONS 63): the families come from the platform's font mirror and the export
+        // carries their files, as a published page takes them from the mirror: no file written names Google. A family
+        // the mirror cannot give is left out and said so, as the published page does, never read from Google instead.
+        const mirrored = await exportedGoogleFonts(googleLinks)
+        googleCss = mirrored.css
+        googleFontFiles = mirrored.files
+        for (const { url, reason } of mirrored.unavailable) {
+          console.warn(`[Static Export] The font mirror could not give ${url}; the export is written without that font: ${reason}`)
+        }
+      }
       fontsCss = [googleCss, buildCustomFontsCss(fonts), buildFontClassesCss(fonts)]
         .filter(Boolean)
         .join('\n')
@@ -216,7 +229,11 @@ export async function exportSite(presetJobId?: string): Promise<ExportJob> {
     }
 
     // ---- Render every page (default locale + per non-default locale) ----
-    const outputs: OutputFile[] = []
+    const outputs: OutputFile[] = googleFontFiles.map((file) => ({
+      key: file.key,
+      body: file.body,
+      contentType: mediaContentType(file.key),
+    }))
     const referencedAssetPaths = new Set<string>()
 
     const renderPage = async (page: Page, ctx: LocaleContext): Promise<void> => {

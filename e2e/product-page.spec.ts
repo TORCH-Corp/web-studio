@@ -175,7 +175,7 @@ test('/products/{parent id} shows the item with its picker: Medium and Large can
     await page.waitForLoadState('networkidle');
     // It opens on the cheapest variant that can be bought: Small Blue, 20 USD at 1520.
     await expect(priceOf(page)).toContainText('30,400 IQD');
-    await expect(priceOf(page).locator('.ws-pd-unit')).toHaveText('/ pcs');
+    await expect(priceOf(page).locator('.ws-pd-unit')).toHaveText('/ Piece');
     await expect(detailOf(page).locator('.ws-desc')).toHaveText('Washed linen.');
     await expect(detailOf(page).locator('img').first()).toHaveAttribute('src', new RegExp(`/store-media/.+item=${ITEM.shirt}`));
 

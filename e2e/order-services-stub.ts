@@ -11,6 +11,12 @@
  *        → 201 { person_id, created: true } for a new number, 200 with created
  *          false for one the organization has in its canonical form (964).
  *
+ * Contact Center, a web form's prospect (part 3, session W3; the route of torch-core-backend 3123625d):
+ *   POST /api/v1/internal/prospects/find-or-create { name, phone, email?, notes?, origin: 'web_form' } (no other key)
+ *        → 200 { kind: 'contact', id } when a person made by the route above holds the phone in its canonical
+ *          form, 200 { kind: 'prospect', id, created: false } when a prospect does, 201 { kind: 'prospect', id,
+ *          created: true } for a new one. The same guard; 400 for a body its schema refuses.
+ *
  * Contact Center, the buyers of the Orders list (session W8):
  *   POST /api/v1/directory/lookup-ids { ids } (1 to 100 uuids) → { success, data: { <id>: { id, entityKind, name,
  *        code, phone, email, status, … } } }: the persons the find-or-create above made, keyed by id; an unknown id
@@ -79,6 +85,7 @@ interface Order {
 
 const calls: Record<OrderService, Call[]> = { 'contact-center': [], sales: [] };
 const persons: Person[] = [];
+const prospects: Array<{ id: string; entityId: string; canonical: string }> = [];
 const orders = new Map<string, Order>();
 let orderNumber = 0;
 let refuseNext: { code: string; items: string[] } | null = null;
@@ -141,6 +148,33 @@ async function findOrCreate(request: http.IncomingMessage, response: http.Server
   const person = { id: randomUUID(), entityId, name: body.name, phone: body.phone, canonical };
   persons.push(person);
   return answer(201, { person_id: person.id, created: true });
+}
+
+async function findOrCreateProspect(request: http.IncomingMessage, response: http.ServerResponse, path: string, down: boolean, json: Reply): Promise<void> {
+  const body = await readBody(request);
+  const answer = (status: number, payload: unknown) => {
+    record('contact-center', request, path, body, status, payload);
+    json(response, status, payload);
+  };
+  const refused = credentials(request, CONTACT_CENTER_KEY);
+  if (refused) return answer(refused.status, { message: refused.message });
+  if (down) return answer(503, { error: 'Service Unavailable' });
+  if (!isObject(body) || !onlyKeys(body, ['name', 'phone', 'email', 'notes', 'origin'])) return answer(400, { message: 'body must NOT have additional properties' });
+  if (typeof body.name !== 'string' || !/\S/.test(body.name) || body.name.length > 255) return answer(400, { message: 'body/name is invalid' });
+  if (typeof body.phone !== 'string' || body.phone.length < 1 || body.phone.length > 20) return answer(400, { message: 'body/phone is invalid' });
+  if (body.email !== undefined && (typeof body.email !== 'string' || body.email.length > 255 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email))) return answer(400, { message: 'body/email must match format "email"' });
+  if (body.notes !== undefined && (typeof body.notes !== 'string' || body.notes.length > 5000)) return answer(400, { message: 'body/notes is invalid' });
+  if (body.origin !== 'web_form') return answer(400, { message: 'body/origin must be web_form' });
+  const canonical = canonicalPhone(body.phone);
+  if (canonical.length < 7) return answer(400, { message: 'A phone needs at least 7 digits' });
+  const entityId = request.headers['x-entity-id'] as string;
+  const person = persons.find((candidate) => candidate.entityId === entityId && candidate.canonical === canonical);
+  if (person) return answer(200, { kind: 'contact', id: person.id });
+  const found = prospects.find((candidate) => candidate.entityId === entityId && candidate.canonical === canonical);
+  if (found) return answer(200, { kind: 'prospect', id: found.id, created: false });
+  const prospect = { id: randomUUID(), entityId, canonical };
+  prospects.push(prospect);
+  return answer(201, { kind: 'prospect', id: prospect.id, created: true });
 }
 
 /** SL2's body, every level closed; a message for the first thing wrong, null when it holds. */
@@ -414,6 +448,10 @@ export async function handleOrderServices(
   const method = request.method;
   if (method === 'POST' && path === '/api/v1/internal/persons/find-or-create') {
     await findOrCreate(request, response, path, isDown('contact-center'), json);
+    return true;
+  }
+  if (method === 'POST' && path === '/api/v1/internal/prospects/find-or-create') {
+    await findOrCreateProspect(request, response, path, isDown('contact-center'), json);
     return true;
   }
   if (method === 'POST' && path === '/internal/orders') {

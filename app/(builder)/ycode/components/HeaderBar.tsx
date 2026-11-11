@@ -40,7 +40,8 @@ import { Separator } from '@/components/ui/separator';
 import { BackupRestoreDialog } from '@/components/project/BackupRestoreDialog';
 import { isCloudVersion } from '@/lib/utils';
 import { useRole } from '@/hooks/use-role';
-import { useWsParts } from '@/hooks/use-ws-parts';
+import { useHasFlag } from '@/lib/platform/use-flag';
+import { WEB_STUDIO_LEAF } from '@/lib/platform/web-studio-scope';
 
 interface HeaderBarProps {
   user: User | null;
@@ -87,8 +88,10 @@ export default function HeaderBar({
   const pathname = usePathname();
   const pageDropdownRef = useRef<HTMLDivElement>(null);
   const { isEditor, canManageSettings } = useRole();
+  // The CMS and Forms screens are only drawn for a user whose flags let the API answer them (part 3, session W2).
+  const canReadCollections = useHasFlag(WEB_STUDIO_LEAF.manageContent, 'r');
+  const canReadForms = useHasFlag(WEB_STUDIO_LEAF.manageForms, 'r');
   const lock = useSiteLock();
-  const wsParts = useWsParts();
   const editorSidebarTab = useEditorStore((s) => s.activeSidebarTab);
   const currentPageCollectionItemId = useEditorStore((s) => s.currentPageCollectionItemId);
   const storeCurrentPageId = useEditorStore((s) => s.currentPageId);
@@ -533,7 +536,7 @@ export default function HeaderBar({
               Design
             </Button>
           )}
-          {wsParts && (
+          {canReadCollections && (
             <Button
               variant={activeNavButton === 'cms' ? 'secondary' : 'ghost'}
               size="sm"
@@ -557,7 +560,7 @@ export default function HeaderBar({
               CMS
             </Button>
           )}
-          {wsParts && !isEditor && (
+          {!isEditor && canReadForms && (
             <Button
               variant={activeNavButton === 'forms' ? 'secondary' : 'ghost'}
               size="sm"

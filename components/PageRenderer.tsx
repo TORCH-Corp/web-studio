@@ -12,6 +12,7 @@ import { buildAllPagesTag } from '@/lib/cache-tags';
 import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
 import { computeStorePagePaths, type ProductPageState, type StorePageContext } from '@/lib/platform/store-elements/pages';
 import { readStorePagePaths } from '@/lib/platform/store-elements/product-page';
+import VisitBeacon from '@/lib/platform/VisitBeacon';
 import { resolveCustomCodePlaceholders } from '@/lib/resolve-cms-variables';
 import { generateInitialAnimationCSS, type HiddenLayerInfo } from '@/lib/animation-utils';
 import { buildCustomFontsCss, buildFontClassesCss, getCustomFontPreloads, getGoogleFontLinks } from '@/lib/font-utils';
@@ -982,6 +983,9 @@ export default async function PageRenderer({
       )}
 
       {ycodeBadge && !isPreview && <YcodeBadge />}
+
+      {/* TORCH (part 3, session W7): a published page reports its own view; the canvas, the preview and error pages do not. */}
+      {page.is_published && !isPreview && page.error_page == null && <VisitBeacon pageId={page.id} />}
     </>
   );
 }

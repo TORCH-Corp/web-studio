@@ -44,7 +44,7 @@ export function cookieAttributes(headers: Headers, url: { protocol: string }): C
 }
 
 /** Web Studio permission leaves, one per area of the app, with the standard flags. */
-export type WebStudioLeaf = 'webstudio.manage_sites' | 'webstudio.manage_content' | 'webstudio.manage_forms' | 'webstudio.manage_orders';
+export type WebStudioLeaf = 'webstudio.manage_sites' | 'webstudio.manage_content' | 'webstudio.manage_forms' | 'webstudio.manage_orders' | 'webstudio.manage_reports';
 export type Flag = 'c' | 'r' | 'u' | 'd' | 'x' | 'export' | 'use_ai';
 
 export interface BosSession {

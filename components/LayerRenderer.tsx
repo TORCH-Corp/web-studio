@@ -58,6 +58,7 @@ import { generateLinkHref, resolveLinkAttrs, isLinkAtCollectionBoundary, isLinkT
 import { stripDisplayNoneClasses } from '@/lib/animation-display';
 import { collectEditorHiddenLayerIds, collectKeptHiddenLayerIds, type HiddenLayerInfo } from '@/lib/animation-utils';
 import AnimationInitializer from '@/components/AnimationInitializer';
+import { pageLocale, prospectFieldsHold, showRefusedFields } from '@/lib/platform/form-prospect-page';
 import { transformLayerIdsForInstance, resolveVariableLinks } from '@/lib/resolve-components';
 
 import type { DesignColorVariable, FieldVariable } from '@/types';
@@ -2814,17 +2815,21 @@ const LayerItemImpl: React.FC<{
           }
         });
 
+        // TORCH (part 3, session W3): a form that creates a prospect checks its name and phone before it is sent.
+        if (formSettings?.create_prospect === true && !prospectFieldsHold(form, payload, currentLocale?.code)) return;
+
         try {
           const response = await fetch('/ycode/api/form-submissions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               form_id: formId || 'unnamed-form',
+              layer_id: layer.id,
+              locale: pageLocale(currentLocale?.code),
               payload,
               metadata: {
                 page_url: typeof window !== 'undefined' ? window.location.href : undefined,
               },
-              email: formSettings?.email_notification,
             }),
           });
 
@@ -2837,6 +2842,9 @@ const LayerItemImpl: React.FC<{
           // Hide both alerts first
           if (errorAlert) errorAlert.style.display = 'none';
           if (successAlert) successAlert.style.display = 'none';
+
+          // TORCH (W3): the server refused the name or the phone; its message is on the field.
+          if (showRefusedFields(form, response.status, result)) return;
 
           if (response.ok) {
             // Success handling

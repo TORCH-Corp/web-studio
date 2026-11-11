@@ -35,6 +35,20 @@
  *        → { success, data: [{ id, code, symbol, name, status }] }, archived
  *        units included, an unknown id left out.
  *
+ * Session W5 (part 3) adds the two reads that say who is told of a new form
+ * submission, the calls Sales makes for a storefront order's notification (its
+ * `order-platform.ts`, `storefrontOrderRecipients`), with the same key:
+ *
+ *   POST /api/internal/people/members  { entityId, limit } (limit up to 500)
+ *        → { people: [{ id, displayName, avatarUrl }], nextCursor }: the
+ *          organization's active members in user-id order, `nextCursor` not
+ *          null when there are more. No read gives the holders of a flag, nor a
+ *          site's members, so the caller asks the flag of each member.
+ *   POST /api/internal/authz/evaluate  { userId, entityId, leafKey, flag }
+ *        → { allowed: boolean }: the user's own profile in the organization
+ *          (libs/service-utils `AuthAuthzClient`, which Sales's holder lookup
+ *          goes through). Guarded by `x-service-api-key` alone.
+ *
  * ORG_SETUP_URL and ORG_SETUP_API_KEY come from the environment. Kept free of
  * Next imports so it runs under `node --test`.
  */
@@ -192,4 +206,34 @@ export async function findUnits(organizationId: string, ids: string[], env: Env 
     }
   }
   return units;
+}
+
+/** auth-service's limit for one member read. */
+const MEMBERS_MAX = 500;
+
+/**
+ * The first `limit` active members of the organization (their ids, in user-id
+ * order) from one call, and whether there are more. For a read that must be
+ * bounded: who a new submission is told to.
+ */
+export async function listMemberIds(organizationId: string, limit: number, env: Env = process.env, fetchImpl: typeof fetch = fetch): Promise<{ ids: string[]; hasMore: boolean }> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > MEMBERS_MAX) throw new Error(`Read at most ${MEMBERS_MAX} members at a time`);
+  const op = 'POST /api/internal/people/members';
+  const body = (await call(op, '/api/internal/people/members', { method: 'POST', body: { entityId: organizationId, limit }, organizationId }, env, fetchImpl)) as { people?: unknown; nextCursor?: unknown } | null;
+  if (!Array.isArray(body?.people)) throw new OrgSetupUnavailableError(`Organization Setup answered ${op} with an unexpected body`);
+  const ids = body.people.map((person) => (person && typeof person === 'object' ? (person as { id?: unknown }).id : undefined));
+  if (!ids.every((id): id is string => typeof id === 'string' && id !== '')) throw new OrgSetupUnavailableError(`Organization Setup answered ${op} with a member that has no id`);
+  return { ids, hasMore: typeof body.nextCursor === 'string' };
+}
+
+/**
+ * Whether the user holds the flag on the leaf in the organization, from their
+ * own profile. A check that was not answered is an error and never a no, so a
+ * caller can tell "not allowed" from "could not ask".
+ */
+export async function userHolds(organizationId: string, userId: string, leafKey: string, flag: string, env: Env = process.env, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  const op = 'POST /api/internal/authz/evaluate';
+  const body = (await call(op, '/api/internal/authz/evaluate', { method: 'POST', body: { userId, entityId: organizationId, leafKey, flag }, organizationId }, env, fetchImpl)) as { allowed?: unknown } | null;
+  if (typeof body?.allowed !== 'boolean') throw new OrgSetupUnavailableError(`Organization Setup answered ${op} with an unexpected body`);
+  return body.allowed;
 }

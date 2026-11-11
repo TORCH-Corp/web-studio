@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { findBranches, findUnits, listBranches, OrgSetupUnavailableError, usdIqdRate } from './org-setup';
+import { findBranches, findUnits, listBranches, listMemberIds, OrgSetupUnavailableError, userHolds, usdIqdRate } from './org-setup';
 
 const ENV = { ORG_SETUP_URL: 'http://auth-service:6001/', ORG_SETUP_API_KEY: 'k' };
 const ORG = '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a';
@@ -96,4 +96,56 @@ test('units are looked up by id in calls of 200, archived ones included, an unkn
   assert.equal(units.has('gone'), false);
   assert.equal((await findUnits(ORG, [], ENV, fetchImpl)).size, 0);
   assert.equal(calls.length, 2, 'no ids, no call');
+});
+
+// ---------------------------------------------------------------------------
+// Who may be told of a new submission (part 3, session W5)
+// ---------------------------------------------------------------------------
+
+const MEMBER_A = '3a3a3a3a-3a3a-4a3a-8a3a-3a3a3a3a3a3a';
+const MEMBER_B = '3b3b3b3b-3b3b-4b3b-8b3b-3b3b3b3b3b3b';
+
+test('the members are the organization\'s first ids, asked with the service key, the organization and the limit; a next cursor means there are more', async () => {
+  let seen: { url: string; method?: string; headers: Headers; body: unknown } | null = null;
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    seen = { url, method: init.method, headers: new Headers(init.headers), body: JSON.parse(String(init.body)) };
+    return new Response(JSON.stringify({ people: [{ id: MEMBER_A, displayName: 'A', avatarUrl: null }, { id: MEMBER_B, displayName: null, avatarUrl: null }], nextCursor: 'next' }));
+  }) as unknown as typeof fetch;
+  assert.deepEqual(await listMemberIds(ORG, 200, ENV, fetchImpl), { ids: [MEMBER_A, MEMBER_B], hasMore: true });
+  assert.equal(seen!.url, 'http://auth-service:6001/api/internal/people/members');
+  assert.equal(seen!.method, 'POST');
+  assert.equal(seen!.headers.get('x-service-api-key'), 'k');
+  assert.equal(seen!.headers.get('x-entity-id'), ORG);
+  assert.deepEqual(seen!.body, { entityId: ORG, limit: 200 });
+  const last = await listMemberIds(ORG, 200, ENV, answer(200, { people: [{ id: MEMBER_A }], nextCursor: null }));
+  assert.deepEqual(last, { ids: [MEMBER_A], hasMore: false });
+});
+
+test('the members that cannot be read are an error that says why, never an empty list', async () => {
+  await assert.rejects(listMemberIds(ORG, 200, {}, answer(200, {})), /not set/);
+  await assert.rejects(listMemberIds(ORG, 200, ENV, answer(401, '')), /answered 401/);
+  await assert.rejects(listMemberIds(ORG, 200, ENV, answer(200, { members: [] })), /unexpected body/);
+  await assert.rejects(listMemberIds(ORG, 200, ENV, answer(200, { people: [{ displayName: 'no id' }], nextCursor: null })), /member that has no id/);
+  await assert.rejects(listMemberIds(ORG, 501, ENV, answer(200, { people: [], nextCursor: null })), /at most 500/);
+});
+
+test('whether a user holds a flag is auth-service\'s evaluate, asked with the service key; only allowed true is yes', async () => {
+  let seen: { url: string; method?: string; headers: Headers; body: unknown } | null = null;
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    seen = { url, method: init.method, headers: new Headers(init.headers), body: JSON.parse(String(init.body)) };
+    return new Response(JSON.stringify({ allowed: true }));
+  }) as unknown as typeof fetch;
+  assert.equal(await userHolds(ORG, MEMBER_A, 'webstudio.manage_forms', 'r', ENV, fetchImpl), true);
+  assert.equal(seen!.url, 'http://auth-service:6001/api/internal/authz/evaluate');
+  assert.equal(seen!.method, 'POST');
+  assert.equal(seen!.headers.get('x-service-api-key'), 'k');
+  assert.deepEqual(seen!.body, { userId: MEMBER_A, entityId: ORG, leafKey: 'webstudio.manage_forms', flag: 'r' });
+  assert.equal(await userHolds(ORG, MEMBER_A, 'webstudio.manage_forms', 'r', ENV, answer(200, { allowed: false })), false);
+});
+
+test('a check auth-service did not answer is an error, never a no: the member is not silently dropped', async () => {
+  await assert.rejects(userHolds(ORG, MEMBER_A, 'webstudio.manage_forms', 'r', {}, answer(200, {})), /not set/);
+  await assert.rejects(userHolds(ORG, MEMBER_A, 'webstudio.manage_forms', 'r', ENV, answer(401, '')), (e: Error) => e instanceof OrgSetupUnavailableError && /answered 401/.test(e.message));
+  await assert.rejects(userHolds(ORG, MEMBER_A, 'webstudio.manage_forms', 'r', ENV, answer(200, { allowed: 'yes' })), /unexpected body/);
+  await assert.rejects(userHolds(ORG, MEMBER_A, 'webstudio.manage_forms', 'r', ENV, answer(200, {})), /unexpected body/);
 });
