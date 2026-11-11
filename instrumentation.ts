@@ -11,4 +11,8 @@ export async function register() {
   // with auth-service over the core event bus. Best effort; logs when it cannot.
   const { startScopeRegistration } = await import('./lib/platform/scope-registration');
   await startScopeRegistration();
+
+  // TORCH platform (part 3, session W3): ask Contact Center again for the form submissions that wait for it.
+  const { startFormLinkRetry } = await import('./lib/platform/form-link-retry');
+  startFormLinkRetry();
 }

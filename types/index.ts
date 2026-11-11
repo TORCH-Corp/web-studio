@@ -202,6 +202,9 @@ export interface FormSettings {
   success_message?: string; // Message shown on successful submission (deprecated - now uses alert child)
   error_message?: string; // Message shown on failed submission (deprecated - now uses alert child)
   redirect_url?: LinkSettingsValue; // Link settings for redirect after successful submission
+  // TORCH (part 3, session W3): each submission also creates a prospect in Contact Center; the form
+  // then keeps a required `name` and `phone` input (lib/platform/form-prospect.ts). Off when absent.
+  create_prospect?: boolean;
   email_notification?: {
     enabled: boolean;
     to: string; // Email address to send notifications to

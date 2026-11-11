@@ -9,6 +9,8 @@ import {
 import { noCache } from '@/lib/api-response';
 import { screenFormSubmission, stripHoneypotField } from '@/lib/form-spam-protection';
 import { getClientIp } from '@/lib/request-utils';
+import { linkSubmission } from '@/lib/platform/form-links';
+import { planSubmission } from '@/lib/platform/form-submit';
 
 // Disable caching for this route
 export const dynamic = 'force-dynamic';
@@ -54,6 +56,10 @@ export async function GET(request: NextRequest) {
  * - form_id: string (required)
  * - payload: object (required)
  * - metadata: object (optional - IP, user agent, etc.)
+ * - layer_id, locale: the form layer's id and the page's language (TORCH, session W3)
+ *
+ * 400 { code: 'invalid_fields', fields: { name?, phone? } } when the form creates a prospect
+ * and the name or the phone breaks its rule (lib/platform/form-submit.ts)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -92,12 +98,29 @@ export async function POST(request: NextRequest) {
 
     const isSpam = verdict.outcome === 'spam';
 
+    // TORCH (part 3, session W3): whether this form creates a prospect is read from the published form, never
+    // from the body; with the switch on, a name or a phone that breaks its rule is refused before anything is stored.
+    const plan = await planSubmission(body, payload, isSpam);
+    if (!plan.ok) {
+      return NextResponse.json({ error: 'Some fields need correcting', code: 'invalid_fields', fields: plan.fields }, { status: 400 });
+    }
+
     const submission = await createFormSubmission({
       form_id: body.form_id,
       payload,
       metadata,
       status: isSpam ? 'spam' : 'new',
     });
+
+    // The submission is stored, so the visitor's answer is a success whatever becomes of its link: Contact Center
+    // is given a short time (lib/platform/form-links.ts), and a link that could not be written is logged.
+    if (plan.site) {
+      try {
+        await linkSubmission(plan.site, { id: submission.id, spam: isSpam }, plan.prospect);
+      } catch (error) {
+        console.error(`[POST /ycode/api/form-submissions] submission ${submission.id}: its Contact Center link was not written`, error);
+      }
+    }
 
     // Nothing else happens when a submission arrives: ycode's email, its webhooks and the app integrations
     // (Airtable, MailerLite) are out of Web Studio (part 3, PRD V1.0 Out-of-Scope; session W2). Spam is

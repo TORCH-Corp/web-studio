@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { ContactCenterUnavailableError, findOrCreatePerson, lookupContacts } from './contact-center';
+import { ContactCenterUnavailableError, findOrCreatePerson, findOrCreateProspect, lookupContacts } from './contact-center';
 
 const ENV = { CONTACT_CENTER_URL: 'http://contact-center-service:6017/', CONTACT_CENTER_API_KEY: 'cc-key' };
 const ORG = '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a';
@@ -96,4 +96,45 @@ test('a lookup that fails, answers badly, or has no configuration is ContactCent
   }) as unknown as typeof fetch;
   await assert.rejects(lookupContacts(ORG, [idAt(1)], ENV, down), /not reachable.*fetch failed/);
   await assert.rejects(lookupContacts(ORG, [idAt(1)], {}, answer(200, {})), /CONTACT_CENTER_URL and CONTACT_CENTER_API_KEY are not set/);
+});
+
+// --- a web form's prospect (part 3, session W3) -----------------------------
+
+test('the prospect is asked for with the name, the phone, the email, the notes and the web_form origin', async () => {
+  let seen: { url: string; headers: Headers; body: unknown } | null = null;
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    seen = { url, headers: new Headers(init.headers), body: JSON.parse(String(init.body)) };
+    return new Response(JSON.stringify({ kind: 'prospect', id: PERSON.toUpperCase(), created: true }), { status: 201 });
+  }) as unknown as typeof fetch;
+  const prospect = { name: 'Ali Hassan', phone: '9647701234567', email: 'ali@example.com', notes: 'Call me' };
+  assert.deepEqual(await findOrCreateProspect(ORG, prospect, 3000, ENV, fetchImpl), { kind: 'prospect', id: PERSON });
+  assert.equal(seen!.url, 'http://contact-center-service:6017/api/v1/internal/prospects/find-or-create');
+  assert.equal(seen!.headers.get('x-service-api-key'), 'cc-key');
+  assert.equal(seen!.headers.get('x-entity-id'), ORG);
+  assert.deepEqual(seen!.body, { ...prospect, origin: 'web_form' });
+});
+
+test('a name and a phone alone send no email and no notes', async () => {
+  let body: unknown;
+  const fetchImpl = (async (_url: string, init: RequestInit) => {
+    body = JSON.parse(String(init.body));
+    return new Response(JSON.stringify({ kind: 'prospect', id: PERSON, created: false }), { status: 200 });
+  }) as unknown as typeof fetch;
+  await findOrCreateProspect(ORG, { name: 'Ali', phone: '9647701234567' }, 3000, ENV, fetchImpl);
+  assert.deepEqual(body, { name: 'Ali', phone: '9647701234567', origin: 'web_form' });
+});
+
+test('a phone that is a contact answers with the contact', async () => {
+  assert.deepEqual(await findOrCreateProspect(ORG, { name: 'Ali', phone: '9647701234567' }, 3000, ENV, answer(200, { kind: 'contact', id: PERSON })), { kind: 'contact', id: PERSON });
+});
+
+test('a prospect call that is refused, fails, answers badly, is too slow or has no configuration is ContactCenterUnavailableError', async () => {
+  const prospect = { name: 'Ali', phone: '9647701234567' };
+  for (const [status, body] of [[400, { message: 'body/phone' }], [401, ''], [500, ''], [503, ''], [200, { kind: 'lead', id: PERSON }], [201, { kind: 'prospect', id: 'x' }], [200, 'not json']] as const) {
+    await assert.rejects(findOrCreateProspect(ORG, prospect, 3000, ENV, answer(status, body)), ContactCenterUnavailableError, `${status} ${JSON.stringify(body)}`);
+  }
+  const slow = ((_url: string, init: RequestInit) =>
+    new Promise((_resolve, reject) => init.signal!.addEventListener('abort', () => reject(init.signal!.reason)))) as unknown as typeof fetch;
+  await assert.rejects(findOrCreateProspect(ORG, prospect, 20, ENV, slow), /not reachable/);
+  await assert.rejects(findOrCreateProspect(ORG, prospect, 3000, {}, answer(200, {})), /CONTACT_CENTER_URL and CONTACT_CENTER_API_KEY are not set/);
 });
