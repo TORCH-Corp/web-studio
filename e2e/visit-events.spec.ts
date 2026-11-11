@@ -326,7 +326,6 @@ test('the product card\'s Add to cart in a real browser reports one cart visitor
     await expect.poll(async () => (await rows().where({ device: 'desktop', kind: 'view' })).length).toBe(1);
     await card.getByRole('button', { name: 'Add to cart' }).click();
     await card.getByRole('button', { name: 'Add to cart' }).click();
-    await expect(page.locator('[data-ws-store="cartIndicator"] .ws-badge, .ws-badge').first()).toBeAttached().catch(() => undefined);
     await expect.poll(async () => (await rows().where({ device: 'desktop', kind: 'add_to_cart' })).length).toBe(1);
 
     const [viewed] = await rows().where({ device: 'desktop', kind: 'view' });
