@@ -179,19 +179,9 @@ export function normalisePath(value: string): string | null {
   return path;
 }
 
-/**
- * Read the body of a view: `{ page_id, path, referrer }`, where `referrer` is
- * the host of the page's referrer or ''. Null when it is not that.
- */
-export function parseVisit(raw: string): VisitInput | null {
-  let body: unknown;
-  try {
-    body = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
-  const { page_id: pageId, path, referrer = '' } = body as Record<string, unknown>;
+/** The view a body holds, or null when it is not one. */
+function viewOf(body: Record<string, unknown>): VisitInput | null {
+  const { page_id: pageId, path, referrer = '' } = body;
   if (typeof pageId !== 'string' || !UUID_PATTERN.test(pageId)) return null;
   if (typeof path !== 'string' || typeof referrer !== 'string') return null;
   const normalised = normalisePath(path);
@@ -199,4 +189,46 @@ export function parseVisit(raw: string): VisitInput | null {
   const referrerHost = referrer.trim().toLowerCase();
   if (referrerHost.length > MAX_HOST_LENGTH || !HOST_PATTERN.test(referrerHost)) return null;
   return { pageId: pageId.toLowerCase(), path: normalised, referrerHost };
+}
+
+/** The JSON object a body is, or null. */
+function objectOf(raw: string): Record<string, unknown> | null {
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+}
+
+/**
+ * Read the body of a view: `{ page_id, path, referrer }`, where `referrer` is
+ * the host of the page's referrer or ''. Null when it is not that.
+ */
+export function parseVisit(raw: string): VisitInput | null {
+  const body = objectOf(raw);
+  return body ? viewOf(body) : null;
+}
+
+/** What a published page reports to its own host: one view of a page, or one add to cart. */
+export type VisitReport = { kind: 'view'; view: VisitInput } | { kind: 'add_to_cart' };
+
+/**
+ * Read what a page reports (session W8). A body with no `kind` is a view, as the
+ * page of session W7 sends it (`kind: 'view'` says so too); `{ kind: 'add_to_cart' }`
+ * is the store's add to cart and carries nothing else: nothing else in the body
+ * is read. Any other kind, an order or a form submission included, is refused:
+ * those two are written by the server when the order is made and the form is
+ * stored, never on a browser's word (lib/platform/visit-events.ts). Null when the
+ * body is none of these.
+ */
+export function parseReport(raw: string): VisitReport | null {
+  const body = objectOf(raw);
+  if (!body) return null;
+  if (!('kind' in body) || body.kind === 'view') {
+    const view = viewOf(body);
+    return view ? { kind: 'view', view } : null;
+  }
+  return body.kind === 'add_to_cart' ? { kind: 'add_to_cart' } : null;
 }

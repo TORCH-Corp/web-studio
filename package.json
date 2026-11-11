@@ -36,6 +36,7 @@
     "e2e:server": "playwright test -c playwright.server.config.ts",
     "e2e:db": "TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json node --require ts-node/register --require tsconfig-paths/register e2e/prepare-database.ts",
     "e2e:auth-stub": "TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json node --require ts-node/register --require tsconfig-paths/register e2e/auth-stub.ts",
+    "visits:totals": "TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json node --require ts-node/register --require tsconfig-paths/register scripts/visit-totals.ts",
     "templates:seed": "TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json node --require ts-node/register --require tsconfig-paths/register scripts/seed-templates.ts",
     "migrate:make": "NODE_NO_WARNINGS=1 knex migrate:make --knexfile knexfile.ts -x ts",
     "migrate:latest": "NODE_NO_WARNINGS=1 knex migrate:latest --knexfile knexfile.ts",

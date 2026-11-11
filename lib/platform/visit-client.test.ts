@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 
-import { VISIT_URL, forgetLastView, referrerHostOf, reportView, visitBody, type VisitBrowser } from './visit-client';
+import { ADD_TO_CART_BODY, VISIT_URL, connectVisitBrowser, forgetLastView, referrerHostOf, reportAddToCart, reportView, visitBody, type VisitBrowser } from './visit-client';
 
 const PAGE = '11111111-2222-4333-8444-555555555555';
 const OTHER_PAGE = '66666666-7777-4888-8999-aaaaaaaaaaaa';
@@ -95,4 +95,58 @@ test('the answer is not read: a refusal\'s body is discarded, so the request doe
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(sent.length, 1);
   assert.equal(state.cancelled, 1);
+});
+
+test('an add to cart is one POST of its kind to the page\'s own host, and carries nothing else (session W8)', () => {
+  assert.deepEqual(JSON.parse(ADD_TO_CART_BODY), { kind: 'add_to_cart' });
+  const { fake, sent } = browser({ pathname: '/shop', referrer: 'https://www.google.com/' });
+  const disconnect = connectVisitBrowser(fake);
+  try {
+    reportAddToCart();
+    reportAddToCart();
+    // Sent on every add: the server keeps one per visitor and day.
+    assert.equal(sent.length, 2);
+    assert.equal(sent[0].url, VISIT_URL);
+    assert.equal(sent[0].init.method, 'POST');
+    assert.equal(sent[0].init.keepalive, true);
+    assert.equal(sent[0].init.body, ADD_TO_CART_BODY);
+  } finally {
+    disconnect();
+  }
+});
+
+test('where no counted page is connected (the builder\'s canvas and preview) an add to cart reports nothing', () => {
+  const { fake, sent } = browser();
+  reportAddToCart();
+  assert.equal(sent.length, 0);
+  // Disconnecting stops the reports; another page's connection is not undone by an older one's disconnect.
+  const first = connectVisitBrowser(fake);
+  const second = browser();
+  const connectedSecond = connectVisitBrowser(second.fake);
+  first();
+  reportAddToCart();
+  assert.equal(sent.length, 0);
+  assert.equal(second.sent.length, 1);
+  connectedSecond();
+  reportAddToCart();
+  assert.equal(second.sent.length, 1);
+});
+
+test('a failed or refused add to cart changes nothing for the visitor and leaves no request open', async () => {
+  const failing = browser({ fail: true });
+  const disconnect = connectVisitBrowser(failing.fake);
+  try {
+    assert.doesNotThrow(() => reportAddToCart());
+  } finally {
+    disconnect();
+  }
+  const refused = browser({ refusal: true });
+  const disconnectRefused = connectVisitBrowser(refused.fake);
+  try {
+    reportAddToCart();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(refused.state.cancelled, 1);
+  } finally {
+    disconnectRefused();
+  }
 });

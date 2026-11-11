@@ -9,6 +9,7 @@ import {
 import { noCache } from '@/lib/api-response';
 import { screenFormSubmission, stripHoneypotField } from '@/lib/form-spam-protection';
 import { getClientIp } from '@/lib/request-utils';
+import { countEventOnHost } from '@/lib/platform/visit-events';
 
 // Disable caching for this route
 export const dynamic = 'force-dynamic';
@@ -98,6 +99,10 @@ export async function POST(request: NextRequest) {
       metadata,
       status: isSpam ? 'spam' : 'new',
     });
+
+    // One 'form' event for the visitor behind this request, for a submission that is not spam (part 3, session W8).
+    // Never fails the submission: it is already stored.
+    if (!isSpam) await countEventOnHost(request, 'form', 'POST /ycode/api/form-submissions');
 
     // Nothing else happens when a submission arrives: ycode's email, its webhooks and the app integrations
     // (Airtable, MailerLite) are out of Web Studio (part 3, PRD V1.0 Out-of-Scope; session W2). Spam is

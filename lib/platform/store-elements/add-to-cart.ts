@@ -1,5 +1,6 @@
 import type { StoreProduct, StoreVariant } from '@/lib/platform/catalogue-rules';
 import type { CardData } from '@/lib/platform/store-elements/card-data';
+import { reportAddToCart } from '@/lib/platform/visit-client';
 import { CartFullError, getCartStore, type CartLineInput, type CartLineSnapshot } from '@/lib/platform/store-elements/cart-store';
 
 /** `added`, or `full`: the cart holds as many different items as a checkout takes, and this one is not in it. */
@@ -35,6 +36,9 @@ export function lineForProduct(product: StoreProduct, variant: StoreVariant | nu
 function add(line: CartLineInput): AddResult {
   try {
     getCartStore().add(line);
+    // The visitor's add to cart is counted on the site's own host (part 3, session W8); the report is
+    // fire-and-forget and does nothing in the builder, where no counted page is connected.
+    reportAddToCart();
     return 'added';
   } catch (error) {
     // A full cart is a state the buyer is told about; with no cart connected (CartStoreNotConnectedError) it
