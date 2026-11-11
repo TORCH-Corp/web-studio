@@ -27,6 +27,12 @@ const PEOPLE = [
   { name: `Omar Hassan ${RUN}`, slug: `omar-${RUN}`, role: 'Engineer', ar: { name: 'عمر حسن', role: 'مهندس' } },
 ];
 
+/** The collections each real template carries (part 3 Task B, 12 Nov 2026; OPEN_QUESTIONS 26 of part 3). */
+const TEMPLATE_COLLECTIONS: Record<string, string[]> = {
+  'company-site': ['Blog / News', 'Team', 'Branches / Locations'],
+  'landing-page': [],
+  'online-store': [],
+};
 interface Field { id: string; key: string | null; name: string; type: string }
 interface Item { id: string; values: Record<string, string> }
 interface Layer { id: string; name: string; classes?: string; settings?: unknown; variables?: unknown; children?: Layer[] }
@@ -161,7 +167,12 @@ test('a site is made from each of TORCH\'s real templates, with Arabic as its de
     expect((await openSite(api, made.id)).status(), candidate.slug).toBe(303);
     const pages = (await data<Array<{ error_page: number | null }>>(await api.get('/ycode/api/pages'))).filter((page) => page.error_page === null);
     expect(pages.length, `the pages of ${candidate.slug}`).toBe(candidate.page_count);
-    // None of them carries a collection, so the site has none either.
-    expect(await data<unknown[]>(await api.get('/ycode/api/collections')), candidate.slug).toEqual([]);
+    // The company site carries three ready collections with sample items (part 3 Task B); the others carry none.
+    const collections = await data<Array<{ id: string; name: string }>>(await api.get('/ycode/api/collections'));
+    expect(collections.map((collection) => collection.name).sort(), candidate.slug).toEqual([...(TEMPLATE_COLLECTIONS[candidate.slug] ?? [])].sort());
+    for (const collection of collections) {
+      const items = (await data<{ items: Item[] }>(await api.get(`/ycode/api/collections/${collection.id}/items?limit=50`))).items;
+      expect(items.length, `${candidate.slug}: ${collection.name}`).toBeGreaterThan(0);
+    }
   }
 });
