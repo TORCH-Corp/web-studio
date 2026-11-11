@@ -14,12 +14,17 @@
  *                    domain and the store settings (u), the list, opening a
  *                    site and reading its settings (r)
  *   manage_content   pages, layers, styles, components, assets, fonts, locales,
- *                    translations, versions (c r u d), publish and revert (u),
- *                    static export and project export (export), the AI agent
- *                    and the MCP clients that edit through it (use_ai)
- *   manage_forms     the contact form and its submissions, collections,
- *                    webhooks, API keys and the integrations: part 3, hidden by
- *                    session 3
+ *                    translations, versions, and collections with their fields
+ *                    and items (part 3, session W1) (c r u d), publish and
+ *                    revert (u), static export and project export (export), the
+ *                    AI agent and the MCP clients that edit through it (use_ai)
+ *   manage_forms     a form's submissions (part 3, PRD V1.0 "Roles and
+ *                    permissions"): the list and one submission (r), its status
+ *                    (u), delete (d); a visitor's own POST is anonymous. Also
+ *                    webhooks, API keys and the integrations, which stay hidden:
+ *                    their reads need x, so r gives submissions and nothing else
+ *   manage_reports   Traffic, Conversions and the Dashboard's visit numbers
+ *                    (part 3): declared in session W1, its routes come in W9
  *   manage_orders    the storefront (part 2): its buyer-facing reads are
  *                    anonymous on GET (session W2), the checkout on POST and
  *                    its confirmation read on GET (W3); the Orders API for the
@@ -88,6 +93,8 @@ const sites = leaf(WEB_STUDIO_LEAF.manageSites);
 const content = leaf(WEB_STUDIO_LEAF.manageContent);
 const forms = leaf(WEB_STUDIO_LEAF.manageForms);
 const orders = leaf(WEB_STUDIO_LEAF.manageOrders);
+/** The forms leaf's hidden routes: every read needs x. */
+const integrations = (flags?: LeafRule['flags']): LeafRule => forms({ GET: 'x', ...flags });
 const isPublic = (reason: string): PublicRule => ({ kind: 'public', reason });
 const sessionOnly = (reason: string): SessionRule => ({ kind: 'session', reason });
 
@@ -244,61 +251,66 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/orders/[id]/confirm': orders({ POST: 'x' }),
   'platform/orders/[id]/cancel': orders({ POST: 'x' }), // { reason }
 
-  // Forms and collections (part 3; hidden by session 3).
-  'form-submissions': forms(undefined, onPost), // a visitor submits a form anonymously
-  'form-submissions/[id]': forms(),
-  'collections': forms(),
-  'collections/[id]': forms(),
-  'collections/[id]/usage': forms(),
-  'collections/[id]/publish': forms({ POST: 'u' }),
-  'collections/[id]/import': forms(),
-  'collections/[id]/fields': forms(),
-  'collections/[id]/fields/[field_id]': forms(),
-  'collections/[id]/fields/[field_id]/usage': forms(),
-  'collections/[id]/fields/reorder': forms(),
-  'collections/[id]/items': forms(),
-  'collections/[id]/items/[item_id]': forms(),
-  'collections/[id]/items/[item_id]/duplicate': forms(),
-  'collections/[id]/items/[item_id]/status': forms(),
-  'collections/[id]/items/[item_id]/values': forms(),
-  'collections/[id]/items/filter': forms(undefined, onPost), // a published page filters its collection
-  'collections/[id]/items/load-more': forms(undefined, onPost), // a published page loads more items
-  'collections/[id]/items/published': forms(),
-  'collections/[id]/items/unpublished': forms(),
-  'collections/[id]/items/reorder': forms({ POST: 'u' }),
-  'collections/fields': forms(),
-  'collections/import/[importId]/status': forms(),
-  'collections/import/process': forms(),
-  'collections/items/batch': forms({ POST: 'r' }), // reads the first items of several collections
-  'collections/items/delete': forms({ POST: 'd' }),
-  'collections/items/slugs': forms({ POST: 'r' }), // resolves item ids to slugs
-  'collections/reorder': forms(),
-  'collections/sample': forms(),
-  'webhooks': forms(),
-  'webhooks/[id]': forms({ POST: 'u' }),
-  'webhooks/[id]/deliveries': forms(),
-  'api-keys': forms(),
-  'api-keys/[id]': forms(),
-  'apps/airtable/bases': forms(),
-  'apps/airtable/bases/[baseId]/tables': forms(),
-  'apps/airtable/connections': forms(),
-  'apps/airtable/connections/[connectionId]': forms(),
-  'apps/airtable/sync': forms({ POST: 'u' }),
-  'apps/airtable/test': forms({ POST: 'u' }),
-  'apps/airtable/webhook/setup': forms({ POST: 'u' }),
-  'apps/airtable/webhook/refresh': forms({ POST: 'u' }),
-  'apps/airtable/webhook/disable': forms({ POST: 'u' }),
-  'apps/webflow/imports': forms(),
-  'apps/webflow/imports/[importId]': forms(),
-  'apps/webflow/migrate': forms(),
-  'apps/webflow/sites': forms(),
-  'apps/webflow/sites/[siteId]/collections': forms(),
-  'apps/webflow/stylesheet': forms(),
-  'apps/webflow/sync': forms({ POST: 'u' }),
-  'apps/webflow/test': forms({ POST: 'u' }),
-  'apps/mailerlite/fields': forms(),
-  'apps/mailerlite/groups': forms(),
-  'apps/mailerlite/test': forms({ POST: 'u' }),
+  // Collections (part 3, session W1): content, next to pages. Read r, create c, change u, delete d, publish u.
+  'collections': content(),
+  'collections/[id]': content(),
+  'collections/[id]/usage': content(),
+  'collections/[id]/publish': content({ POST: 'u' }),
+  'collections/[id]/import': content(),
+  'collections/[id]/fields': content(),
+  'collections/[id]/fields/[field_id]': content(),
+  'collections/[id]/fields/[field_id]/usage': content(),
+  'collections/[id]/fields/reorder': content(),
+  'collections/[id]/items': content(),
+  'collections/[id]/items/[item_id]': content(),
+  'collections/[id]/items/[item_id]/duplicate': content(),
+  'collections/[id]/items/[item_id]/status': content(),
+  'collections/[id]/items/[item_id]/values': content(),
+  'collections/[id]/items/filter': content(undefined, onPost), // a published page filters its collection
+  'collections/[id]/items/load-more': content(undefined, onPost), // a published page loads more items
+  'collections/[id]/items/published': content(),
+  'collections/[id]/items/unpublished': content(),
+  'collections/[id]/items/reorder': content({ POST: 'u' }),
+  'collections/fields': content(),
+  'collections/import/[importId]/status': content(),
+  'collections/import/process': content(),
+  'collections/items/batch': content({ POST: 'r' }), // reads the first items of several collections
+  'collections/items/delete': content({ POST: 'd' }),
+  'collections/items/slugs': content({ POST: 'r' }), // resolves item ids to slugs
+  'collections/reorder': content(),
+  'collections/sample': content(),
+
+  // Forms (part 3): a form's submissions; webhooks, API keys and the integrations stay hidden.
+  'form-submissions': forms(undefined, onPost), // GET the list (r), DELETE several (d); a visitor's POST is anonymous
+  'form-submissions/[id]': forms(), // GET one (r), PUT its status (u), DELETE (d)
+
+  // Webhooks, API keys and the integrations: hidden, and Manager only. A read here returns a webhook's secret or a
+  // connection's settings, so it needs x, not the r that lets a Member or Viewer read submissions (session W1).
+  'webhooks': integrations(),
+  'webhooks/[id]': integrations({ POST: 'u' }),
+  'webhooks/[id]/deliveries': integrations(),
+  'api-keys': integrations(),
+  'api-keys/[id]': integrations(),
+  'apps/airtable/bases': integrations(),
+  'apps/airtable/bases/[baseId]/tables': integrations(),
+  'apps/airtable/connections': integrations(),
+  'apps/airtable/connections/[connectionId]': integrations(),
+  'apps/airtable/sync': integrations({ POST: 'u' }),
+  'apps/airtable/test': integrations({ POST: 'u' }),
+  'apps/airtable/webhook/setup': integrations({ POST: 'u' }),
+  'apps/airtable/webhook/refresh': integrations({ POST: 'u' }),
+  'apps/airtable/webhook/disable': integrations({ POST: 'u' }),
+  'apps/webflow/imports': integrations(),
+  'apps/webflow/imports/[importId]': integrations(),
+  'apps/webflow/migrate': integrations(),
+  'apps/webflow/sites': integrations(),
+  'apps/webflow/sites/[siteId]/collections': integrations(),
+  'apps/webflow/stylesheet': integrations(),
+  'apps/webflow/sync': integrations({ POST: 'u' }),
+  'apps/webflow/test': integrations({ POST: 'u' }),
+  'apps/mailerlite/fields': integrations(),
+  'apps/mailerlite/groups': integrations(),
+  'apps/mailerlite/test': integrations({ POST: 'u' }),
 };
 
 /** The gated paths outside /ycode/api: the builder's preview and the template service bridge. */

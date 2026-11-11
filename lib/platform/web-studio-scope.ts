@@ -8,15 +8,16 @@
  * the AI agent is `use_ai` on it. Leaf keys are a permanent contract: renaming
  * one silently revokes every grant of the old name. Add leaves; never rename.
  *
- * The scope itself is data, `permission-scope.json`: four leaves in three
- * modules with the flag defaults PRD V1.0 gives the Manager, Member and Viewer
- * profiles (Manager every flag, Member manage_content c r u and manage_sites r,
- * Viewer r on both, nothing on forms). Part 1 enforces the first two leaves;
- * manage_forms is declared now for part 3. Part 2 (PRD V1.1 "Roles and
- * permissions") enforces manage_orders and gives Member and Viewer r on it: x,
- * confirm and cancel, stays with the Manager. The scope is published again at
- * every start, but a profile that already exists is not rewritten: its grants
- * stay as an administrator set them.
+ * The scope itself is data, `permission-scope.json`: five leaves in four
+ * modules with the flag defaults the PRDs give the Manager, Member and Viewer
+ * profiles. Manager: every flag on every leaf. Member: manage_content c r u,
+ * r on the others. Viewer: r on every leaf. Part 2 (PRD V1.1) gave Member and
+ * Viewer r on manage_orders: x, confirm and cancel, stays with the Manager.
+ * Part 3 (PRD V1.0 "Roles and permissions", session W1) moves collections
+ * under manage_content, leaves a form's submissions on manage_forms, adds
+ * manage_reports, and gives Member and Viewer r on both. The scope is
+ * published again at every start, but a profile that already exists is not
+ * rewritten: its grants stay as an administrator set them.
  *
  * `buildWebStudioScope` adds the catalogue app id and gives the shape
  * auth-service's consumer expects (PermissionScopeShape); scope-registration.ts
@@ -31,12 +32,14 @@ export const WEB_STUDIO_APP_NAME = 'Web Studio';
 export const WEB_STUDIO_LEAF = {
   /** Sites: create and delete a site, its settings and domain, the list. */
   manageSites: 'webstudio.manage_sites',
-  /** Pages, layers, styles, components, assets, locales, translations, publish, static export, the AI agent. */
+  /** Pages, collections, layers, styles, components, assets, locales, translations, publish, static export, the AI agent. */
   manageContent: 'webstudio.manage_content',
-  /** The contact form, its submissions, collections, webhooks and the integrations (part 3). */
+  /** A form's submissions (part 3); webhooks, API keys and the integrations, which stay hidden. */
   manageForms: 'webstudio.manage_forms',
   /** Storefront orders (part 2). */
   manageOrders: 'webstudio.manage_orders',
+  /** The Traffic and Conversions reports and the Dashboard's visit numbers (part 3). */
+  manageReports: 'webstudio.manage_reports',
 } as const satisfies Record<string, WebStudioLeaf>;
 
 export const WEB_STUDIO_LEAVES: readonly WebStudioLeaf[] = Object.values(WEB_STUDIO_LEAF);

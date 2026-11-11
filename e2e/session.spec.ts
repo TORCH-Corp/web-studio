@@ -252,3 +252,70 @@ test('a Viewer reads everything and gets 403 on every write', async () => {
   expect(pages.map((page) => page.name)).not.toContain('Nope');
   expect((await owner.get('/ycode/api/platform/sites').then((r) => r.json())).data.map((s: SiteRecord) => s.id)).toContain(site.id);
 });
+
+test('part 3, W1: collections follow the content leaf, submissions the forms leaf, and the session carries the reports leaf', async () => {
+  const permissionsOf = async (api: APIRequestContext) => (await (await api.get('/ycode/api/auth/session')).json()).data.permissions as Record<string, string[]>;
+  const refusal = async (response: APIResponse) => {
+    expect(response.status(), await response.text()).toBe(403);
+    return (await response.json()).required as string;
+  };
+  const SUBMISSION = '5f1a4b0e-0000-4000-8000-000000000000';
+
+  // The fifth leaf is read at sign-in like the others, and GET /auth/session returns its flags.
+  expect((await permissionsOf(owner))['webstudio.manage_reports']).toEqual(['c', 'r', 'u', 'd', 'x', 'export', 'use_ai']);
+
+  let collectionId: string;
+  const member = await signInWithToken(baseURL, tokenFor(PEOPLE.member), site.id);
+  try {
+    const permissions = await permissionsOf(member);
+    expect(permissions['webstudio.manage_reports']).toEqual(['r']);
+    expect(permissions['webstudio.manage_forms']).toEqual(['r']);
+
+    // A Member creates a collection (content c) and may not delete it (content d).
+    const created = await member.post('/ycode/api/collections', { data: { name: `Posts ${RUN}` } });
+    expect(created.ok(), await created.text()).toBe(true);
+    collectionId = (await created.json()).data.id;
+    expect(await refusal(await member.delete(`/ycode/api/collections/${collectionId}`))).toBe('webstudio.manage_content.d');
+    // Submissions: a Member reads them (forms r) and may not change or delete one.
+    expect((await member.get('/ycode/api/form-submissions')).status()).toBe(200);
+    expect(await refusal(await member.put(`/ycode/api/form-submissions/${SUBMISSION}`, { data: { status: 'read' } }))).toBe('webstudio.manage_forms.u');
+    expect(await refusal(await member.delete(`/ycode/api/form-submissions/${SUBMISSION}`))).toBe('webstudio.manage_forms.d');
+    // The Member's write took the site's editor lock: let go, so the owner can clean up below.
+    expect((await member.delete('/ycode/api/platform/site-lock')).status()).toBe(200);
+  } finally {
+    await member.dispose();
+  }
+
+  const viewer = await signInWithToken(baseURL, tokenFor(PEOPLE.viewer), site.id);
+  try {
+    expect((await permissionsOf(viewer))['webstudio.manage_reports']).toEqual(['r']);
+    // A Viewer reads collections and submissions, and changes neither.
+    const list = await viewer.get('/ycode/api/collections');
+    expect(list.status(), await list.text()).toBe(200);
+    expect(((await list.json()).data as Array<{ id: string }>).map((collection) => collection.id)).toContain(collectionId);
+    expect((await viewer.get('/ycode/api/form-submissions')).status()).toBe(200);
+    expect(await refusal(await viewer.post('/ycode/api/collections', { data: { name: 'Nope' } }))).toBe('webstudio.manage_content.c');
+    expect(await refusal(await viewer.put(`/ycode/api/collections/${collectionId}`, { data: { name: 'Renamed' } }))).toBe('webstudio.manage_content.u');
+    expect(await refusal(await viewer.post(`/ycode/api/collections/${collectionId}/publish`, { data: {} }))).toBe('webstudio.manage_content.u');
+    expect(await refusal(await viewer.put(`/ycode/api/form-submissions/${SUBMISSION}`, { data: { status: 'read' } }))).toBe('webstudio.manage_forms.u');
+  } finally {
+    await viewer.dispose();
+  }
+
+  // Every flag on the forms leaf and nothing else: collections are out of reach since they moved to content.
+  const formsOnly = await signIn(baseURL, { sub: PEOPLE.nobody.sub, email: PEOPLE.nobody.email, org: ORG, perms: { 'webstudio.manage_forms': ['c', 'r', 'u', 'd', 'x', 'export', 'use_ai'] } } as never);
+  try {
+    expect(await refusal(await formsOnly.get('/ycode/api/collections'))).toBe('webstudio.manage_content.r');
+    expect(await refusal(await formsOnly.get(`/ycode/api/collections/${collectionId}/items`))).toBe('webstudio.manage_content.r');
+    expect(await refusal(await formsOnly.post('/ycode/api/collections', { data: { name: 'Nope' } }))).toBe('webstudio.manage_content.c');
+  } finally {
+    await formsOnly.dispose();
+  }
+
+  // The Viewer and the forms-only user changed nothing; the owner (content d) removes the Member's collection.
+  const collections = (await (await owner.get('/ycode/api/collections')).json()).data as Array<{ id: string; name: string }>;
+  expect(collections.filter((collection) => collection.name === 'Nope' || collection.name === 'Renamed')).toEqual([]);
+  expect(collections.find((collection) => collection.id === collectionId)?.name).toBe(`Posts ${RUN}`);
+  const removed = await owner.delete(`/ycode/api/collections/${collectionId}`);
+  expect(removed.ok(), await removed.text()).toBe(true);
+});
