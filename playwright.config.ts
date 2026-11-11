@@ -112,6 +112,7 @@ export default defineConfig({
         SALES_API_KEY: SALES_KEY,
         SALES_APP_ID, // the Orders API's deep links (session W8)
         WS_APP_ID,
+        WS_VISIT_SALT: 'e2e-visit-salt-of-the-test-run', // the visitor key's secret (part 3, session W7)
       },
     },
   ],

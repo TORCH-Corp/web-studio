@@ -201,6 +201,7 @@ The production values are in the compose service `web-studio` (secrets from the 
     SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
     SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
     SALES_APP_ID=<Sales's catalogue app id>   # ${SALES_APP_ID} in the root .env; the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
+    WS_VISIT_SALT=<a long random secret of Web Studio's own>   # the salt of the visitor key (part 3, W7); at least 16 characters; unset: no view is counted, and the log says so once
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -910,6 +911,46 @@ Four small items from parts 1 and 2 (PRD V1.0 "Carried from parts 1 and 2"); all
   heading's preload), `product-page.spec.ts` and `checkout-flow.spec.ts` (the unit's name in English and Arabic).
   The font case needs the mirror to read the family from Google the first time; where the run has no network it checks
   only that no file names a Google host.
+
+## Visit counting (part 3, session W7)
+- **How a view reaches the server.** The published page tells its own host: `lib/platform/VisitBeacon.tsx`, a client
+  component that renders nothing, mounted by `components/PageRenderer.tsx` (one line) on a published page that is not an
+  error page, sends one `POST /studio/api/visits` after the page has loaded (`fetch` with `keepalive`, a relative address,
+  `lib/platform/visit-client.ts`), and again when the visitor moves to another page without a full load. The reason: a
+  published page is served from the cache (`revalidate = false`), so the server does not run when it is viewed and cannot
+  count it while rendering; a script after load delays nothing; a relative address cannot leave the site's host; and with
+  scripts off nothing is sent and nothing is counted. The canvas and the preview render drafts, so they never mount it. A
+  page the browser prerendered waits for `prerenderingchange`. No cookie is set and nothing is read from or written to the
+  browser's storage.
+- **The route.** `POST /ycode/api/visits` (public name `/studio/api/visits`), `{ page_id, path, referrer }`, where
+  `referrer` is the host of `document.referrer` only. Anonymous, in the proxy's map as public; the site comes from the host
+  alone, so the builder host, a template and an unknown host answer 404 `site_not_found`. Same origin only (403
+  `cross_origin`), a 2 KB body (413 `too_large`), `invalid_body` 400, and 600 requests per ten minutes per site and IP
+  (429 `rate_limited`; in memory, `lib/platform/visit-limit.ts`: the form route's ten a window is a number one reader
+  passes, so the route has its own). Everything else is 204, counted or not.
+- **Not counted** (204, no row): a known bot by its user agent (`isBot`, a program-driven browser included, so the e2e's
+  headless browsers are not visitors), a request with a prefetch header, a request that carries a valid `bos_session`
+  (an editor where his session reaches the published host), a page id that is not a published, non-error page of the
+  host's site, a request with no client address, and a view whose insert failed (logged; "the count never fails a page").
+- **The visitor key.** `visitorKey` in `lib/platform/visit-rules.ts`: HMAC-SHA-256, keyed with `WS_VISIT_SALT`, of the
+  site id, the day, the client IP (`getClientIp`, nginx's `X-Real-IP`) and the user agent. The day is the platform's day
+  in Baghdad (`VISIT_TIME_ZONE`, `visitDay`), so the totals of W8 must use the same day. Changing the salt starts every
+  visitor anew from that moment.
+- **Source and device.** `sourceOf`: no referrer `direct`; a search engine `search`; a social network or messenger
+  (their short links and Android apps included) `social`; any other host `referral` ("another site"). A view reached from
+  the site's own host takes the source of the visitor's first row of the day (one statement, `lib/platform/visits.ts`),
+  `direct` when there is none. `deviceOf`: `phone`, `tablet`, `desktop`; an iPad asking for the desktop site says it is a
+  Mac and counts as a desktop.
+- **Tables** (`20261111000001_torch_visits.ts`, direct knex, not tenant tables, not copied from a template).
+  `platform_visits`: `site_id`, `page_id`, `path` (decoded, no query, no trailing slash), `created_at`, `visitor_key`,
+  `source`, `device`, `kind` (`view`; W8 adds the events, which may have no page: the page columns are required for a view
+  only, and `kind` has no list to widen). `platform_visit_days`: `site_id`, `day`, `path`, `source`, `device`, `views`,
+  `visitors`, primary key on the first five; W8 fills it. No IP address, user agent, referrer, name or country anywhere.
+- **Not done here.** The static export's pages carry no beacon: an exported site is on a host with no Web Studio behind
+  it. The events, the totals, the 90-day clean-up (W8) and the reports (W9).
+- **Test.** `lib/platform/visit-rules.test.ts`, `visit-limit.test.ts`, `visit-client.test.ts`; `e2e/visits.spec.ts`
+  (three views of two pages from two visitors; a bot, a prefetch, an editor, the preview, an error page and scripts off
+  give none; a real browser contacts its own host only and gets no cookie; the refusals; a failing insert; the limit).
 
 
 ## Proven
