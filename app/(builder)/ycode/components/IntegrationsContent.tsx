@@ -4,10 +4,9 @@ import React from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
+// Webhooks and the Web Studio API (API keys) stay hidden (part 3, session W2): lib/platform/parts.ts answers 404 for them.
 const INTEGRATIONS_ITEMS = [
   { id: 'apps', label: 'Apps', path: '/ycode/integrations/apps' },
-  { id: 'webhooks', label: 'Webhooks', path: '/ycode/integrations/webhooks' },
-  { id: 'api', label: 'Web Studio API', path: '/ycode/integrations/api' },
   { id: 'mcp', label: 'MCP', path: '/ycode/integrations/mcp' },
 ];
 

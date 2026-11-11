@@ -190,7 +190,6 @@ The production values are in the compose service `web-studio` (secrets from the 
     WS_DOMAIN_CHECK=on   # `off` accepts any host name as a custom host, with no check against verified domains
     PAGE_AUTH_SECRET=<signs the password-protected page cookies; Web Studio's own>
     ALLOW_DEV_LOGIN=false   # absent in production; true only on a dev box: POST /ycode/api/auth/dev-login
-    WS_PARTS=1   # absent in production: shows Collections and Forms (parts 2 and 3)
     WS_TEMPLATES_ORG=<uuid>  # the Business OS organization whose sites are TORCH's templates (session 4); on the server "TORCH corp"
     ORG_SETUP_URL=http://auth-service:6001   # Organization Setup (served by auth-service): the branches (W1), the day's rate and unit names (W2)
     ORG_SETUP_API_KEY=<auth-service's SERVICE_API_KEY>   # ${AUTH_INTERNAL_SERVICE_API_KEY} in the root .env; the internal routes take the service key (and x-entity-id for the rate and units); Sales holds the same key
@@ -838,7 +837,7 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
 
 ## The permission map for part 3 (part 3, session W1)
 - **What changed** (PRD V1.0 of part 3, "Roles and permissions"; notebook decisions 18 and 20c). No screen changed, and
-  Collections and Forms are still hidden behind `WS_PARTS` (session W2 shows them).
+  Collections and Forms were still hidden behind `WS_PARTS` (session W2, the next section, shows them with no flag).
 - **Collections are content.** Every `collections/...` route in `lib/platform/permissions.ts` is on `webstudio.manage_content`,
   mapped like pages: read `r` (the two lookups that use POST, `items/batch` and `items/slugs`, too), create `c` (a collection,
   a field, an item, a duplicate, the sample, an import), change `u` (PUT, the reorders, an item's status), publish `u`,
@@ -866,6 +865,53 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
   from the scope's own defaults), `web-studio-scope.test.ts` (five leaves, the defaults), `auth-service.test.ts` (the leaf
   at sign-in), `e2e/session.spec.ts` (the same through the proxy, and the session's answer).
 
+## Forms and Collections shown (part 3, session W2)
+Forms and Collections are on the port for every site, with no flag. PRD V1.0 "Forms" and "Collections"; the app's own
+screens for them are sessions W3 to W6 and A1 to A3.
+
+- **No `WS_PARTS`.** `lib/platform/parts.ts` no longer reads the environment, `hooks/use-ws-parts.tsx` and the
+  layout's provider are deleted, and the element library lists the Form element always. The header's CMS and Forms
+  buttons are drawn from the user's flags, not from a role guess: CMS needs `webstudio.manage_content` `r`, Forms
+  needs `webstudio.manage_forms` `r` and a role that may edit (`lib/platform/use-flag.ts`, `useHasFlag`, from the flags
+  the session cookie carries). A profile that existed before part 3 holds no forms flag until an administrator sets it,
+  so its designer would otherwise see a button that leads to 403s. The server answers the same 403 either way.
+- **What stays hidden, whatever the user's flags** (PRD Out-of-Scope; `REMOVED_ROUTES`, `HIDDEN_ROUTES`,
+  `HIDDEN_API_ROUTES` and `HIDDEN_APP_IDS` in `lib/platform/parts.ts`). `proxy.ts` answers 404 before it looks at the
+  session, for the `/ycode` and the public `/studio` names alike: the webhooks screen and routes (`integrations/webhooks`,
+  `api/webhooks`), the API keys screen ("Web Studio API", `integrations/api`) and routes (`api/api-keys`), and every route of
+  the Airtable, MailerLite and Webflow apps and of the three placeholders (Mailchimp, Zapier, Make). The Integrations
+  screen keeps Apps (Static HTML Export, Mapbox, Google Map) and MCP; `GET /ycode/api/apps` lists those three only; the
+  Airtable client asks for no connection (`lib/apps/airtable/client.ts`), so the CMS does not call a 404 on every open. The
+  public API under `/ycode/api/v1` is not hidden: it only answers a request that carries an API key, and no key can be made.
+  The permission map keeps its entries for the hidden routes (the route test needs a rule per file).
+- **The email setting of a form** is gone from the form's settings panel (`FormSettings.tsx`: only Success and
+  Redirect stay), from the MCP tool `update_form_settings`, and from the body both renderers post. A form layer that
+  already carries `email_notification` keeps the data and nothing reads it. Settings > Email stays as ycode ships it (it
+  now configures nothing a form uses: see the pull request's notes).
+- **The submit route does one thing: it stores.** `POST /ycode/api/form-submissions` (the `/studio` name from a published
+  page) screens the post (same origin, payload caps, honeypot, rate limit per site and address), strips the honeypot's field,
+  stores the row with its metadata (the address, the user agent, the page) and answers 201 with the row. It no longer sends
+  ycode's email, dispatches the `form.submitted` webhook, or runs the app integrations; a bot's post is stored as `spam` and
+  answered the same. Publishing still calls `dispatchSitePublishedEvent`, which finds no webhook.
+- **A form in Arabic and English.** A form's texts (labels, the button, the success and the error message) are ordinary text
+  layers: the localization screen lists them and the page uses a translation once it is marked complete (an incomplete one
+  is a draft and never shown, ycode's rule). The page's `lang` and `dir` follow the locale, so labels, the success message and
+  the error message come out in the page's language and direction. Not translatable in ycode: an input's placeholder
+  (the Form element's three fields carry one that repeats the label: it stays English on an Arabic page until the user clears
+  it; OPEN_QUESTIONS, part 3), and the honeypot's own label, which no person or screen reader reaches.
+- **A collection's items on a page** show through a Collection element bound to the collection (its Settings > CMS), and on
+  a dynamic page ("CMS page": slug `*`, `settings.cms` names the collection and its slug field) at `/{slug}` and
+  `/{locale}/{slug}`. An item's words in Arabic are the localization screen's translations of the item
+  (`source_type cms`, `field:key:{key}` or `field:id:{id}` for a field the user added). A new item's manual position is 0
+  (ycode's own default), so a list with no sort shows the newest first; the builder's reorder sets positions.
+- **Tests.** `e2e/forms.spec.ts` (the Form element, the Forms screen and the missing email block; the Forms button for a
+  user with and without the forms flag; a visitor on an English page and on an Arabic page, each in its own language and
+  direction; the row for that site only, and another site's own rows apart; the rate limit refusing a visitor with the error
+  message in Arabic; the honeypot's spam row; a post from another origin refused; no webhook called), `e2e/collections.spec.ts`
+  (a collection with two added fields and two items made in the builder; a list bound in the builder; an item page; both
+  items on the list and each on its page, in both languages; a second site with none; the editor lock and a reader), and
+  `e2e/offline.spec.ts` (Collections and Forms open; the hidden screens and routes answer 404, `/studio` too; Apps lists
+  three apps). `lib/platform/parts.test.ts` pins the hidden set against the app registry.
 
 ## Carried items (part 3, session W10, 11 Nov 2026)
 Four small items from parts 1 and 2 (PRD V1.0 "Carried from parts 1 and 2"); all in the fork.
@@ -1034,10 +1080,10 @@ Sales: none draft, none confirmed. `POST
 - **Removed screens** (404 from `proxy.ts`, files deleted): settings/users, profile,
   accept-invite, welcome (the Supabase setup wizard), with their API stubs and the invite
   button. A server without `DATABASE_URL` shows a message instead of redirecting to the wizard.
-- **`WS_PARTS=1`** (server env, read by `lib/platform/parts.ts`) shows Collections and Forms.
-  Unset, `/ycode/collections*` and `/ycode/forms*` answer 404, the header has no CMS and
-  Forms buttons, and the element library has no Form element. The `collection` and `filter`
-  elements and the API routes stay (the pages and the builder's stores use them).
+- **`WS_PARTS=1`** (server env, read by `lib/platform/parts.ts`) showed Collections and Forms.
+  Unset, `/ycode/collections*` and `/ycode/forms*` answered 404, the header had no CMS and
+  Forms buttons, and the element library had no Form element. The flag is gone since part 3,
+  session W2: both are always shown ("Forms and Collections shown", above).
 - `e2e/offline.spec.ts` is the done-when check.
 
 ## Session 2: session and permissions

@@ -298,10 +298,11 @@ test('part 3, W1: collections follow the content leaf, submissions the forms lea
     expect(await refusal(await viewer.put(`/ycode/api/collections/${collectionId}`, { data: { name: 'Renamed' } }))).toBe('webstudio.manage_content.u');
     expect(await refusal(await viewer.post(`/ycode/api/collections/${collectionId}/publish`, { data: {} }))).toBe('webstudio.manage_content.u');
     expect(await refusal(await viewer.put(`/ycode/api/form-submissions/${SUBMISSION}`, { data: { status: 'read' } }))).toBe('webstudio.manage_forms.u');
-    // The r that reads submissions reads no webhook (its signing secret), API key or integration.
+    // The r that reads submissions reads no webhook (its signing secret), API key or integration: since part 3, session W2
+    // those routes are not found for anyone, so the answer is the same 404 as for the Manager (offline.spec.ts).
     for (const path of ['webhooks', 'api-keys', 'apps/airtable/connections']) {
-      expect(await refusal(await viewer.get(`/ycode/api/${path}`)), path).toBe('webstudio.manage_forms.x');
-      expect((await viewer.head(`/ycode/api/${path}`)).status(), `HEAD ${path}`).toBe(403);
+      expect((await viewer.get(`/ycode/api/${path}`)).status(), path).toBe(404);
+      expect((await viewer.head(`/ycode/api/${path}`)).status(), `HEAD ${path}`).toBe(404);
     }
   } finally {
     await viewer.dispose();
@@ -317,8 +318,8 @@ test('part 3, W1: collections follow the content leaf, submissions the forms lea
     await formsOnly.dispose();
   }
 
-  // A Manager still reads the hidden set-up.
-  expect((await owner.get('/ycode/api/webhooks')).status()).toBe(200);
+  // A Manager does not read the hidden set-up either (part 3, session W2: hidden whatever the flags).
+  expect((await owner.get('/ycode/api/webhooks')).status()).toBe(404);
 
   // The Viewer and the forms-only user changed nothing; the owner (content d) removes the Member's collection.
   const collections = (await (await owner.get('/ycode/api/collections')).json()).data as Array<{ id: string; name: string }>;

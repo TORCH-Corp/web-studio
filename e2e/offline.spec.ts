@@ -6,8 +6,14 @@
  * other than the app's blocked: it adds a section, the builder saves, the
  * site publishes and answers on its host, and the AI agent, integrations,
  * static export and MCP screens open. No request may reach another host, none
- * may fail, and the page may log no error. Collections, Forms and the removed
- * screens are absent from the navigation and answer 404.
+ * may fail, and the page may log no error. The removed screens are absent from
+ * the navigation and answer 404.
+ *
+ * Part 3, session W2: Collections and Forms are shown for every site, with no
+ * flag (the header's CMS and Forms buttons, the Form element, the two screens).
+ * What stays hidden, whatever the user's flags, answers 404: the webhooks and
+ * API keys screens and routes, and the Airtable, MailerLite and Webflow routes;
+ * the Integrations screen keeps Apps (static export, the map keys) and MCP.
  *
  * Part 2, session 13: ycode's update check is gone. It went browser -> the app's
  * own /ycode/api/updates -> api.github.com, so the blocked-host guard above never
@@ -77,7 +83,7 @@ test('the builder opens a site, adds a section, saves and publishes with every o
   await page.getByRole('button', { name: 'Add layout' }).click();
   await page.getByRole('tab', { name: 'Elements' }).click();
   await expect(page.getByRole('button', { name: 'Section', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Form', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Form', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Section', exact: true }).click();
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 
@@ -94,11 +100,11 @@ test('the builder opens a site, adds a section, saves and publishes with every o
   await published.dispose();
 });
 
-test('part 1 shows Design only: no CMS and no Forms in the header', async () => {
+test('the header carries Design, CMS and Forms, with no flag', async () => {
   await page.goto(`/ycode/api/platform/sites/${site.id}/open`);
-  await expect(page.getByRole('button', { name: 'Design' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'CMS' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Forms' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Forms', exact: true })).toBeVisible();
 });
 
 test('the header carries no update notice and the builder never asks about updates', async () => {
@@ -110,8 +116,8 @@ test('the header carries no update notice and the builder never asks about updat
   expect(requestedUrls.filter((url) => url.includes('/ycode/api/updates'))).toEqual([]);
 });
 
-test('the AI agent, integrations, static export and MCP screens open without an error', async () => {
-  for (const path of ['/ycode/settings/agent', '/ycode/integrations', '/ycode/integrations/mcp', '/ycode/integrations/apps', '/ycode/integrations/api', '/ycode/integrations/webhooks', '/ycode/settings/general']) {
+test('the AI agent, integrations, static export, MCP, Collections and Forms screens open without an error', async () => {
+  for (const path of ['/ycode/settings/agent', '/ycode/integrations', '/ycode/integrations/mcp', '/ycode/integrations/apps', '/ycode/settings/general', '/ycode/collections', '/ycode/forms']) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(200);
     await page.waitForLoadState('networkidle');
@@ -119,11 +125,37 @@ test('the AI agent, integrations, static export and MCP screens open without an 
   }
 });
 
-test('Collections, Forms and the removed screens answer 404', async () => {
-  for (const path of ['/ycode/collections', '/ycode/collections/abc', '/ycode/forms', '/ycode/settings/users', '/ycode/settings/updates', '/ycode/profile', '/ycode/accept-invite', '/ycode/welcome']) {
+test('the Integrations screen has Apps and MCP only: no webhooks, no API keys, and no connector among the apps', async () => {
+  await page.goto('/ycode/integrations/apps');
+  await expect(page.getByRole('button', { name: 'Apps', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'MCP', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Webhooks', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Web Studio API', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Static HTML Export')).toBeVisible();
+  await expect(page.getByText('Mapbox', { exact: true })).toBeVisible();
+  for (const hidden of ['Airtable', 'MailerLite', 'Webflow', 'Mailchimp', 'Zapier']) await expect(page.getByText(hidden, { exact: true }), hidden).toHaveCount(0);
+
+  const listed = await context.request.get('/ycode/api/apps');
+  expect(listed.status()).toBe(200);
+  expect(((await listed.json()).data as Array<{ id: string }>).map((app) => app.id).sort()).toEqual(['google-maps-embed', 'mapbox', 'static-export']);
+});
+
+test('the removed screens and what stays hidden answer 404, whatever the user\'s flags', async () => {
+  for (const path of ['/ycode/settings/users', '/ycode/settings/updates', '/ycode/profile', '/ycode/accept-invite', '/ycode/welcome', '/ycode/integrations/webhooks', '/ycode/integrations/api']) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(404);
   }
+  // The same user holds every flag, and still gets nothing from the hidden routes (the public name `/studio` stands for the same tree).
+  for (const path of [
+    '/ycode/api/webhooks', '/ycode/api/webhooks/x', '/ycode/api/api-keys', '/studio/api/webhooks', '/studio/api/api-keys',
+    '/ycode/api/apps/airtable/connections', '/ycode/api/apps/airtable/settings', '/ycode/api/apps/mailerlite/groups', '/ycode/api/apps/webflow/sites', '/ycode/api/apps/mailchimp/settings',
+  ]) {
+    const response = await context.request.get(path);
+    expect(response.status(), path).toBe(404);
+  }
+  expect((await context.request.post('/ycode/api/webhooks', { data: { name: 'x', url: 'https://example.com', events: [] } })).status()).toBe(404);
+  // What stays under Apps still answers.
+  expect((await context.request.get('/ycode/api/apps/static-export/status')).status()).toBe(200);
 
   const settings = await page.goto('/ycode/settings/general');
   expect(settings?.status()).toBe(200);
@@ -153,6 +185,6 @@ test('the icons come from the app and the font mirror refuses what is not a Goog
 test('nothing reached, failed or logged an error on the way', () => {
   expect(reachedOtherHosts).toEqual([]);
   expect(failedRequests).toEqual([]);
-  expect(errorResponses.filter((entry) => !/\/ycode\/(collections|forms|settings\/users|settings\/updates|profile|accept-invite|welcome)/.test(entry))).toEqual([]);
+  expect(errorResponses.filter((entry) => !/\/ycode\/(integrations\/(webhooks|api)|settings\/users|settings\/updates|profile|accept-invite|welcome)/.test(entry))).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

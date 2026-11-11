@@ -6,10 +6,6 @@ import {
   deleteFormSubmissionsByFormId,
   bulkDeleteFormSubmissions,
 } from '@/lib/repositories/formSubmissionRepository';
-import { dispatchFormSubmittedEvent } from '@/lib/services/webhookService';
-import { getTenantIdFromHeaders, runWithTenantId } from '@/lib/supabase-server';
-import { sendFormSubmissionEmail, extractReplyToEmail } from '@/lib/services/emailService';
-import { processAppIntegrations } from '@/lib/apps/integration-service';
 import { noCache } from '@/lib/api-response';
 import { screenFormSubmission, stripHoneypotField } from '@/lib/form-spam-protection';
 import { getClientIp } from '@/lib/request-utils';
@@ -103,53 +99,9 @@ export async function POST(request: NextRequest) {
       status: isSpam ? 'spam' : 'new',
     });
 
-    // Spam is stored for review but never notified, so bots stay silent.
-    // The response still reports success so they don't retry.
-    if (isSpam) {
-      return NextResponse.json(
-        { data: submission, message: 'Form submitted successfully' },
-        { status: 201 }
-      );
-    }
-
-    // Dispatch webhook event (fire and forget). c0 port: the request's
-    // organization is carried into the background work explicitly, because
-    // headers() is gone once the response has been sent.
-    const tenantId = await getTenantIdFromHeaders();
-    const dispatch = () => dispatchFormSubmittedEvent({
-      form_id: body.form_id,
-      submission_id: submission.id,
-      fields: payload,
-      metadata,
-    });
-    void (tenantId ? runWithTenantId(tenantId, dispatch) : dispatch());
-
-    // Send email notification if enabled (fire and forget)
-    if (body.email?.enabled && body.email?.to) {
-      // Extract reply-to email from form payload (first email field found)
-      const replyTo = extractReplyToEmail(payload);
-
-      const email = () => sendFormSubmissionEmail(
-        body.email!.to,
-        body.email!.subject || `New form submission: ${body.form_id}`,
-        {
-          formId: body.form_id,
-          submissionId: submission.id,
-          payload,
-          metadata: {
-            ...metadata,
-            submitted_at: submission.created_at,
-          },
-          replyTo,
-        }
-      );
-      void (tenantId ? runWithTenantId(tenantId, email) : email());
-    }
-
-    // Process app integrations (fire and forget)
-    const integrations = () => processAppIntegrations(body.form_id, submission.id, payload);
-    void (tenantId ? runWithTenantId(tenantId, integrations) : integrations());
-
+    // Nothing else happens when a submission arrives: ycode's email, its webhooks and the app integrations
+    // (Airtable, MailerLite) are out of Web Studio (part 3, PRD V1.0 Out-of-Scope; session W2). Spam is
+    // stored for review, and the answer is the same so that bots stay silent and do not retry.
     return NextResponse.json(
       { data: submission, message: 'Form submitted successfully' },
       { status: 201 }
