@@ -5,9 +5,8 @@
  * One submission that is not spam: one notification to each holder (the Manager, the Member and the Viewer of
  * e2e/auth-fixtures.ts hold it; the one who manages orders only, and the one with no Web Studio leaf, do not), with
  * the English text and the deep link that opens the submission in the app, naming the form as the app's list does
- * (its custom name, else its id). Spam sends none. The visitor's answer
- * does not wait for the notification. With Notification Center down, or with Organization Setup down, the
- * submission is still stored and answered.
+ * (its custom name, else its id). Spam sends none. The visitor's answer does not wait for the notification. With
+ * Notification Center down, or with Organization Setup down, the submission is still stored and answered.
  */
 
 import knex, { type Knex } from 'knex';

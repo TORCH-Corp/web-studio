@@ -14,9 +14,10 @@
  *
  * The text is English, as Sales's is: no service gives a recipient's language
  * (PRD V1.0 Out of Scope). The form is named as the app's list names it (its
- * custom name, else its id), so the words match what the user opens. The notification opens the submission in the Web
- * Studio app by its own deep link, `torch://app/<WS_APP_ID>/…`, the form the
- * shell opens (Orders uses it for the same app).
+ * custom name, else its id), so the words match what the user opens. The
+ * notification opens the submission in the Web Studio app by its own deep link,
+ * `torch://app/<WS_APP_ID>/…`, the form the shell opens (Orders uses it for the
+ * same app).
  *
  * Best effort, as the notification itself: the submission is already stored
  * and the visitor already answered, so nothing here throws; what could not be
