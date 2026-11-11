@@ -69,7 +69,7 @@ interface MiniLineProps {
   imageUrl: string | null;
   name: string;
   options: string;
-  /** "2 × 25,000 IQD / pcs" */
+  /** "2 × 25,000 IQD / Piece" */
   times: string;
   total: string | null;
   tags?: React.ReactNode;
@@ -108,7 +108,7 @@ export function MiniLine({ imageUrl, name, options, times, total, tags, onRemove
   );
 }
 
-/** The quantity times the price, with the unit when the item has one: "2 × 25,000 IQD / pcs". */
+/** The quantity times the price, with the unit's name when the item has one: "2 × 25,000 IQD / Piece". */
 export function timesText(quantity: string, price: Money, unit: { name: string; symbol?: string } | null, lang: StoreLang): string {
   const u = unitText(unit);
   return `${quantity} × ${moneyText(price, lang)}${u ? ` / ${u}` : ''}`;

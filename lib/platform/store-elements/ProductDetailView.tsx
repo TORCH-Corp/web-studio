@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import type { StoreAxis, StoreProduct, StoreVariant } from '@/lib/platform/catalogue-rules';
 import { nameFor } from '@/lib/platform/store-elements/card-data';
 import { CardMedia } from '@/lib/platform/store-elements/CardView';
-import { formatPrice } from '@/lib/platform/store-elements/format';
+import { formatPrice, unitText } from '@/lib/platform/store-elements/format';
 import { AlertIcon, BagIcon, BoxIcon, CheckIcon, ChevronIcon, MinusIcon, PlusIcon } from '@/lib/platform/store-elements/icons';
 import type { StoreLinks } from '@/lib/platform/store-elements/links';
 import { galleryFor, optionRows, type Selection } from '@/lib/platform/store-elements/picker';
@@ -87,7 +87,7 @@ function ProductBody(props: ProductDetailViewProps) {
   const price = variant?.price ?? product.price;
   const name = nameFor(product, lang);
   const description = lang === 'ar' && product.description_ar ? product.description_ar : product.description;
-  const unit = product.unit ? product.unit.symbol || product.unit.name : null;
+  const unit = unitText(product.unit);
   // A product with variants can be bought once a variant that can be bought is chosen.
   const canBuy = product.variants.length === 0 || (variant !== null && variant.available);
   const quantityNumber = Number(quantity);

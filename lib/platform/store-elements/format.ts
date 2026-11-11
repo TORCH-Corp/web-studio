@@ -62,7 +62,12 @@ export function optionsText(axes: readonly AxisLike[], lang: StoreLang): string 
   return axes.map((axis) => `${lang === 'ar' && axis.name_ar ? axis.name_ar : axis.name}: ${lang === 'ar' && axis.option_ar ? axis.option_ar : axis.option}`).join(' · ');
 }
 
-/** The unit as a line shows it: its symbol, else its name; null for an item with no unit. */
+/**
+ * The unit as the product page, the cart, the checkout and the confirmation show it: its name ("Each", not "ea";
+ * owner, 10 Nov 2026, OPEN_QUESTIONS 68 of features/storefront-and-cart). The symbol only stands in for a unit that has
+ * no name. Organization Setup keeps one name per unit, so the same word reads in Arabic and in English; null for an
+ * item with no unit.
+ */
 export function unitText(unit: { name: string; symbol?: string } | null): string | null {
-  return unit ? unit.symbol || unit.name || null : null;
+  return unit ? unit.name || unit.symbol || null : null;
 }
