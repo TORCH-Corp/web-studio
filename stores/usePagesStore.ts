@@ -27,6 +27,7 @@ import { getDescendantFolderIds, isHomepage, findHomepage, findNextSelection } f
 import { updateLayersWithStyle, detachStyleFromLayers } from '../lib/layer-style-utils';
 import { updateLayersWithComponent, detachComponentFromLayers } from '../lib/component-utils';
 import { useComponentsStore, triggerThumbnailGeneration } from './useComponentsStore';
+import { guardProspectForms } from '@/lib/platform/form-prospect-guard';
 
 /**
  * Module-level dedupe map for in-flight loadDraft requests.
@@ -248,7 +249,8 @@ function findLayerInTree(tree: Layer[], layerId: string): Layer | null {
   return null;
 }
 
-export const usePagesStore = create<PagesStore>((set, get) => ({
+// TORCH (part 3, session W3): a change that takes a required field from a form that creates a prospect is refused.
+export const usePagesStore = create<PagesStore>(guardProspectForms((set, get) => ({
   pages: [],
   folders: [],
   draftsByPageId: {},
@@ -3149,4 +3151,4 @@ export const usePagesStore = create<PagesStore>((set, get) => ({
       console.error('[usePagesStore.refetchPageCollectionItem] Error:', error);
     }
   },
-}));
+})));

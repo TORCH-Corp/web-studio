@@ -201,6 +201,7 @@ The production values are in the compose service `web-studio` (secrets from the 
     SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
     SALES_APP_ID=<Sales's catalogue app id>   # ${SALES_APP_ID} in the root .env; the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
     WS_VISIT_SALT=<a long random secret of Web Studio's own>   # the salt of the visitor key (part 3, W7; the events and totals of W8 use it too); at least 16 characters; unset: no view or event is counted, and the log says so once
+    WS_FORM_RETRY_TICK_SECONDS=30   # optional (part 3, W3): how often the waiting form links are looked at; 30 when unset. Not the delay between a submission's attempts
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
 After the migrations, once per environment and again when a template's name or
@@ -1030,6 +1031,61 @@ Four small items from parts 1 and 2 (PRD V1.0 "Carried from parts 1 and 2"); all
   collections are not listed; a Viewer reads the list with `can_change: false`, a create-only user too, a Member gets
   `true`; 401, 403 and 404).
 
+
+## The prospect switch and the Contact Center link (part 3, session W3)
+
+A form can send its submissions to Contact Center, and each submission knows what became of it (PRD V1.0 "Forms",
+"Prospects").
+
+- **The switch.** `settings.form.create_prospect` on the form layer, next to the success action; "Create a prospect
+  in Contact Center" in the form's settings (`FormSettings.tsx`). Off for the Form element; on for the new
+  **Contact form** element (`lib/templates/forms.ts`, `contactForm`: the Form element with a phone field; name and
+  phone required, email and message optional).
+- **The rule.** `lib/platform/form-prospect.ts`, with nothing of Next or the database in it. While the switch is on
+  the form holds an input named `name` and an input named `phone`, both required. The builder refuses a change that
+  takes one away (removed, moved out, renamed, made optional) and a switch-on for a form that lacks one, with a
+  toast that says why. The rule sits once, around the pages store's `set`
+  (`lib/platform/form-prospect-guard.ts`; two lines in `stores/usePagesStore.ts`), so ycode's actions are
+  untouched. A form that is new to the tree or was already out of order (a paste, a page as it loads) is let
+  through, so a page is never locked. A form inside a **component** is edited in the component store, which has
+  no guard: the server's check below is what holds there.
+- **The phone.** Checkout's rule (`canonicalIraqiMobile`): an Iraqi mobile with or without the country code. The
+  page checks before it sends and shows the message on the field with the browser's own validation bubble, in the
+  page's language (`lib/platform/form-prospect-page.ts`, called by the two renderers); the server checks again and
+  answers `400 { code: 'invalid_fields', fields: { name?, phone? } }`, storing nothing.
+- **Where the switch is read.** `POST /ycode/api/form-submissions` reads it from the site's **published** layers
+  (pages and components) by the form id and the layer id the body names (`publishedSwitch` in
+  `lib/platform/form-links.ts`, `planSubmission` in `lib/platform/form-submit.ts`). Nothing in the body turns it on
+  or off. Form ids are not unique, so the layer id tells two forms with one id apart; a body that names no
+  published layer is read by the form id alone and is on when any published form with that id is on.
+- **The link.** `platform_form_links` (`20261111000002_torch_form_links.ts`): one row per submission, direct knex:
+  `submission_id` (primary key, goes with the submission), `site_id`, `state`, `contact_center_id`, `attempts`,
+  `last_attempt_at`, `created_at`. The migration gives every existing submission a `stored` row.
+
+  | state | when |
+  |---|---|
+  | `stored` | the switch is off, or the submission is spam: Contact Center is not asked |
+  | `waiting` | the switch is on and Contact Center has not answered |
+  | `prospect` | Contact Center answered with a prospect (new, or the one that already holds the phone) |
+  | `contact` | the phone is a contact's; no prospect is made |
+
+- **The call.** `findOrCreateProspect` in `lib/platform/contact-center.ts`: `POST
+  /api/v1/internal/prospects/find-or-create { name, phone (964…), email?, notes?, origin: 'web_form' }`, the
+  message as the notes. The visitor's request gives it 3 seconds (`FIRST_ATTEMPT_TIMEOUT_MS`); the answer to the
+  visitor is a success once the submission is stored, whatever Contact Center does.
+- **The retry.** A timer in the server process, started from `instrumentation.ts`
+  (`lib/platform/form-link-retry.ts`), every `WS_FORM_RETRY_TICK_SECONDS` (30). Each run takes up to 20 waiting
+  rows of live sites whose delay has passed and asks again with the submission's stored fields. The delay between
+  a row's attempts doubles from one minute to six hours and stays there until Contact Center answers
+  (`retryDelaySeconds`). A row is taken by counting its attempt under `FOR UPDATE SKIP LOCKED`, so a second process
+  would share the rows, not repeat them. What waits is in the table, so a restart loses nothing. The service has no
+  job queue; a queue, a cron container or a cron route called from outside would each add a piece to deploy and
+  watch for one small job.
+- **Before production.** Contact Center's route (torch-core-backend, session 1 of part 3) deployed;
+  `CONTACT_CENTER_URL` and `CONTACT_CENTER_API_KEY` are part 2's.
+- **Tests.** `lib/platform/form-prospect.test.ts` (the four states, the required-field rule, the fields, the
+  delay), `contact-center.test.ts` (the call), `e2e/form-prospects.spec.ts` (the builder, the page, the stub
+  Contact Center up and down, the retry).
 
 ## Visit events, daily totals and the 90-day clean-up (part 3, session W8)
 - **Four kinds in `platform_visits`.** `view` (session W7) and three events of the same visitor: `add_to_cart`, `order`,

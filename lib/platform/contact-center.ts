@@ -27,6 +27,14 @@
  *          guard as the route above; Sales reads its customers with it, in chunks of 100. The Orders list shows the
  *          buyer's name and phone from it: Web Studio keeps no buyer data.
  *
+ *   POST /api/v1/internal/prospects/find-or-create   { name, phone, email?, notes?, origin: 'web_form' }  (part 3, session W3)
+ *        → 200 { kind: 'contact', id } when a live person holds the phone in its canonical form (no prospect is
+ *          made), 200 { kind: 'prospect', id, created: false } when a prospect that is not converted holds it (the
+ *          notes are added to its notes under the day), 201 { kind: 'prospect', id, created: true } for a new
+ *          prospect, source WEB_FORM. The same guard as the routes above; 400 for a body its schema refuses (name 1
+ *          to 255, phone 1 to 20, email an address of up to 255, notes up to 5000). From the route's code
+ *          (torch-core-backend 3123625d, `apps/contact-center-service/src/app/domains/internal-prospects`).
+ *
  * CONTACT_CENTER_URL and CONTACT_CENTER_API_KEY come from the environment.
  * Kept free of Next imports so it runs under `node --test`.
  */
@@ -81,6 +89,38 @@ export async function findOrCreatePerson(
     throw new ContactCenterUnavailableError(`Contact Center answered ${op} with an unexpected body`);
   }
   return { personId: body.person_id.toLowerCase(), created: body.created };
+}
+
+/** What a web form's submission is in Contact Center: the prospect with its phone, made when no one holds it, or the contact who does. */
+export async function findOrCreateProspect(
+  organizationId: string,
+  prospect: { name: string; phone: string; email?: string; notes?: string },
+  timeoutMs: number = TIMEOUT_MS,
+  env: Env = process.env,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ kind: 'prospect' | 'contact'; id: string }> {
+  const op = 'POST /api/v1/internal/prospects/find-or-create';
+  const { baseUrl, apiKey } = config(env);
+  let response: Response;
+  try {
+    response = await fetchImpl(`${baseUrl}/api/v1/internal/prospects/find-or-create`, {
+      method: 'POST',
+      headers: { 'x-service-api-key': apiKey, 'x-entity-id': organizationId, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: prospect.name, phone: prospect.phone, email: prospect.email, notes: prospect.notes, origin: 'web_form' }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw new ContactCenterUnavailableError(`Contact Center is not reachable (${op}): ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (response.status !== 200 && response.status !== 201) {
+    const detail = (await response.text().catch(() => '')).slice(0, 200);
+    throw new ContactCenterUnavailableError(`Contact Center answered ${response.status} to ${op}${detail ? `: ${detail}` : ''}`);
+  }
+  const body = (await response.json().catch(() => undefined)) as { kind?: unknown; id?: unknown } | undefined;
+  if (!body || (body.kind !== 'prospect' && body.kind !== 'contact') || typeof body.id !== 'string' || !UUID.test(body.id)) {
+    throw new ContactCenterUnavailableError(`Contact Center answered ${op} with an unexpected body`);
+  }
+  return { kind: body.kind, id: body.id.toLowerCase() };
 }
 
 /** A contact as the Orders list shows a buyer. */

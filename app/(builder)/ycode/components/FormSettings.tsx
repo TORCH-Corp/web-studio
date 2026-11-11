@@ -9,6 +9,7 @@
 import React, { useState, useCallback } from 'react';
 
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import SettingsPanel from './SettingsPanel';
 import LinkSettings from './LinkSettings';
@@ -125,6 +126,22 @@ export default function FormSettings({ layer, onLayerUpdate }: FormSettingsProps
             hideBehavior
           />
         )}
+
+        {/* TORCH (part 3, session W3): the store refuses the switch for a form without a required name and phone, and says why */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="create-prospect">Create a prospect in Contact Center</Label>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Each submission becomes a prospect. The form keeps a required name and phone field.
+            </p>
+          </div>
+          <Switch
+            id="create-prospect"
+            size="sm"
+            checked={formSettings.create_prospect === true}
+            onCheckedChange={(checked) => handleSettingChange('create_prospect', checked)}
+          />
+        </div>
 
       </div>
     </SettingsPanel>
