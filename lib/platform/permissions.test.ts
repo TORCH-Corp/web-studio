@@ -204,6 +204,21 @@ test('part 3, W1: every collections route is on the content leaf, with the flag 
   assert.equal(isEditingWrite(accessFor(`${C}/c1/publish`, 'POST', q())!, 'POST'), true);
 });
 
+test('part 3, W6: the app\'s list of a site\'s collections is content r: a Viewer reads it, the forms and sites leaves do not', () => {
+  const list = '/ycode/api/platform/sites/3f0b2c7e-2d7a-4c3e-9a1e-7b1d2e3f4a5b/collections';
+  assert.equal(matchApiRoute(list), 'platform/sites/[id]/collections');
+  assert.deepEqual(accessFor(list, 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'r' });
+  // It is a read, never an editing write: no editor lock is asked for.
+  assert.equal(isEditingWrite(accessFor(list, 'GET', q())!, 'GET'), false);
+  // The write side stays the builder's: this route has no write verb the map would let through as anything but c, u or d on content.
+  assert.deepEqual(accessFor(list, 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_content', flag: 'c' });
+
+  assert.equal(allowed(sessionOfProfile('viewer'), 'GET', list), true);
+  assert.equal(allowed(sessionOfProfile('member'), 'GET', list), true);
+  const every = { c: true, r: true, u: true, d: true, x: true, export: true, use_ai: true };
+  assert.equal(allowed(sessionWith({ 'webstudio.manage_sites': every, 'webstudio.manage_forms': every }), 'GET', list), false);
+});
+
 test('part 3, W1: form submissions stay on the forms leaf: r to list and read, u for a status, d to delete, a visitor\'s POST anonymous', () => {
   const forms = (flag: string) => ({ kind: 'leaf', leaf: 'webstudio.manage_forms', flag });
   assert.deepEqual(accessFor('/ycode/api/form-submissions', 'GET', q('form_id=contact')), forms('r'));

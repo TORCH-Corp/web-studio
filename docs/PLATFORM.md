@@ -998,6 +998,38 @@ Four small items from parts 1 and 2 (PRD V1.0 "Carried from parts 1 and 2"); all
   (three views of two pages from two visitors; a bot, a prefetch, an editor, the preview, an error page and scripts off
   give none; a real browser contacts its own host only and gets no cookie; the refusals; a failing insert; the limit).
 
+## Collections API for the app (part 3, session W6)
+- **The route.** `GET /ycode/api/platform/sites/{id}/collections`, `webstudio.manage_content` `r` in the proxy's map. It is
+  under `platform/`, so it needs a session and no site cookie, and it takes no editor lock: the app reads a site's
+  collections without opening the site, as it reads the site's images. A site of another organization, an unknown id and
+  an id that is not a uuid are 404; no session 401; a user without the content leaf 403 `{ required:
+  'webstudio.manage_content.r' }`. Logic in `lib/platform/collections.ts`, the route file's comment gives the answer's shape.
+- **The answer.** `{ data: [{ id, name, item_count, last_change, builder_path }], can_change }`, in the builder's own
+  order (`order`, then newest first). One statement (direct knex on `tenant_id`, the way `lib/platform/templates.ts` reads
+  a site's content): the site's draft collections that are not deleted, each with a left join on its draft items.
+  - `item_count` is the items that are not deleted.
+  - `last_change` is the later of the collection's `updated_at` and the latest `updated_at` of its items, as an ISO date.
+    No person: the fork records none (plan decision 20a). An item's edit moves only the item's date, and a rename only the
+    collection's, so the date is the latest of both. **A deleted item's date counts**: ycode's soft delete sets
+    `updated_at`, and removing an item is a change to the collection, though the item is no longer counted.
+  - `builder_path` is `/ycode/collections/{id}`, the builder's route for the collection (`app/(builder)/ycode/collections/[id]`).
+  - `can_change` is whether the session holds `webstudio.manage_content` `u`, from the sign-in snapshot like the editor
+    lock's own rule (`mayHoldSiteLock`): the app shows "Open in builder" when it is true and the read-only note when it is not.
+    It tells the screen what to draw; the builder itself refuses a reader's writes (403, and 423 while another user holds the lock).
+- **Opening the builder on a collection is session A2's.** The app opens a site's builder at
+  `{service}/ycode/api/auth/callback?token=…&site=…`, which always redirects to `/ycode`; it takes no target. Carrying
+  `builder_path` into the opened builder needs either a target the callback accepts (limited to paths under `/ycode/`, so it
+  is not an open redirect) or the app's webview navigating to it once the callback has set the cookies. Neither is built here
+  (out of this session's bounds); the builder route itself is whole and reads the site from the `ws_site` cookie.
+- **Not here.** Creating, renaming and deleting a collection, its fields and its items are the builder's, and stay on the
+  `collections/...` routes (session W1's map). No paging: a site has a handful of collections and the builder lists them all.
+- **Test.** `lib/platform/collections.test.ts` (the row: the count as a number, the later of two dates, no items, a
+  missing date) and `lib/platform/permissions.test.ts`; `e2e/collections-api.spec.ts` (two collections with items give the
+  counts and the path; a deleted collection is not listed and a deleted item not counted; editing an item, adding one,
+  deleting one and renaming the collection each move the date of that collection and no other's; another site's
+  collections are not listed; a Viewer reads the list with `can_change: false`, a create-only user too, a Member gets
+  `true`; 401, 403 and 404).
+
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
