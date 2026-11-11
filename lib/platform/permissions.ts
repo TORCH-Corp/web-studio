@@ -15,7 +15,8 @@
  *                    site and reading its settings (r)
  *   manage_content   pages, layers, styles, components, assets, fonts, locales,
  *                    translations, versions, and collections with their fields
- *                    and items (part 3, session W1) (c r u d), publish and
+ *                    and items (part 3, session W1) (c r u d), the app's list of a
+ *                    site's collections (W6) (r), publish and
  *                    revert (u), static export and project export (export), the
  *                    AI agent and the MCP clients that edit through it (use_ai)
  *   manage_forms     a form's submissions (part 3, PRD V1.0 "Roles and
@@ -135,6 +136,9 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/sites/[id]/store': sites(), // GET (r), PATCH (u): selling, currency, branch, categories, delivery fee (part 2, W1)
   'platform/sites/[id]/assets': sites(), // GET (r): the site's images a share image can be, for Site settings (session 10)
   'platform/sites/[id]/assets/[assetId]': sites(), // GET (r): one image of the site, served as /a/ serves it (session 10)
+  // A site's collections for the app's Collections screen (part 3, W6): content's, like the builder's own list. Siteless
+  // (platform/), so it needs no site cookie and takes no editor lock; the write side is the builder's.
+  'platform/sites/[id]/collections': content(), // GET (r)
   'platform/store-elements/categories': content(), // GET (r): the categories a product grid can list, for the open site (part 2, W4)
   'platform/store-elements/products': content(), // GET (r): the products a product card can pick, for the open site (part 2, W4)
   'platform/templates': sites(), // GET (r): TORCH's templates, the same list for every organization (session 4)
