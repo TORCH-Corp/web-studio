@@ -6,11 +6,14 @@ import { placeOrder, RATE_LIMIT_WINDOW_MS, storedCheckout } from '@/lib/platform
 import { checkoutIdOf, parseCheckout } from '@/lib/platform/checkout-input';
 import { checkoutCounter, limitKey } from '@/lib/platform/checkout-limit';
 import { sellingSite, storeNotFound } from '@/lib/platform/store-api';
+import { countEvent } from '@/lib/platform/visit-events';
 
 export const dynamic = 'force-dynamic';
 
 /** What the screen's refusals are called, for the page. */
 const SCREEN_CODES: Record<number, string> = { 400: 'too_large', 403: 'cross_origin', 429: 'rate_limited' };
+
+const ROUTE = 'POST /ycode/api/store/checkout';
 
 /**
  * POST /ycode/api/store/checkout (part 2, session W3): the buyer's checkout
@@ -38,6 +41,10 @@ const SCREEN_CODES: Record<number, string> = { 400: 'too_large', 403: 'cross_ori
  *       Organization Setup could not be asked, or the store cannot take orders now
  *       (no rate on a USD store; Sales refused its branch): nothing is stored
  *   404 { code: store_not_found }  the builder host, an unknown host, a store that does not sell
+ *
+ * An order made by this request (not a replay, not a request that waited on
+ * another's) also writes one 'order' visit event for the visitor
+ * (lib/platform/visit-events.ts, part 3 session W8).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -83,7 +90,10 @@ export async function POST(request: NextRequest) {
       return noCache({ error: 'Some fields need correcting', code: 'invalid_checkout', fields: parsed.fields }, 400);
     }
 
-    const outcome = await placeOrder(site, store, parsed.value, ip);
+    // One 'order' visit event per Sales order made, for the visitor behind the request that made it (session W8):
+    // a checkout that already had its order, a refused item and a Sales that was down are not orders, and a second
+    // request waiting on the same checkout adds none. It never fails the order.
+    const outcome = await placeOrder(site, store, parsed.value, ip, () => countEvent(request, site.id, 'order', ROUTE));
     switch (outcome.kind) {
       case 'placed':
         return noCache({ data: { checkout_id: parsed.value.checkout_id, code: outcome.code } }, outcome.created ? 201 : 200);

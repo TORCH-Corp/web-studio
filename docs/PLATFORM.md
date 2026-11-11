@@ -200,7 +200,7 @@ The production values are in the compose service `web-studio` (secrets from the 
     SALES_URL=http://sales-service:6029   # the checkout's order: the service create and the order read (W3)
     SALES_API_KEY=<sales-service's SERVICE_API_KEY>   # ${SALES_SERVICE_API_KEY} in the root .env; with x-entity-id
     SALES_APP_ID=<Sales's catalogue app id>   # ${SALES_APP_ID} in the root .env; the Orders API's deep link into Sales (W8): torch://app/<this>/orders/<id>; unset: open_in_sales is null
-    WS_VISIT_SALT=<a long random secret of Web Studio's own>   # the salt of the visitor key (part 3, W7); at least 16 characters; unset: no view is counted, and the log says so once
+    WS_VISIT_SALT=<a long random secret of Web Studio's own>   # the salt of the visitor key (part 3, W7; the events and totals of W8 use it too); at least 16 characters; unset: no view or event is counted, and the log says so once
     WS_FORM_RETRY_TICK_SECONDS=30   # optional (part 3, W3): how often the waiting form links are looked at; 30 when unset. Not the delay between a submission's attempts
     DATABASE_URL_TEST=postgresql://.../webstudio_test   # pnpm e2e only; recreated on every run
 
@@ -990,11 +990,11 @@ Four small items from parts 1 and 2 (PRD V1.0 "Carried from parts 1 and 2"); all
   Mac and counts as a desktop.
 - **Tables** (`20261111000001_torch_visits.ts`, direct knex, not tenant tables, not copied from a template).
   `platform_visits`: `site_id`, `page_id`, `path` (decoded, no query, no trailing slash), `created_at`, `visitor_key`,
-  `source`, `device`, `kind` (`view`; W8 adds the events, which may have no page: the page columns are required for a view
-  only, and `kind` has no list to widen). `platform_visit_days`: `site_id`, `day`, `path`, `source`, `device`, `views`,
-  `visitors`, primary key on the first five; W8 fills it. No IP address, user agent, referrer, name or country anywhere.
+  `source`, `device`, `kind` (`view`; the events of W8 below may have no page: the page columns are required for a view
+  only). `platform_visit_days`: `site_id`, `day`, `path`, `source`, `device`, `views`, `visitors`, primary key on the
+  first five; the daily run of W8 fills it. No IP address, user agent, referrer, name or country anywhere.
 - **Not done here.** The static export's pages carry no beacon: an exported site is on a host with no Web Studio behind
-  it. The events, the totals, the 90-day clean-up (W8) and the reports (W9).
+  it. The events, the totals and the 90-day clean-up are W8's (next section); the reports are W9's.
 - **Test.** `lib/platform/visit-rules.test.ts`, `visit-limit.test.ts`, `visit-client.test.ts`; `e2e/visits.spec.ts`
   (three views of two pages from two visitors; a bot, a prefetch, an editor, the preview, an error page and scripts off
   give none; a real browser contacts its own host only and gets no cookie; the refusals; a failing insert; the limit).
@@ -1086,6 +1086,76 @@ A form can send its submissions to Contact Center, and each submission knows wha
 - **Tests.** `lib/platform/form-prospect.test.ts` (the four states, the required-field rule, the fields, the
   delay), `contact-center.test.ts` (the call), `e2e/form-prospects.spec.ts` (the builder, the page, the stub
   Contact Center up and down, the retry).
+
+## Visit events, daily totals and the 90-day clean-up (part 3, session W8)
+- **Four kinds in `platform_visits`.** `view` (session W7) and three events of the same visitor: `add_to_cart`, `order`,
+  `form`. An event has no page (`page_id` and `path` null). Each carries the visitor key that visitor's page view has that
+  day: the same `visitorKey` of the same site, day, client IP and user agent, worked out by the request that causes it
+  (`lib/platform/visit-events.ts`, `visitorOf`), and the source of the visitor's first row of the day, `direct` when there
+  is none (`recordEvent` in `lib/platform/visits.ts`; the device is the request's own). The same rules as a view decide
+  whether it is counted: a known bot, a prefetch, a request that carries a valid `bos_session`, a request with no client
+  address and a missing `WS_VISIT_SALT` count nothing (the salt message is logged once per process and now says "no view or
+  event"). A failure to store is logged and never touches what the visitor did: the order, the submission and the page go
+  on (`countEvent` never throws).
+- **Where each is written.**
+  - `add_to_cart`: the store's add to cart (`lib/platform/store-elements/add-to-cart.ts`, the one place every card, grid
+    and product page ends in) calls `reportAddToCart()` (`lib/platform/visit-client.ts`): one `POST /studio/api/visits`
+    with `{ kind: 'add_to_cart' }` to the page's own host, nothing else in the body, no cookie, no storage. It reports only
+    where a counted page is connected: `VisitBeacon` connects its `window` while it is mounted (a published page, never the
+    canvas or the preview) and disconnects on unmount, so an add to cart in the builder reports nothing. The route
+    (`parseReport` in `lib/platform/visit-rules.ts`) reads a view as before (no `kind`, or `kind: 'view'`) or exactly
+    `{ kind: 'add_to_cart' }`; **any other kind, `order` and `form` included, is 400 `invalid_body`**: those two are the
+    server's to write, never a browser's word. The row is one per visitor and day: a partial unique index
+    (`platform_visits_cart_once_index`, on the visitor key, which is already per site and day) refuses a repeat, so the
+    page sends on every add and a bot's hundred leave one row. The add to cart is not checked against the store: a site
+    that does not sell has the row, and the Conversions report shows form submissions only for it (PRD).
+  - `order`: `POST /ycode/api/store/checkout` passes `placeOrder` a callback that `place` runs once, after the Sales order
+    is created and recorded (`order.created`): **not** for a replayed checkout (200, its order already existed), a refused
+    item (422), a Sales or other service that could not be asked (503), the honeypot (201 with no order), and **not twice
+    for a double click**: a second request for a checkout in flight waits on the first's flight and gets its outcome
+    (`created: true` as well), so the event is written by the flight that made the order, not by each response. It is every
+    order: a visitor who orders twice has two rows.
+  - `form`: `POST /ycode/api/form-submissions` writes one when the submission is stored with status `new`: spam (the
+    honeypot) is stored for review as before and is not a conversion, and a refused post (403, 400) writes nothing. The
+    site comes from the request's host (`countEventOnHost`); the builder host and a host of no site count nothing.
+- **Which number each total holds** (`lib/platform/visit-totals.ts`, the comment at its top):
+  `visitors` is visitors with at least one counted view that day, each once; `views` is every view; `cartVisitors`,
+  `orderVisitors` and `formVisitors` are visitors, each once however many times; `orders` and `forms` are the true number
+  of Sales orders created and forms stored. An event does not make its visitor a `visitor`: an add to cart, an order or a
+  form whose view was not counted (refused as too frequent, or sent before the salt was set) is in its own column only, so
+  a share of visitors can in principle pass 100 %; W9's reports clamp what they show.
+- **Tables** (`20261111000002_torch_visit_events.ts`). `platform_visits` gets a check on `kind` (the four) and the unique
+  index above. `platform_visit_site_days`: `site_id`, `day`, `visitors`, `cart_visitors`, `order_visitors`, `orders`,
+  `form_visitors`, `forms`, primary key `(site_id, day)`, numbers only. It is also the record that a day is totalled.
+  `platform_visit_days` (W7) now holds the page rows: views and visitors per site, day, page path, source and device.
+  Neither totals table is ever deleted from; both go with their site.
+- **The daily run** (`lib/platform/visit-totals-run.ts`; the numbers are `totalsOfDay`, unit-tested on a fixture of three
+  days). One transaction, behind an advisory lock (a second run at the same moment answers `skipped: true`): (1) every
+  finished day (before today, in the platform's day, Baghdad) of every site that has detailed rows and **no row in
+  `platform_visit_site_days`** is read, totalled and written (its site row and its page rows, inserts that ignore a
+  conflict), so a day is totalled once, the first run after it ends, and running again changes nothing; a backlog of
+  missed days is caught up in the same run; (2) detailed rows older than 90 days (`RETENTION_DAYS`) are deleted, only
+  those whose day has its site row, so a day the run could not total is never lost. The day boundary is the database's
+  `AT TIME ZONE 'Asia/Baghdad'`, the same zone `visitDay` gives the visitor key. A row written for a finished day after
+  that day was totalled is not in the totals: the scheduled run is at 01:00, an hour after the day ends, and a row is
+  written within a second of its request.
+- **How it runs.** The service starts a timer (`startVisitTotalsSchedule`, called from `instrumentation.ts`): at 01:00
+  Baghdad time (22:00 UTC the evening before) every day, logged as `[visit totals] {"skipped":false,"siteDays":N,"deleted":M}`;
+  a failed run is logged and the next day's run totals the days it missed. By hand, and for the e2e: `pnpm visits:totals`
+  (`scripts/visit-totals.ts`, `DATABASE_URL`), the last line of its output is the same JSON; in the container, the way the
+  template seed runs: `docker exec web-studio sh -c 'cd /tooling && TS_NODE_TRANSPILE_ONLY=1 TS_NODE_PROJECT=tsconfig.test.json
+  node -r ts-node/register -r tsconfig-paths/register scripts/visit-totals.ts'`. It needs no new environment key: the salt
+  of W7 is the only one the events use. A server with several processes is safe (the lock).
+- **Rollback.** The migration's `down` drops `platform_visit_site_days`, the unique index and the kind check. The
+  totals are never read to serve a page, so nothing else depends on them; a rolled-back image simply stops adding events and
+  totals (the detailed rows then stay until the run is back).
+- **Test.** `lib/platform/visit-totals.test.ts` (the three-day fixture), `visit-totals-schedule.test.ts` (the next run,
+  and the timer under mocked time: once a day, armed again after a failure), `visit-rules.test.ts` (`parseReport`), `visit-client.test.ts` (the report and where it does nothing);
+  `e2e/visit-events.spec.ts`: a visitor who views, adds to the cart twice and orders is one cart visitor and one order under
+  one key; a refused item, Sales down and a replayed checkout write no order; a form gives one event, spam and refusals none;
+  a browser cannot report an order or a form; the product card's button in a real browser reports once however many times
+  it is pressed; the new table holds numbers only; the daily run totals every finished day once (the day boundary at
+  midnight in Baghdad included), twice over changes nothing, and a row of 91 days ago is gone while its total stays.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream

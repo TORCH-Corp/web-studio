@@ -15,4 +15,9 @@ export async function register() {
   // TORCH platform (part 3, session W3): ask Contact Center again for the form submissions that wait for it.
   const { startFormLinkRetry } = await import('./lib/platform/form-link-retry');
   startFormLinkRetry();
+
+  // Visit totals (part 3, session W8): at 01:00 Baghdad time every day, finished days become daily totals and
+  // detailed visit rows older than 90 days are removed. Logged; a failed run is tried again the next day.
+  const { startVisitTotalsSchedule } = await import('./lib/platform/visit-totals-schedule');
+  startVisitTotalsSchedule();
 }
