@@ -107,8 +107,10 @@ test('one submission tells each holder of read on the forms permission once, in 
   expect(sent.status).toBe(201);
 
   await expect.poll(async () => (await notifications()).length).toBe(READERS.length);
-  await expect.poll(async () => (await notifications()).length, { message: 'and no more come after' }).toBe(READERS.length);
+  // Nobody is told twice: wait well past the time the three calls took, and count again.
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
   const made = await notifications();
+  expect(made).toHaveLength(READERS.length);
   expect(made.map((call) => call.status)).toEqual(READERS.map(() => 201));
   expect(made.map((call) => call.body!.recipientUserId).sort()).toEqual(READERS);
   for (const call of made) {
