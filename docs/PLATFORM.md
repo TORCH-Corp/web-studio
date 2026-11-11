@@ -104,7 +104,7 @@ drops the schema.
   JSON-path filters, count/head, upsert, the 4 RPCs). `lib/supabase-server.ts` returns it.
 - **Business OS session.** `lib/platform/session.ts` verifies an HS256 session cookie
   (`bos_session`) carrying user, organization and Web Studio permission flags
-  (`webstudio.manage_sites / manage_content / manage_forms / manage_orders`).
+  (`webstudio.manage_sites / manage_content / manage_forms / manage_orders / manage_reports`).
   `proxy.ts`, `lib/supabase-auth.ts`, the browser client and the auth store read it.
   The cookie is minted from the shell's access token (session 2, below).
 - **Per site (session 1; c0 was per organization).** Migration
@@ -833,6 +833,32 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
   site now carries the font, so its "only the site's own host" check covers it on production.
 
 
+## The permission map for part 3 (part 3, session W1)
+- **What changed** (PRD V1.0 of part 3, "Roles and permissions"; notebook decisions 18 and 20c). No screen changed, and
+  Collections and Forms are still hidden behind `WS_PARTS` (session W2 shows them).
+- **Collections are content.** Every `collections/...` route in `lib/platform/permissions.ts` is on `webstudio.manage_content`,
+  mapped like pages: read `r` (the two lookups that use POST, `items/batch` and `items/slugs`, too), create `c` (a collection,
+  a field, an item, a duplicate, the sample, an import), change `u` (PUT, the reorders, an item's status), publish `u`,
+  delete `d` (`items/delete` too). A visitor's `items/filter` and `items/load-more` stay anonymous on POST. A collection
+  write still waits for the site's editor lock. The public API under `v1/` keeps its own API-key credential.
+- **Submissions are the forms leaf.** `form-submissions` and `form-submissions/[id]` stay on `webstudio.manage_forms`: `r`
+  to list and read, `u` to change a status, `d` to delete (one, several, or a form's); the visitor's POST stays anonymous.
+  Webhooks, API keys and the integrations stay on the forms leaf too, and stay hidden.
+- **A fifth leaf, `webstudio.manage_reports`,** for Traffic, Conversions and the Dashboard's visit numbers: in
+  `permission-scope.json` (module Reports), `WEB_STUDIO_LEAF.manageReports` and the session's `WebStudioLeaf`. The callback
+  reads it from `GET /authz/my-permissions?namespace=webstudio` with the others (`WEB_STUDIO_LEAVES`), and
+  `GET /ycode/api/auth/session` returns its flags in `permissions`. No route is on it yet (session W9). No leaf was renamed
+  or removed; the matrix names of two leaves follow what they now cover ("Pages, collections and publishing",
+  "Form submissions").
+- **Defaults.** Manager every flag on the five leaves. Member and Viewer gain `r` on `manage_forms` and `r` on
+  `manage_reports`; `manage_content` (Member c r u, Viewer r), `manage_sites` and `manage_orders` are unchanged.
+- **Existing profiles are not rewritten.** The scope is published again at every start, but a profile that already exists
+  keeps the grants an administrator set: an existing Member or Viewer gets `r` on forms and reports by hand in Organization
+  Setup, and an existing profile that held only `manage_forms` loses collections until it is given `manage_content`.
+- **Tests.** `permissions.test.ts` (every collections route and its flag; the Member, the Viewer and a forms-only user,
+  from the scope's own defaults), `web-studio-scope.test.ts` (five leaves, the defaults), `auth-service.test.ts` (the leaf
+  at sign-in), `e2e/session.spec.ts` (the same through the proxy, and the session's answer).
+
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
 unit tests pass; two organizations provisioned through the platform API; each signs in
@@ -957,7 +983,8 @@ Sales: none draft, none confirmed. `POST
   revert, status u; static and project export `export`; the AI agent and MCP tokens
   `use_ai`; devtools reset d). manage_sites: the sites API; manage_content: the builder's
   data; manage_forms: collections, forms, webhooks, API keys, integrations (part 3);
-  manage_orders: no route yet (part 2). Public routes have their own credential; a few are
+  manage_orders: no route yet (part 2). (Part 3, session W1, moved collections to manage_content and added
+  manage_reports: see "The permission map for part 3".) Public routes have their own credential; a few are
   anonymous by design for visitors (a form submission, a published page's filter, the
   published error page). `proxy.ts` answers 401 with no session, 403 with
   `{error, required: 'webstudio.manage_sites.c'}` without the flag, and 404 for a path

@@ -23,7 +23,7 @@ export interface TestPerson {
 }
 
 export const PEOPLE: Record<'owner' | 'salesless' | 'member' | 'viewer' | 'nobody', TestPerson> = {
-  /** The Manager profile's defaults: every flag on all four leaves (plus another app's, which must not leak into the session). */
+  /** The Manager profile's defaults: every flag on all five leaves (plus another app's, which must not leak into the session). */
   owner: {
     sub: '2a2a2a2a-2a2a-4a2a-8a2a-2a2a2a2a2a2a',
     email: 'owner@example.com',
@@ -35,6 +35,7 @@ export const PEOPLE: Record<'owner' | 'salesless' | 'member' | 'viewer' | 'nobod
       'webstudio.manage_content': ALL,
       'webstudio.manage_forms': ALL,
       'webstudio.manage_orders': ALL,
+      'webstudio.manage_reports': ALL,
       'sales.manage_leads': ALL,
       // Part 2, W8: a Manager of Web Studio who is also a Sales salesman, so Sales accepts their confirm and cancel.
       'sales.manage_orders': ALL,
@@ -55,7 +56,7 @@ export const PEOPLE: Record<'owner' | 'salesless' | 'member' | 'viewer' | 'nobod
       'sales.manage_orders': READ,
     },
   },
-  /** The Member profile's defaults: manage_content c r u, manage_sites r, manage_orders r. No profile name: the builder shows first and last name. */
+  /** The Member profile's defaults: manage_content c r u, r on manage_sites, manage_orders, manage_forms and manage_reports (part 3, W1). No profile name: the builder shows first and last name. */
   member: {
     sub: '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b',
     email: 'member@example.com',
@@ -65,11 +66,12 @@ export const PEOPLE: Record<'owner' | 'salesless' | 'member' | 'viewer' | 'nobod
     permissions: {
       'webstudio.manage_sites': READ,
       'webstudio.manage_content': EDIT,
-      'webstudio.manage_forms': NONE,
+      'webstudio.manage_forms': READ,
       'webstudio.manage_orders': READ,
+      'webstudio.manage_reports': READ,
     },
   },
-  /** The Viewer profile's defaults: r on manage_sites, manage_content and manage_orders. */
+  /** The Viewer profile's defaults: r on all five leaves (manage_forms and manage_reports from part 3, W1). */
   viewer: {
     sub: '2c2c2c2c-2c2c-4c2c-8c2c-2c2c2c2c2c2c',
     email: 'viewer@example.com',
@@ -79,8 +81,9 @@ export const PEOPLE: Record<'owner' | 'salesless' | 'member' | 'viewer' | 'nobod
     permissions: {
       'webstudio.manage_sites': READ,
       'webstudio.manage_content': READ,
-      'webstudio.manage_forms': NONE,
+      'webstudio.manage_forms': READ,
       'webstudio.manage_orders': READ,
+      'webstudio.manage_reports': READ,
     },
   },
   /** A member of the organization with no Web Studio leaf at all. */

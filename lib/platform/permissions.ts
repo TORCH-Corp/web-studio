@@ -14,12 +14,16 @@
  *                    domain and the store settings (u), the list, opening a
  *                    site and reading its settings (r)
  *   manage_content   pages, layers, styles, components, assets, fonts, locales,
- *                    translations, versions (c r u d), publish and revert (u),
- *                    static export and project export (export), the AI agent
- *                    and the MCP clients that edit through it (use_ai)
- *   manage_forms     the contact form and its submissions, collections,
- *                    webhooks, API keys and the integrations: part 3, hidden by
- *                    session 3
+ *                    translations, versions, and collections with their fields
+ *                    and items (part 3, session W1) (c r u d), publish and
+ *                    revert (u), static export and project export (export), the
+ *                    AI agent and the MCP clients that edit through it (use_ai)
+ *   manage_forms     a form's submissions (part 3, PRD V1.0 "Roles and
+ *                    permissions"): the list and one submission (r), its status
+ *                    (u), delete (d); a visitor's own POST is anonymous. Also
+ *                    webhooks, API keys and the integrations, which stay hidden
+ *   manage_reports   Traffic, Conversions and the Dashboard's visit numbers
+ *                    (part 3): declared in session W1, its routes come in W9
  *   manage_orders    the storefront (part 2): its buyer-facing reads are
  *                    anonymous on GET (session W2), the checkout on POST and
  *                    its confirmation read on GET (W3); the Orders API for the
@@ -244,36 +248,38 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'platform/orders/[id]/confirm': orders({ POST: 'x' }),
   'platform/orders/[id]/cancel': orders({ POST: 'x' }), // { reason }
 
-  // Forms and collections (part 3; hidden by session 3).
-  'form-submissions': forms(undefined, onPost), // a visitor submits a form anonymously
-  'form-submissions/[id]': forms(),
-  'collections': forms(),
-  'collections/[id]': forms(),
-  'collections/[id]/usage': forms(),
-  'collections/[id]/publish': forms({ POST: 'u' }),
-  'collections/[id]/import': forms(),
-  'collections/[id]/fields': forms(),
-  'collections/[id]/fields/[field_id]': forms(),
-  'collections/[id]/fields/[field_id]/usage': forms(),
-  'collections/[id]/fields/reorder': forms(),
-  'collections/[id]/items': forms(),
-  'collections/[id]/items/[item_id]': forms(),
-  'collections/[id]/items/[item_id]/duplicate': forms(),
-  'collections/[id]/items/[item_id]/status': forms(),
-  'collections/[id]/items/[item_id]/values': forms(),
-  'collections/[id]/items/filter': forms(undefined, onPost), // a published page filters its collection
-  'collections/[id]/items/load-more': forms(undefined, onPost), // a published page loads more items
-  'collections/[id]/items/published': forms(),
-  'collections/[id]/items/unpublished': forms(),
-  'collections/[id]/items/reorder': forms({ POST: 'u' }),
-  'collections/fields': forms(),
-  'collections/import/[importId]/status': forms(),
-  'collections/import/process': forms(),
-  'collections/items/batch': forms({ POST: 'r' }), // reads the first items of several collections
-  'collections/items/delete': forms({ POST: 'd' }),
-  'collections/items/slugs': forms({ POST: 'r' }), // resolves item ids to slugs
-  'collections/reorder': forms(),
-  'collections/sample': forms(),
+  // Collections (part 3, session W1): content, next to pages. Read r, create c, change u, delete d, publish u.
+  'collections': content(),
+  'collections/[id]': content(),
+  'collections/[id]/usage': content(),
+  'collections/[id]/publish': content({ POST: 'u' }),
+  'collections/[id]/import': content(),
+  'collections/[id]/fields': content(),
+  'collections/[id]/fields/[field_id]': content(),
+  'collections/[id]/fields/[field_id]/usage': content(),
+  'collections/[id]/fields/reorder': content(),
+  'collections/[id]/items': content(),
+  'collections/[id]/items/[item_id]': content(),
+  'collections/[id]/items/[item_id]/duplicate': content(),
+  'collections/[id]/items/[item_id]/status': content(),
+  'collections/[id]/items/[item_id]/values': content(),
+  'collections/[id]/items/filter': content(undefined, onPost), // a published page filters its collection
+  'collections/[id]/items/load-more': content(undefined, onPost), // a published page loads more items
+  'collections/[id]/items/published': content(),
+  'collections/[id]/items/unpublished': content(),
+  'collections/[id]/items/reorder': content({ POST: 'u' }),
+  'collections/fields': content(),
+  'collections/import/[importId]/status': content(),
+  'collections/import/process': content(),
+  'collections/items/batch': content({ POST: 'r' }), // reads the first items of several collections
+  'collections/items/delete': content({ POST: 'd' }),
+  'collections/items/slugs': content({ POST: 'r' }), // resolves item ids to slugs
+  'collections/reorder': content(),
+  'collections/sample': content(),
+
+  // Forms (part 3): a form's submissions; webhooks, API keys and the integrations stay hidden.
+  'form-submissions': forms(undefined, onPost), // GET the list (r), DELETE several (d); a visitor's POST is anonymous
+  'form-submissions/[id]': forms(), // GET one (r), PUT its status (u), DELETE (d)
   'webhooks': forms(),
   'webhooks/[id]': forms({ POST: 'u' }),
   'webhooks/[id]/deliveries': forms(),
