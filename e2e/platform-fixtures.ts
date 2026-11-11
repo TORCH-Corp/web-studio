@@ -17,6 +17,8 @@ export const PRODUCT_SERVICES_KEY = 'e2e-product-services-key';
 /** Session W3: the keys the stub's Contact Center and Sales take (each service's own SERVICE_API_KEY). */
 export const CONTACT_CENTER_KEY = 'e2e-contact-center-key';
 export const SALES_KEY = 'e2e-sales-key';
+/** Part 3, session W5: the key the stub's Notification Center takes (notification-engine's own SERVICE_API_KEY). */
+export const NOTIFICATION_KEY = 'e2e-notification-key';
 
 /** Session W8: the catalogue ids of Sales and of Web Studio, which the Orders API's deep links name (SALES_APP_ID, WS_APP_ID). */
 export const SALES_APP_ID = '6c6c6c6c-6c6c-4c6c-8c6c-6c6c6c6c6c6c';

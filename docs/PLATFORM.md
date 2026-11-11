@@ -1088,6 +1088,54 @@ A form can send its submissions to Contact Center, and each submission knows wha
   delay), `contact-center.test.ts` (the call), `e2e/form-prospects.spec.ts` (the builder, the page, the stub
   Contact Center up and down, the retry).
 
+## The notification of a new submission (part 3, session W5)
+
+A new submission raises a Business OS notification to the users who may read submissions (PRD V1.0 "Notification").
+
+- **When.** `POST /ycode/api/form-submissions`, after the submission is stored, for a submission that is not spam. The
+  call is made in Next's `after()`, so the visitor's answer is sent first and never waits for it, and nothing in it
+  throws: what could not be done is logged with the submission's id (`[web-studio submission notification] …`).
+  Spam, and a request that resolves to no site, tell nobody.
+- **Who.** The members of the site's organization for whom auth-service's evaluate answers true for
+  `webstudio.manage_forms` flag `r` (`findSubmissionReaders` in `lib/platform/submission-notification.ts`), chosen the way
+  sales-service chooses for a storefront order (`storefrontOrderRecipients`): the organization's first 200 members
+  (`RECIPIENT_CAP`, one `POST /api/internal/people/members`, `listMemberIds` in `lib/platform/org-setup.ts`), each asked
+  with `POST /api/internal/authz/evaluate` (`userHolds`), five at a time. No service lists the holders of a flag or a
+  site's members, so the holders are the organization's, not the site's. More than 200 members is logged and the rest
+  are not asked; a member whose check failed is logged and left out; a failed members read tells nobody and is logged.
+  There is no cache of the answers (Sales keeps one for 60 seconds): a contact form's rate limit bounds how many
+  submissions ask.
+- **The text.** English, as Sales's is (PRD V1.0 Out of Scope: no service gives a recipient's language). Title
+  `New form submission`, body `{sender name} sent {form name} on {site name}.` The sender is the form's `name` field as
+  the visitor typed it ("A visitor" when the form has none), the form name is the one the app's list shows (`formsOfSite`
+  in `lib/platform/submissions.ts`: the form layer's custom name, else its id; the id again when the name could not be
+  read, which is logged), the site name is the site's. Each is tidied (control characters and runs of spaces become one
+  space) and cut to 80 characters with an ellipsis, because the visitor chooses the sender and the form id.
+- **The link.** `torch://app/<WS_APP_ID>/sites/<site id>/contact-form/<submission id>`, the form the shell opens
+  (Orders' `open_in_web_studio` is the same with `/orders/<id>`). **The app's routes for it are not built yet**: session
+  12 (A1) gives the Contact form screen `/sites/:id/contact-form` and a submission's full page
+  `/sites/:id/contact-form/:submissionId`, and session 14 (A3) opens that page; they must use this path, or this one
+  line (`submissionLink`) changes. Without `WS_APP_ID` the notification has no link the shell can open, so it is not sent and
+  the log says why.
+- **The client.** `lib/platform/notification.ts`, hand-written: `POST /api/notifications { recipientUserId,
+  channels: ['IN_APP'], title, body, category: 'TRANSACTIONAL', actionUrl, metadata: { sourceEntityId } }` with
+  `x-service-api-key`, `x-entity-id` (the organization) and `x-sender-app: web-studio`, one call per user, five at a time,
+  none retried (a retry could tell a user twice). A user the service refused is in the result with the reason and is logged;
+  the others are told. Checked on 11 Nov 2026 against the live specs of auth-service and notification-engine
+  (`/api/internal/people/members` and `/api/internal/authz/evaluate`: `x-service-api-key`, bodies and answers as the code
+  reads them; `/api/notifications`: answers 401 with or without the trailing slash).
+- **Keys.** New: `NOTIFICATION_ENGINE_URL` (`http://notification-engine:6004`) and `NOTIFICATION_ENGINE_API_KEY` (the
+  root `.env` variable `NOTIFICATION_ENGINE_API_KEY`, the engine's own `SERVICE_API_KEY`, the name and the source Sales
+  and the other services use). Already set, now also used: `ORG_SETUP_URL` and `ORG_SETUP_API_KEY` (the member list and the
+  evaluate are auth-service routes taking the same key) and `WS_APP_ID` (the link). Session 18 sets the two new keys on the
+  server's `web-studio` service and proves them with a real submission.
+- **Tests.** `lib/platform/submission-notification.test.ts` (the text, the sender, the link, the holders, the cap, the
+  concurrency, every failure), `notification.test.ts` (the call), `org-setup.test.ts` (the member read and the
+  evaluate), `e2e/submission-notification.spec.ts` against the stub in `e2e/notification-stub.ts`: one submission, one
+  notification to each of the three stubbed holders and none to the two who do not hold the flag; spam sends none and asks
+  nobody; the answer is back in under two seconds while the stub takes three; with Notification Center down, and with
+  Organization Setup down, the submission is still stored and answered.
+
 ## Visit events, daily totals and the 90-day clean-up (part 3, session W8)
 - **Four kinds in `platform_visits`.** `view` (session W7) and three events of the same visitor: `add_to_cart`, `order`,
   `form`. An event has no page (`page_id` and `path` null). Each carries the visitor key that visitor's page view has that

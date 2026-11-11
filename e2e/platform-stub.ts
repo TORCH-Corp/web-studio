@@ -22,16 +22,19 @@
  *
  * Contact Center's find-or-create and Sales's service create and order read
  * (session W3) are e2e/order-services-stub.ts, which records every call.
+ * Notification Center's create, and Organization Setup's member list and permission
+ * evaluate (part 3, session W5), are e2e/notification-stub.ts, which records every call too.
  *
  * For the specs:
  *   GET  /__health
- *   POST /__down { services: ['org-setup' | 'product-services' | 'contact-center' | 'sales'] }
+ *   POST /__down { services: ['org-setup' | 'product-services' | 'contact-center' | 'sales' | 'notification'] }
  *        those answer 503 until the next call; [] restores
  *   POST /__rate { found: boolean }   whether Organization Setup has the day's rate (Sales's stub reads it too)
  *   POST /__item { id, status?, base_price? }   changes an item of the catalogue (session W6): Product & Services and
  *        Sales's stub both read it, so "the item turned inactive" or "the price changed" is what both say next;
  *        POST /__items/reset puts every item back as the fixtures have it
  *   GET  /__calls?service=…, POST /__sales/refuse, POST /__sales/delay  (order-services-stub.ts)
+ *   GET  /__calls?service=notification|org-setup, POST /__notification/delay  (notification-stub.ts)
  *
  * The data is e2e/platform-fixtures.ts.
  */
@@ -50,12 +53,13 @@ import {
   type FixtureCategory,
   type FixtureItem,
 } from './platform-fixtures';
+import { handleNotificationServices, type NotificationService } from './notification-stub';
 import { handleOrderServices, type OrderService } from './order-services-stub';
 
 const PORT = Number(process.env.E2E_PLATFORM_PORT || 3105);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type Service = 'org-setup' | 'product-services' | OrderService;
+type Service = 'org-setup' | 'product-services' | OrderService | NotificationService;
 let down = new Set<Service>();
 let rateFound = true;
 /** The items as the fixtures have them, for `/__items/reset`. */
@@ -262,6 +266,7 @@ const server = http.createServer(async (request, response) => {
       return await orgSetupInOrganization(request, response, url);
     }
     if (request.method === 'GET' && (path.startsWith('/categories/') || path === '/items' || path.startsWith('/items/'))) return productServices(request, response, path, url.searchParams);
+    if (await handleNotificationServices(request, response, url, (service) => down.has(service), json)) return;
     if (await handleOrderServices(request, response, url, (service) => down.has(service), () => rateFound, json)) return;
     return json(response, 404, { error: 'Not Found', message: `No route ${request.method} ${path}` });
   } catch (error) {

@@ -38,6 +38,7 @@ import {
   type StoreProduct,
 } from '@/lib/platform/catalogue-rules';
 import { currentFileHash, downloadDocumentFile } from '@/lib/platform/document-center';
+import { mapLimit } from '@/lib/platform/map-limit';
 import { findUnits, usdIqdRate } from '@/lib/platform/org-setup';
 import { getCategoryTree, getVariantWorkspace, listEcommerceItems, listItemImages, type ItemImage } from '@/lib/platform/product-services';
 import type { Site } from '@/lib/platform/site';
@@ -55,19 +56,6 @@ interface Snapshot {
   catalogue: Catalogue;
   /** Each product's images, read the first time its page or one of its images asks (and kept with the snapshot). */
   galleries: Map<string, Promise<ItemImage[] | null>>;
-}
-
-async function mapLimit<T, R>(values: T[], limit: number, fn: (value: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(values.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < values.length) {
-      const index = next++;
-      results[index] = await fn(values[index]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
-  return results;
 }
 
 async function read(site: Site, store: StoreRow): Promise<Snapshot> {
