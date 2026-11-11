@@ -1504,8 +1504,8 @@ ready collections with sample items in Arabic and English; part 3 open question 
   (none when that language was not asked for). An incomplete translation is not applied and stays where it is: ycode marks
   a translation incomplete when its item's value changes, so a template item whose English text was edited after its Arabic
   was written needs the Arabic completed again in the template's translation screen before an Arabic-first site shows it.
-  **Not changed:** `swapSiteSourceLanguage` (Site settings, "make this language the default") still swaps pages and
-  components only, not items; the same gap exists for every site that has collections.
+  Site settings' "make this language the default" runs the same rule on a site's draft rows: see "The default language
+  and the items" below.
 - **Not touched.** A site made before this session and a blank site (the blank template runs the blank seed, not the copy);
   the Collections screens and routes; the template's own rows.
 - **Tests.** Unit: `lib/platform/template-collections.test.ts` (the id map over the shapes above, the orphans, the swap, the
@@ -1537,6 +1537,60 @@ ready collections with sample items in Arabic and English; part 3 open question 
   deploy keeps them when the old image runs: its Collections screens read the same tables. A restore of the dump is not needed for this change.
   What the server e2e leaves: the test template and the sites made from it and from the real templates, soft-deleted (a soft-deleted site keeps
   its rows, two collections among them); nothing else.
+
+## The default language and the items (part 3, session W12, 11 Nov 2026)
+
+Open question 24c (found by session 19, owner's answer of 11 Nov 2026): Site settings' "make this language the default"
+(`PATCH /ycode/api/platform/sites/{id}/settings` with another `default_language`, `swapSiteSourceLanguage`) moved the text of pages,
+components and folders but never an item's, so a site with collections that changed its default kept the items' values in the old
+default and every translation where it was: the default address read the old language and the other address read the new one.
+
+- **The rule is session 19's, not a second one.** `planCmsSwap` (`lib/platform/default-language.ts`) runs `swapCmsSource`
+  (`template-collections.ts`, the function the template copy runs on the rows it is about to insert) on a copy of the site's draft
+  rows and reports what it changed: the values that changed, the content hash of each item they belong to, the new default's
+  translation rows that the values now hold, and the translation rows to write for the old default. It touches none of the rows it
+  is given. For every **text** and **rich text** field of every item, a completed, non-blank translation into the new default becomes
+  the value, and the value it replaces becomes the translation into the old default (`text`, or `richtext` for a rich text field), a
+  row the old default already has for that field (a deleted one too) being brought back and not doubled. An item value with an
+  incomplete translation, a blank one or none keeps its text, and the unfinished translation stays where it was: nothing is lost,
+  as for a page's text. An image, a number, a reference and every other type is not text and is left alone. When the old default
+  leaves the site in the same change, nothing is written for it (as for a page).
+- **Slugs move too.** An item's slug and its name are text fields like the others: a slug with a completed translation in the new
+  default becomes the item's address at the default address, and the old slug becomes the old language's translation. After the next
+  publish the page of an item whose slug is translated is at `/hala-ar` (Arabic default) and `/en/hala-saad`, and the address it had
+  before, `/hala-saad`, answers 404 (a page's slug follows the same rule). An item whose slug is not translated keeps its address in both
+  languages.
+- **One transaction.** `swapSiteSourceLanguage` reads the draft pages, layers, components, folders, fields, items, values and the two
+  languages' translations, plans both swaps, writes the pages' (as before), then the items' (`writeCmsPlan`), then moves the default
+  flag, in one knex transaction: a failure anywhere, the flag's own update included, changes nothing (the e2e makes the last write
+  fail with a trigger and compares every row afterwards). The values and the hashes are written with one `UPDATE ... FROM
+  jsonb_to_recordset` per 500 rows (a site with thousands of items is a few statements, not tens of thousands), the moved
+  translations are soft-deleted and the old default's translations upserted on the unique key, 500 rows to a statement. A site
+  with no item translated into the new default reads no collection table at all.
+- **Hashes.** ycode keeps an item's `content_hash` equal to the hash of its values (`setValues` recomputes it) and publish compares
+  it with the published item's; the swap rehashes (`rehashItems`) the items whose values it changed.
+- **Drafts only, and what a visitor sees until the next publish.** Only draft rows are written; the published values, hashes,
+  translations and the published default flag are not touched, so **until the next publish every address reads exactly as it did before
+  the change** (the e2e reads the home page, `/ar` and the item pages between the change and the publish: the old state, not a mix).
+  Publish carries the new values, the new translations and the new flag together, and from then on the default address reads the new
+  language. Not looked at: a partial publish of one page or one item between the change and a full publish.
+- **Not changed.** `swapCmsSource` and the template copy; the Collections screens and routes; Site settings' layout. The 'default
+  language' control, its confirmation for a removed language and the pages' swap behave as before.
+- **Tests.** Unit, `lib/platform/default-language.test.ts` (8 new cases over `planCmsSwap`: an item with a completed translation,
+  with an incomplete one and with none, a field translated and another not, a blank translation and the old default leaving the site,
+  a deleted row of the old default brought back, the hashes, no input row touched, an empty site). e2e,
+  `e2e/default-language-items.spec.ts` (6 tests: a site with a collection of five items, English default, Arabic translations
+  (a rich text Bio, a translated address, an incomplete name, an item with no Arabic); the default moves to Arabic and then back, the
+  rows after the round trip equal the first state (rich text byte for byte), a visitor reads the first state until the next publish, the
+  default address, `/en`, the list and the item pages read as above after it, draft and published hashes equal the hash of the
+  values, and a change that fails on its last write changes nothing). Nine one-line breaks, each failing the intended test: the
+  items' write outside the transaction, no hash write, moved translations not deleted, the old default's row not brought back, the old
+  default's text not stored, no value written (e2e); the plan working on the caller's rows, no rehash, `moved` counting every
+  translation (unit).
+- **`pnpm test` and open question 17c.** The case "a prospect call that is refused, fails, answers badly, is too slow or has no
+  configuration" in `contact-center.test.ts` already holds its own timer since session D1 (`fc694b1`); `pnpm test` exited 0 on the
+  feature branch before this session (875 tests) and `contact-center.test.ts` passes on Node 20.17, 22.21 and 24.22 (11 of 11, none
+  cancelled). Nothing was changed there.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
