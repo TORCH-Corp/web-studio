@@ -275,6 +275,7 @@ test('part 3, W1: r on the forms leaf reads submissions only: webhooks, API keys
   const hiddenReads = ['/ycode/api/webhooks', '/ycode/api/webhooks/w1', '/ycode/api/webhooks/w1/deliveries', '/ycode/api/api-keys', '/ycode/api/apps/airtable/connections', '/ycode/api/apps/airtable/bases', '/ycode/api/apps/webflow/imports', '/ycode/api/apps/webflow/sites', '/ycode/api/apps/mailerlite/groups'];
   for (const pathname of hiddenReads) {
     assert.deepEqual(accessFor(pathname, 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'x' }, pathname);
+    assert.deepEqual(accessFor(pathname, 'HEAD', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'x' }, `HEAD ${pathname}`);
     assert.equal(allowed(sessionOfProfile('member'), 'GET', pathname), false, `member ${pathname}`);
     assert.equal(allowed(sessionOfProfile('viewer'), 'GET', pathname), false, `viewer ${pathname}`);
     assert.equal(allowed(sessionOfProfile('manager'), 'GET', pathname), true, `manager ${pathname}`);

@@ -854,8 +854,11 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
 - **Defaults.** Manager every flag on the five leaves. Member and Viewer gain `r` on `manage_forms` and `r` on
   `manage_reports`; `manage_content` (Member c r u, Viewer r), `manage_sites` and `manage_orders` are unchanged.
 - **Existing profiles are not rewritten.** The scope is published again at every start, but a profile that already exists
-  keeps the grants an administrator set: an existing Member or Viewer gets `r` on forms and reports by hand in Organization
-  Setup, and an existing profile that held only `manage_forms` loses collections until it is given `manage_content`.
+  keeps the grants an administrator set on the leaves it already has: an existing Member or Viewer gets `r` on
+  `manage_forms` by hand in Organization Setup, and an existing profile that held only `manage_forms` loses collections
+  until it is given `manage_content`. A leaf that is new to the scope is merged in by auth-service
+  (`mergeWithScopeDiff`): `manage_reports` reaches an existing system profile with the defaults above and a custom
+  profile with every flag off, so only a custom profile needs it by hand.
 - **Tests.** `permissions.test.ts` (every collections route and its flag; the Member, the Viewer and a forms-only user,
   from the scope's own defaults), `web-studio-scope.test.ts` (five leaves, the defaults), `auth-service.test.ts` (the leaf
   at sign-in), `e2e/session.spec.ts` (the same through the proxy, and the session's answer).
