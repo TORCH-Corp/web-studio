@@ -1,8 +1,7 @@
 import { noCache } from '@/lib/api-response';
 import { deleteSubmission, readSubmission } from '@/lib/platform/submissions';
+import { UUID_PATTERN } from '@/lib/platform/submissions-view';
 import { getSessionFromCookies, getSiteForOrganization } from '@/lib/platform/site';
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Context = { params: Promise<{ id: string; submissionId: string }> };
 
