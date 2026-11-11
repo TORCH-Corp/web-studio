@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test';
 import { TEMPLATES_ORG } from './e2e/helpers';
 import { ensureTestKeys } from './e2e/test-keys';
 import { DOMAIN_SERVICE_KEY } from './e2e/domain-fixtures';
-import { CONTACT_CENTER_APP_ID, CONTACT_CENTER_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_APP_ID, SALES_KEY, WS_APP_ID } from './e2e/platform-fixtures';
+import { CONTACT_CENTER_APP_ID, CONTACT_CENTER_KEY, NOTIFICATION_KEY, ORG_SETUP_KEY, PRODUCT_SERVICES_KEY, SALES_APP_ID, SALES_KEY, WS_APP_ID } from './e2e/platform-fixtures';
 
 /**
  * End-to-end suite for the TORCH fork (part 1, session 1).
@@ -110,6 +110,8 @@ export default defineConfig({
         CONTACT_CENTER_API_KEY: CONTACT_CENTER_KEY,
         SALES_URL: PLATFORM_URL,
         SALES_API_KEY: SALES_KEY,
+        NOTIFICATION_ENGINE_URL: PLATFORM_URL, // the new-submission notification (part 3, session W5)
+        NOTIFICATION_ENGINE_API_KEY: NOTIFICATION_KEY,
         SALES_APP_ID, // the Orders API's deep links (session W8)
         WS_APP_ID,
         CONTACT_CENTER_APP_ID, // a submission's deep link into Contact Center (part 3, session W4)
