@@ -21,7 +21,8 @@
  *   manage_forms     a form's submissions (part 3, PRD V1.0 "Roles and
  *                    permissions"): the list and one submission (r), its status
  *                    (u), delete (d); a visitor's own POST is anonymous. Also
- *                    webhooks, API keys and the integrations, which stay hidden
+ *                    webhooks, API keys and the integrations, which stay hidden:
+ *                    their reads need x, so r gives submissions and nothing else
  *   manage_reports   Traffic, Conversions and the Dashboard's visit numbers
  *                    (part 3): declared in session W1, its routes come in W9
  *   manage_orders    the storefront (part 2): its buyer-facing reads are
@@ -92,6 +93,8 @@ const sites = leaf(WEB_STUDIO_LEAF.manageSites);
 const content = leaf(WEB_STUDIO_LEAF.manageContent);
 const forms = leaf(WEB_STUDIO_LEAF.manageForms);
 const orders = leaf(WEB_STUDIO_LEAF.manageOrders);
+/** The forms leaf's hidden routes: every read needs x. */
+const integrations = (flags?: LeafRule['flags']): LeafRule => forms({ GET: 'x', ...flags });
 const isPublic = (reason: string): PublicRule => ({ kind: 'public', reason });
 const sessionOnly = (reason: string): SessionRule => ({ kind: 'session', reason });
 
@@ -280,31 +283,34 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   // Forms (part 3): a form's submissions; webhooks, API keys and the integrations stay hidden.
   'form-submissions': forms(undefined, onPost), // GET the list (r), DELETE several (d); a visitor's POST is anonymous
   'form-submissions/[id]': forms(), // GET one (r), PUT its status (u), DELETE (d)
-  'webhooks': forms(),
-  'webhooks/[id]': forms({ POST: 'u' }),
-  'webhooks/[id]/deliveries': forms(),
-  'api-keys': forms(),
-  'api-keys/[id]': forms(),
-  'apps/airtable/bases': forms(),
-  'apps/airtable/bases/[baseId]/tables': forms(),
-  'apps/airtable/connections': forms(),
-  'apps/airtable/connections/[connectionId]': forms(),
-  'apps/airtable/sync': forms({ POST: 'u' }),
-  'apps/airtable/test': forms({ POST: 'u' }),
-  'apps/airtable/webhook/setup': forms({ POST: 'u' }),
-  'apps/airtable/webhook/refresh': forms({ POST: 'u' }),
-  'apps/airtable/webhook/disable': forms({ POST: 'u' }),
-  'apps/webflow/imports': forms(),
-  'apps/webflow/imports/[importId]': forms(),
-  'apps/webflow/migrate': forms(),
-  'apps/webflow/sites': forms(),
-  'apps/webflow/sites/[siteId]/collections': forms(),
-  'apps/webflow/stylesheet': forms(),
-  'apps/webflow/sync': forms({ POST: 'u' }),
-  'apps/webflow/test': forms({ POST: 'u' }),
-  'apps/mailerlite/fields': forms(),
-  'apps/mailerlite/groups': forms(),
-  'apps/mailerlite/test': forms({ POST: 'u' }),
+
+  // Webhooks, API keys and the integrations: hidden, and Manager only. A read here returns a webhook's secret or a
+  // connection's settings, so it needs x, not the r that lets a Member or Viewer read submissions (session W1).
+  'webhooks': integrations(),
+  'webhooks/[id]': integrations({ POST: 'u' }),
+  'webhooks/[id]/deliveries': integrations(),
+  'api-keys': integrations(),
+  'api-keys/[id]': integrations(),
+  'apps/airtable/bases': integrations(),
+  'apps/airtable/bases/[baseId]/tables': integrations(),
+  'apps/airtable/connections': integrations(),
+  'apps/airtable/connections/[connectionId]': integrations(),
+  'apps/airtable/sync': integrations({ POST: 'u' }),
+  'apps/airtable/test': integrations({ POST: 'u' }),
+  'apps/airtable/webhook/setup': integrations({ POST: 'u' }),
+  'apps/airtable/webhook/refresh': integrations({ POST: 'u' }),
+  'apps/airtable/webhook/disable': integrations({ POST: 'u' }),
+  'apps/webflow/imports': integrations(),
+  'apps/webflow/imports/[importId]': integrations(),
+  'apps/webflow/migrate': integrations(),
+  'apps/webflow/sites': integrations(),
+  'apps/webflow/sites/[siteId]/collections': integrations(),
+  'apps/webflow/stylesheet': integrations(),
+  'apps/webflow/sync': integrations({ POST: 'u' }),
+  'apps/webflow/test': integrations({ POST: 'u' }),
+  'apps/mailerlite/fields': integrations(),
+  'apps/mailerlite/groups': integrations(),
+  'apps/mailerlite/test': integrations({ POST: 'u' }),
 };
 
 /** The gated paths outside /ycode/api: the builder's preview and the template service bridge. */

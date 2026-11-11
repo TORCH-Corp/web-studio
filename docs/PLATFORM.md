@@ -843,7 +843,8 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
   write still waits for the site's editor lock. The public API under `v1/` keeps its own API-key credential.
 - **Submissions are the forms leaf.** `form-submissions` and `form-submissions/[id]` stay on `webstudio.manage_forms`: `r`
   to list and read, `u` to change a status, `d` to delete (one, several, or a form's); the visitor's POST stays anonymous.
-  Webhooks, API keys and the integrations stay on the forms leaf too, and stay hidden.
+  Webhooks, API keys and the integrations stay on the forms leaf too, and stay hidden; their reads need `x` (they return a
+  webhook's secret and a connection's settings), so the `r` a Member or Viewer now holds opens submissions and nothing else.
 - **A fifth leaf, `webstudio.manage_reports`,** for Traffic, Conversions and the Dashboard's visit numbers: in
   `permission-scope.json` (module Reports), `WEB_STUDIO_LEAF.manageReports` and the session's `WebStudioLeaf`. The callback
   reads it from `GET /authz/my-permissions?namespace=webstudio` with the others (`WEB_STUDIO_LEAVES`), and

@@ -271,6 +271,27 @@ test('part 3, W1: the forms leaf alone no longer reaches collections, and the co
   assert.equal(allowed(contentOnly, 'DELETE', '/ycode/api/form-submissions/s1'), false);
 });
 
+test('part 3, W1: r on the forms leaf reads submissions only: webhooks, API keys and the integrations need x to read', () => {
+  const hiddenReads = ['/ycode/api/webhooks', '/ycode/api/webhooks/w1', '/ycode/api/webhooks/w1/deliveries', '/ycode/api/api-keys', '/ycode/api/apps/airtable/connections', '/ycode/api/apps/airtable/bases', '/ycode/api/apps/webflow/imports', '/ycode/api/apps/webflow/sites', '/ycode/api/apps/mailerlite/groups'];
+  for (const pathname of hiddenReads) {
+    assert.deepEqual(accessFor(pathname, 'GET', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'x' }, pathname);
+    assert.equal(allowed(sessionOfProfile('member'), 'GET', pathname), false, `member ${pathname}`);
+    assert.equal(allowed(sessionOfProfile('viewer'), 'GET', pathname), false, `viewer ${pathname}`);
+    assert.equal(allowed(sessionOfProfile('manager'), 'GET', pathname), true, `manager ${pathname}`);
+  }
+  // Every GET of the forms leaf that r opens is a submissions route.
+  const openToReaders = Object.entries(API_ROUTE_ACCESS)
+    .filter(([, rule]) => rule.kind === 'leaf' && rule.leaf === 'webstudio.manage_forms' && (rule.flags?.GET ?? 'r') === 'r')
+    .map(([pattern]) => pattern)
+    .sort();
+  assert.deepEqual(openToReaders, ['form-submissions', 'form-submissions/[id]']);
+  // Their writes keep the flags they had.
+  assert.deepEqual(accessFor('/ycode/api/webhooks', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'c' });
+  assert.deepEqual(accessFor('/ycode/api/webhooks/w1', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'u' });
+  assert.deepEqual(accessFor('/ycode/api/api-keys/k1', 'DELETE', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'd' });
+  assert.deepEqual(accessFor('/ycode/api/apps/airtable/sync', 'POST', q()), { kind: 'leaf', leaf: 'webstudio.manage_forms', flag: 'u' });
+});
+
 test('part 3, W1: the reports leaf is a leaf of the session, and no route is on it before W9', () => {
   assert.equal(WEB_STUDIO_LEAF.manageReports, 'webstudio.manage_reports');
   assert.equal(requirementName({ leaf: WEB_STUDIO_LEAF.manageReports, flag: 'r' }), 'webstudio.manage_reports.r');
