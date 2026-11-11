@@ -86,7 +86,9 @@ Organization Setup, Product & Services, Contact Center, Sales and Document Cente
 buyer in a real browser on a published site, and every host the store pages and the builder contact). The local `pnpm e2e`
 leaves `e2e/server` out (`testIgnore` in `playwright.config.ts`) and must never be given the production `DATABASE_URL_TEST`: it
 drops the schema. Part 3 (session D1, 11 Nov 2026) adds `forms-and-reports.spec.ts`: five tests against the real Contact Center,
-Notification Center and Organization Setup (see "Part 3 in production"); the whole suite is 42 tests.
+Notification Center and Organization Setup (see "Part 3 in production"); session W11 adds `template-collections.spec.ts` (three tests: a
+site made from a test template that carries a collection shows it, and a site is made from each of TORCH's real templates; see "Template
+collections"); the whole suite is 45 tests.
 - **What a run uses and leaves** (`e2e/server/real-services.ts`). One login for the whole run (`global-setup.ts` keeps the
   token in `E2E_ACCESS_TOKEN`, in memory; auth-service answers 429 after 20 logins in 15 minutes). One fixed test item,
   SKU `E2E-WS-STORE-01` ("E2E Web Studio test item", 25,000 IQD, the "All - General" leaf category, with one 8 x 8 PNG as its
@@ -1515,6 +1517,26 @@ ready collections with sample items in Arabic and English; part 3 open question 
   site), and on the server `e2e/server/template-collections.spec.ts` (the test account's organization is the templates
   organization, so the run makes its own template there; it is a row in every organization's Templates list for the minutes
   the run takes, and is deleted with the site).
+- **How it was deployed (11 Nov 2026), and how to roll back.** From the session branch's commit `fe3c500` (the tree of the squash
+  that follows it; after it only this record changes), the way "Part 3 in production" did, with no migration and no key.
+  1. *Preconditions, read only:* the feature branch was at `fc694b1` (sessions 1 to 18); `git diff --name-only fc694b1 HEAD -- database`
+     is empty; the running image `web-studio:11197ce-20261111` (id `782304224cff`) was healthy, 56 migrations, 12 live sites, no collection.
+  2. *Backup:* `docker exec web-studio-db pg_dump -U postgres --no-owner webstudio | gzip > /root/backups/webstudio-20261111-pre-w11.sql.gz`
+     (1.3 MB, `gunzip -t` passes).
+  3. *Rollback tag:* `docker tag web-studio:11197ce-20261111 web-studio:11197ce-pre-w11-20261111`.
+  4. *Sync and build:* `git archive` of the commit into a scratch directory, `rsync -azcn --delete` by checksum listed exactly the nine paths
+     of `git diff --name-only 11197ce HEAD` (four changed, five new: the two specs, the unit test, `template-collections.ts`,
+     `template-copy-error.ts`; nothing to delete), the real `rsync`, a second dry run with no real change, then `docker compose build
+     web-studio` (about a minute), the image tagged `web-studio:fe3c500-20261111` (id `c70a12bd2b7c`).
+  5. *Up:* `docker compose up -d --no-deps web-studio`: healthy within a few seconds, 0 restarts, "knex migrate:latest: Already up to date", both
+     timer lines in the log.
+  6. *Check:* `pnpm e2e:server`, 45 tests, all pass (the 42 of session D1 and the three of `template-collections.spec.ts`); no `template copy`
+     or error line in the log afterwards; 12 live sites and 4 live templates, as before.
+  *Roll back* with `docker tag web-studio:11197ce-pre-w11-20261111 web-studio:local` and `cd /root/core-backend && docker compose up -d
+  --no-deps web-studio`. Nothing needs `WS_SKIP_MIGRATE`: the database is the same. A site made from a template with collections after this
+  deploy keeps them when the old image runs: its Collections screens read the same tables. A restore of the dump is not needed for this change.
+  What the server e2e leaves: the test template and the sites made from it and from the real templates, soft-deleted (a soft-deleted site keeps
+  its rows, two collections among them); nothing else.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
