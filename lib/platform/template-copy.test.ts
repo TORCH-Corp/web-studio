@@ -70,9 +70,18 @@ test('the settings left behind are the publish state, the site name, the site id
   }
 });
 
-test('the copied tables are the ones the plan names', () => {
+test('the copied tables are the ones the plan names, the four collection tables since part 3 (session W11)', () => {
   assert.deepEqual(
     [...COPIED_TABLES].sort(),
-    ['asset_folders', 'assets', 'color_variables', 'components', 'fonts', 'global_variables', 'layer_styles', 'locales', 'page_folders', 'page_layers', 'pages', 'settings', 'translations'],
+    ['asset_folders', 'assets', 'collection_fields', 'collection_item_values', 'collection_items', 'collections', 'color_variables', 'components', 'fonts', 'global_variables', 'layer_styles', 'locales', 'page_folders', 'page_layers', 'pages', 'settings', 'translations'],
   );
+});
+
+test('a table is inserted after the table its foreign key names: collections, then their fields and items, then the values', () => {
+  const at = (table: (typeof COPIED_TABLES)[number]) => COPIED_TABLES.indexOf(table);
+  assert.ok(at('collections') < at('collection_fields'));
+  assert.ok(at('collections') < at('collection_items'));
+  assert.ok(at('collection_items') < at('collection_item_values'));
+  assert.ok(at('collection_fields') < at('collection_item_values'));
+  assert.ok(at('locales') < at('translations'));
 });

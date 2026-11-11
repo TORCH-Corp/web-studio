@@ -5,8 +5,9 @@ the c0 port of 1 Nov 2026, then part 1's sessions on top of it (sessions 1 to 11
 on `feature/web-studio-storefront-and-cart`: sessions W1 to W8 and D1 below; **"Part 2 in production (session D1)"** is
 the one place that lists its keys, tables, routes, checkout flow, image cache and how it was deployed; "Part 2 release fixes
 (session 22)" lists the fixes made to it and to ycode's own files after the build), then part 3 (contact form, collections and
-analytics, on `feature/web-studio-forms-collections-and-analytics`: sessions W1 to W10 and D1 below; **"Part 3 in production
-(session D1)"** is the one place that lists its keys, tables, timers, how it was deployed and how to roll it back).
+analytics, on `feature/web-studio-forms-collections-and-analytics`: sessions W1 to W11 and D1 below; **"Part 3 in production
+(session D1)"** is the one place that lists its keys, tables, timers, how it was deployed and how to roll it back; **"Template
+collections (session W11)"** is how a site made from a template gets the template's collections).
 
 ## How the service runs (session 11)
 One container, `web-studio`, in the platform's compose project on the production server
@@ -1446,6 +1447,74 @@ Part 3 runs in the same container as parts 1 and 2. What it added, in one place;
 - **Found while deploying, not fixed here.** The Member and Viewer profiles of TORCH corp lack `manage_forms` r (above). The first
   scheduled daily run and a real retry are not yet seen (above). `pnpm test` exited 1 on the feature branch because one test was
   reported cancelled (part 3 OPEN_QUESTIONS 17c); this session fixed the test, not the code: the call it stands in for was never wrong.
+
+## Template collections (part 3, session W11)
+A site made from a template gets the template's collections (PRD V1.0 "Collections": the company-site template carries three
+ready collections with sample items in Arabic and English; part 3 open question 9, answered by the owner on 11 Nov 2026).
+`lib/platform/template-copy.ts` copies, in the transaction that provisions the site, the draft rows of `collections`,
+`collection_fields`, `collection_items`, `collection_item_values` and the CMS translations of the items (`translations` with
+`source_type = 'cms'`, which the copy already carried, with the template's item ids, before this session). The pure parts are in
+`lib/platform/template-collections.ts` (tested without a database, `template-collections.test.ts`), the error class in
+`template-copy-error.ts`. No migration.
+- **What is copied, and what is not.** Draft rows only, as for pages: the new site publishes them at its first publish. Rows
+  whose parent is not live stay behind with it (`dropOrphans`): the fields, items and values of a soft-deleted collection, the
+  values of a soft-deleted field, and the translations of an item or a field that is soft-deleted. ycode's delete routes
+  soft-delete these together (an item's translations with the item, a collection's with the collection), so such rows exist
+  only after a cascade that failed part way (the collection delete logs the error and goes on); the filter keeps them out of
+  the copy. The copy logs one line when it leaves something behind:
+  `[template copy] left behind, whose collection, item or field is not live: ...`. Not
+  copied: the published twins, the CSV import jobs (`collection_imports`), form submissions and visit data (they are not
+  tenant content of a template and no table of the copy names them).
+- **Ids.** Every copied row gets a new id and `remapIds` replaces every id of the map wherever it stands in a row, as for the
+  pages: a Collection element's source (`variables.collection.id`, its `sort_by`, `source_field_id` and filters), field
+  variables (`field_id` and the `relationships` list of a reference), a CMS page's `settings.cms`, a link to an item
+  (`link.page.collection_item_id`), an option source (`settings.optionsSource`), a reference field
+  (`reference_collection_id`), a count field's `data.count`, a collection's `sorting.field`, the values of reference fields
+  (an item id, or a JSON list of them), the ids inside a rich text or link value, and the keys of the items' translations
+  (`source_id`, and `field:id:{field}` for a field that has no key). **`collections.uuid` is a second identifier with a global
+  UNIQUE constraint** (ycode's template export maps it too): each copied collection gets a new one, registered in the map.
+  An item's `content_hash` covers its values' field ids, so it is computed again from the new values (`rehashItems`).
+- **A pointer that cannot be followed.** After the map, before any file is copied (`checkPointers`), no copied row may point at an
+  id of the template. Two checks, both over every copied table: (1) any id, anywhere in a row's text, that is a collection,
+  a collection's `uuid`, a field or an item of the template that was **not** copied (deleted, or only a published twin); (2) any
+  value, at a key where ycode keeps the id of a collection, a field or an item (`collection_id`, `collectionId`,
+  `reference_collection_id`, `referenceCollectionId`, `slug_field_id`, `field_id`, `fieldId`, `sortFieldId`, `source_field_id`,
+  `sort_by`, `collection_item_id`, `defaultItemId`, the lists `defaultItemIds` and `relationships`, and `variables.collection.id`),
+  that is an id and is not one of the new site's. A keyword or an empty value is not a pointer (`manual`, `current-collection`,
+  `''`). The values of reference fields are read as item ids, those of rich text and link fields as JSON. The first one found
+  fails the copy with a `TemplatePointerError` (a `TemplateCopyError`): *"The template cannot be copied: page_layers row {id}
+  points at {id} at layers[0].children[0].variables.collection.id, which is no collection, field or item of the template"* (or
+  *"which the template has but did not copy (it is deleted or not live)"*). The sites route answers 500 with that message, the
+  transaction rolls back and no site, row or file is left. What it cannot see: an id of a row that no longer exists anywhere,
+  inside free text at a place that is not one of those keys (a filter's `value` list is read only through the reference-field
+  rule above); it is left as it is, as for pages. **A template with a stale pointer cannot make sites until its builder fixes it**
+  (the Collection element or link that names a deleted collection); the message names the row and the place. The existing
+  templates were checked (11 Nov 2026) against the draft rows of every live site on production, the four seeded templates
+  included: no pointer fails.
+- **Assets** are handled as the page assets of a template are: every asset of the template and its files are copied whether
+  a page or an item uses them, the asset ids inside item values (an image field's value, a rich text's image) follow the map,
+  and the template's site id inside a file URL becomes the new site's. A value that names an asset the template no longer has
+  is left as it is, as a layer's is.
+- **The default language.** ycode keeps the default language's text in the item's values and the other languages in
+  translations, so when the new site's default is not the template's the items follow, as the pages do (OPEN_QUESTIONS 24,
+  `default-language.ts`): `swapCmsSource` makes every completed, non-blank translation of a text or rich text field into
+  the new default the item's value, and the value it replaces becomes a translation into the template's default language
+  (none when that language was not asked for). An incomplete translation is not applied and stays where it is: ycode marks
+  a translation incomplete when its item's value changes, so a template item whose English text was edited after its Arabic
+  was written needs the Arabic completed again in the template's translation screen before an Arabic-first site shows it.
+  **Not changed:** `swapSiteSourceLanguage` (Site settings, "make this language the default") still swaps pages and
+  components only, not items; the same gap exists for every site that has collections.
+- **Not touched.** A site made before this session and a blank site (the blank template runs the blank seed, not the copy);
+  the Collections screens and routes; the template's own rows.
+- **Tests.** Unit: `lib/platform/template-collections.test.ts` (the id map over the shapes above, the orphans, the swap, the
+  pointer errors, the hashes), `template-copy.test.ts` (the table list and its order). e2e: `e2e/template-collections.spec.ts`
+  (a template with People, with a list page, an item page, a link, a select and a photo, and Posts, whose Author refers to
+  People; items with Arabic translations and a deleted one; a site made from it shows both collections on its published pages
+  and each person on her own page, in both languages; Arabic as the default; independence both ways; no template id in any
+  row of the site; a site made before and a blank site have none; a stale pointer refuses the copy by name and leaves no
+  site), and on the server `e2e/server/template-collections.spec.ts` (the test account's organization is the templates
+  organization, so the run makes its own template there; it is a row in every organization's Templates list for the minutes
+  the run takes, and is deleted with the site).
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream

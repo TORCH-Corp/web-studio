@@ -13,10 +13,18 @@
  * template's site id inside file URLs), the way ycode's own template export
  * does it: each known id is replaced wherever it appears in the row's text.
  *
+ * Collections (part 3, session W11): the template's collections, their fields, items and
+ * values and the translations of its items are copied the same way, as drafts, so the new
+ * site's lists and item pages work before its first publish (lib/platform/template-collections.ts
+ * holds what is about collections only). The copy also follows every pointer at one of them: a
+ * Collection element's source, field variables, a CMS page's settings, a link to an item, an
+ * option source, a reference between collections. A pointer that cannot be followed fails the
+ * copy with a `TemplatePointerError`, and the transaction leaves no site behind.
+ *
  * Not copied: the published rows (the copy is a draft until its first
  * publish; the error pages get a published twin, as blank provisioning
- * gives them), the versions history, collections and forms (part 3), API
- * keys, webhooks, integrations, AI chats, and the settings in
+ * gives them), the versions history, form submissions and visit data, API
+ * keys, webhooks, integrations, AI chats, CSV import jobs, and the settings in
  * `SETTINGS_NOT_COPIED` plus the AI provider keys.
  *
  * The template's languages that were not asked for stay behind with their
@@ -43,6 +51,10 @@ import { applySourceSwap, planSourceSwap } from '@/lib/platform/default-language
 import type { SiteSeeder } from '@/lib/platform/provision';
 import type { Site } from '@/lib/platform/site';
 import { copySiteStorage, createStorageClient, objectExists, publicUrlFor } from '@/lib/platform/storage';
+import { TemplateCopyError } from '@/lib/platform/template-copy-error';
+import { checkPointers, dropOrphans, mapCollectionUuids, rehashItems, swapCmsSource } from '@/lib/platform/template-collections';
+
+export { TemplateCopyError };
 
 /** The tenant tables a template is copied from, parents before children. */
 export const COPIED_TABLES = [
@@ -56,6 +68,10 @@ export const COPIED_TABLES = [
   'fonts',
   'asset_folders',
   'assets',
+  'collections',
+  'collection_fields',
+  'collection_items',
+  'collection_item_values',
   'settings',
   'locales',
   'translations',
@@ -104,14 +120,6 @@ export function remapIds<T>(value: T, map: Map<string, string>): T {
     return out as T;
   }
   return value;
-}
-
-/** The template cannot be copied as it is (a file it names is missing). */
-export class TemplateCopyError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TemplateCopyError';
-  }
 }
 
 interface TableColumns {
@@ -166,11 +174,37 @@ async function insertRows(trx: Knex.Transaction, table: CopiedTable, rows: Row[]
   await trx.batchInsert(table, data, 100);
 }
 
+/**
+ * The ids of the template's collections (and their own `uuid`), fields and items that the copy does not carry:
+ * rows that are deleted, or exist only as a published twin. Nothing in the new site may point at one of them.
+ */
+async function readCollectionIdsNotCopied(trx: Knex.Transaction, templateId: string, map: Map<string, string>): Promise<Set<string>> {
+  const left = new Set<string>();
+  const tables = [['collections', ['id', 'uuid']], ['collection_fields', ['id']], ['collection_items', ['id']]] as const;
+  for (const [table, columns] of tables) {
+    const rows = (await trx(table).where('tenant_id', templateId).select(...columns)) as Row[];
+    for (const row of rows) {
+      for (const column of columns) {
+        const id = String(row[column]).toLowerCase();
+        if (!map.has(id)) left.add(id);
+      }
+    }
+  }
+  return left;
+}
+
 /** A seeder that copies this template into the site being provisioned. */
 export function copyTemplate(template: Site): SiteSeeder {
   return async (trx, site, input) => {
     const columns = await describeTables(trx);
     const rows = await readDraftRows(trx, template.id, columns);
+
+    // The copy is the template's live draft: a row whose parent is not live stays behind with it (a deleted
+    // collection's items, the translations of a deleted item).
+    const orphans = dropOrphans(rows);
+    if (orphans.fields + orphans.items + orphans.values + orphans.translations > 0) {
+      console.warn(`[template copy] left behind, whose collection, item or field is not live: ${orphans.fields} fields, ${orphans.items} items, ${orphans.values} values, ${orphans.translations} translations (template ${template.id})`);
+    }
 
     const languages = input.languages as string[];
 
@@ -183,6 +217,8 @@ export function copyTemplate(template: Site): SiteSeeder {
       const source = { pages: rows.pages, pageLayers: rows.page_layers, components: rows.components, folders: rows.page_folders, translations: rows.translations };
       const plan = planSourceSwap(source, newDefault.id as string, languages.includes(templateDefault.code as string));
       applySourceSwap(source, plan, templateDefault.id as string);
+      // The items' text follows the default as the pages' does: their values are the default language's, the rest are translations.
+      swapCmsSource(rows, newDefault.id as string, templateDefault.id as string, languages.includes(templateDefault.code as string));
     }
 
     // The languages asked for; a template language not asked for stays behind with its translations.
@@ -196,6 +232,15 @@ export function copyTemplate(template: Site): SiteSeeder {
     for (const table of COPIED_TABLES) {
       for (const row of rows[table]) map.set((row.id as string).toLowerCase(), randomUUID());
     }
+    mapCollectionUuids(rows.collections, map);
+
+    const copied = {} as Record<CopiedTable, Row[]>;
+    for (const table of COPIED_TABLES) copied[table] = rows[table].map((row) => prepare(row, map));
+
+    // Nothing in the copy may point at the template: a pointer at a collection, field or item that was not copied
+    // fails the copy here, before any file is copied.
+    rehashItems(copied.collection_items, copied.collection_item_values);
+    checkPointers(copied, new Set(map.values()), await readCollectionIdsNotCopied(trx, template.id, map));
 
     // The files (on disk or in Document Center, by PLATFORM_STORAGE), before the rows that point at them.
     await copySiteStorage(template.id, site.id, site.organization_id);
@@ -211,9 +256,6 @@ export function copyTemplate(template: Site): SiteSeeder {
         throw new TemplateCopyError(`The file of the font "${font.family}" (${storagePath}) is missing from the template's storage`);
       }
     }
-
-    const copied = {} as Record<CopiedTable, Row[]>;
-    for (const table of COPIED_TABLES) copied[table] = rows[table].map((row) => prepare(row, map));
 
     // File URLs and content hashes are the new site's.
     for (const asset of copied.assets) {
