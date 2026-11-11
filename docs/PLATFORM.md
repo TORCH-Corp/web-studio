@@ -851,7 +851,7 @@ templates' and part 1's sites preloading IBM Plex Sans Arabic from `fonts.gstati
 - **A fifth leaf, `webstudio.manage_reports`,** for Traffic, Conversions and the Dashboard's visit numbers: in
   `permission-scope.json` (module Reports), `WEB_STUDIO_LEAF.manageReports` and the session's `WebStudioLeaf`. The callback
   reads it from `GET /authz/my-permissions?namespace=webstudio` with the others (`WEB_STUDIO_LEAVES`), and
-  `GET /ycode/api/auth/session` returns its flags in `permissions`. No route is on it yet (session W9). No leaf was renamed
+  `GET /ycode/api/auth/session` returns its flags in `permissions`. Session W9 (the Reports API, below) puts its three routes on it. No leaf was renamed
   or removed; the matrix names of two leaves follow what they now cover ("Pages, collections and publishing",
   "Form submissions").
 - **Defaults.** Manager every flag on the five leaves. Member and Viewer gain `r` on `manage_forms` and `r` on
@@ -1156,6 +1156,73 @@ A form can send its submissions to Contact Center, and each submission knows wha
   a browser cannot report an order or a form; the product card's button in a real browser reports once however many times
   it is pressed; the new table holds numbers only; the daily run totals every finished day once (the day boundary at
   midnight in Baghdad included), twice over changes nothing, and a row of 91 days ago is gone while its total stays.
+
+## Reports API for the app (part 3, session W9)
+- **Three reads, all `webstudio.manage_reports` r** (`lib/platform/permissions.ts`, siteless under `platform/`: no site cookie,
+  no editor lock). Manager, Member and Viewer hold it by default (session W1); a user without it is 403 with
+  `required: 'webstudio.manage_reports.r'`, no session is 401, and a site of another organization, one that does not exist
+  or an id that is no id is 404 (`getSiteForOrganization`; the site is checked before the period, so a stranger is never
+  told 400).
+  - `GET /ycode/api/platform/sites/{id}/reports/traffic`: `{ data: { period, no_data, views, visitors_per_day, series, pages,
+    sources, devices } }`. `series` has one `{ day, views, visitors }` for every day of the period, oldest first, a day with
+    no visit with zeros; `visitors_per_day` is the average over the period's days (each day's own value is in the series);
+    `pages` is `{ total, top }`: `total` counts the pages viewed, `top` the 6 most viewed (the handoff's "Top 6 of 38") by views
+    then path, each `{ path, name, views, share }`, `name` being the page's name in the builder or `null` when no page has that
+    path now; `sources` is all four (`direct`, `search`, `social`, `referral`, which is "another site") and `devices` all three
+    (`phone`, `desktop`, `tablet`), always in that order, with `views` and `share`. No countries.
+  - `GET /ycode/api/platform/sites/{id}/reports/conversions`: `{ data: { period, no_data, sells, steps } }`
+    with `steps` in the funnel's order, each `{ step, count, share }`: `visitors`, `cart`, `orders`, `forms`. A site that does not
+    sell has `sells: false` and only `visitors` and `forms`: the cart and orders steps are **absent**, whatever the site holds of them
+    (a site that does not sell can hold `add_to_cart` rows, W8).
+  - `GET /ycode/api/platform/reports/summary`: `{ data: { period, no_data, total: { views, visitors_per_day }, sites } }`,
+    `sites` being the organization's live sites oldest first (the order of All sites) with `{ id, name, status, views,
+    visitors_per_day, views_by_day }`; `views_by_day` is `[{ day, views }]`, one per day, for the Dashboard's small chart. A site
+    that was never published (`status: 'draft'`, no `published_at`) has `views`, `visitors_per_day` and `views_by_day` all `null`,
+    not zero, is not read and adds nothing to the total. An organization with no site answers `sites: []` and `no_data: true`.
+- **The period.** `?period=today|last_7_days|last_30_days`, or `?from=YYYY-MM-DD&to=YYYY-MM-DD`: one kind, never both,
+  never neither. The days are the platform's (Baghdad, `visitDay`), both ends counted; the last 7 days end today and count it. A
+  range is real days, `from` not after `to`, `to` not after today, and at most **366** days ("one year"). Anything else is 400
+  `{ error, code: 'invalid_period' }` with what to change. The answer's `period` is `{ key, from, to, days }`, `key` being
+  `today`, `last_7_days`, `last_30_days` or `custom`, so the app shows the days it read. (`lib/platform/report-period.ts`.)
+- **No data is not an error.** A period with nothing to show answers 200 with `no_data: true`, zeros, empty lists and (for
+  Traffic and the summary) the zero-filled series. "Nothing to show" is: no view (Traffic); no shown step with a count
+  (Conversions, so a site that does not sell looks at its two steps only); no view and no visitor in any site (summary).
+  In Conversions a share is `null` when there are no visitors to divide by.
+- **Which number is which** (the daily totals', `lib/platform/visit-totals.ts`). A visitor is counted once a day, so there is no
+  "visitors in the period": `visitors_per_day` is the visitors of every day added up over the number of days of the period, days
+  nobody visited included, to one decimal (8 visitor-days over 7 days is 1.1). In Conversions `visitors` is those visitor-days
+  added up, `cart` the visitors who added to the cart (once a day each), `orders` the orders placed (every one: a visitor who
+  orders twice is two) and `forms` the form submissions that were not spam. A **share of visitors** is the count over the
+  visitors, one decimal, **clamped to 100**: an order or a form whose visitor's view was not counted (a refused view, a missing
+  salt) is in its own count only, so the count can pass the visitors. The **shares of a whole list** (sources, devices, all pages)
+  are percentages with one decimal that add up to exactly 100.0 (the largest remainders get the tenths left over, the earlier one
+  on a tie: `sharesOf` in `lib/platform/report-numbers.ts`); the top pages' shares are of **all** the views, so the six shown
+  add up to less than 100 when there are more pages.
+- **Where a day is read from.** The days up to the site's **latest totalled day** (`platform_visit_site_days`) come from the
+  totals (`platform_visit_site_days` and `platform_visit_days`); the days after it come from the detailed rows
+  (`platform_visits`), made into numbers by `totalsOfDay`, the function the daily run uses. That is today, which is never in the
+  totals, and a finished day the run has not reached yet (the hour after midnight, 00:00 to 01:00 Baghdad, or a run that
+  failed). A day is never read from both, so nothing is counted twice; the detailed rows are gone after 90 days, so a range
+  over 90 days is read from the totals alone. The rule needs no new table or column and no environment key. (`lib/platform/reports.ts`.)
+- **The page names** come from the site's own pages (the draft rows that are not deleted and are not error pages), because the
+  totals keep a path and not a page id: each page's path is built the way the builder builds it (`buildSlugPath`), a dynamic
+  page names every path its collection makes, and a path that begins with one of the site's language codes (`/ar/about`) is
+  the page without it. A page deleted since the visit, or whose slug changed, has `name: null` and the app shows the path.
+  Not translated: the name is the builder's. (`lib/platform/report-pages.ts`.)
+- **Left out** (plan decisions): countries, the busiest day and a table view of the chart (handoff decision 3), export, revenue.
+  The answers carry nothing of a visitor: no key, no address.
+- **One side effect.** Conversions reads whether the site sells through `storeOf` (as the published site and Orders do), which
+  makes the site's store row with its defaults on the first read of any site: the same idempotent insert the Store settings
+  screen does. Nothing else a report does writes.
+- **Test.** `lib/platform/report-period.test.ts`, `report-numbers.test.ts` (shares that add up for any counts, the average, the
+  series, the three reports) and `report-pages.test.ts` (folders, index pages, dynamic pages, language codes);
+  `permissions.test.ts` (the three routes on the leaf, a Viewer reads, a user with the other four leaves does not);
+  `e2e/reports-api.spec.ts` on a fixture of visits and events for a selling site, a site that does not sell and a draft: the
+  numbers of the three routes with every figure written out by hand; the shares add up; the finished days' detailed rows are
+  deleted after the daily run, so their numbers can only come from the totals, and today's rows are never totalled; a finished
+  day the run has not reached is read from the detailed rows; the cart and order steps absent for the site that does not sell;
+  a period with no visit; a draft with no numbers; the period's refusals and the 366-day limit; a Viewer reads; 401, 403 without
+  `manage_reports` r, 404 for another organization's site.
 
 ## Proven
 c0 (sandbox, 1 Nov): 48 migrations on an empty PostgreSQL 16; `next build`; 284 upstream
