@@ -191,7 +191,7 @@ test('a visitor\'s browser views the published page and sends the form: one view
 test('the submission is in the app\'s API as a prospect, Contact Center holds it, and the people who may read it are told', async () => {
   // The list: one submission, unread, from the form, with its Contact Center state. The call to Contact Center
   // is made while the visitor's request waits (3 seconds at most), so the state is there at once; poll for a slow one.
-  type Row = { id: string; unread: boolean; form: { id: string }; sender: { name: string; phone: string }; contact_center: { state: string; kind: string | null; id: string | null } };
+  type Row = { id: string; unread: boolean; form: { id: string; name: string }; sender: { name: string; phone: string }; contact_center: { state: string; kind: string | null; id: string | null } };
   let row: Row | undefined;
   await expect(async () => {
     const rows = await data<Row[]>(await api.get(`/ycode/api/platform/sites/${site.id}/submissions`));
@@ -199,7 +199,8 @@ test('the submission is in the app\'s API as a prospect, Contact Center holds it
     row = rows[0];
     expect(row.contact_center.state).toBe('prospect');
   }).toPass({ timeout: 45_000 });
-  expect(row).toMatchObject({ unread: true, form: { id: 'contact-form' }, sender: { name: TEST_PROSPECT.name, phone: TEST_PROSPECT.phone }, contact_center: { state: 'prospect', kind: 'prospect' } });
+  // A form is named by its layer's own name in the builder (the element's own, "Contact form"), else by its id (session W4).
+  expect(row).toMatchObject({ unread: true, form: { id: 'contact-form', name: 'Contact form' }, sender: { name: TEST_PROSPECT.name, phone: TEST_PROSPECT.phone }, contact_center: { state: 'prospect', kind: 'prospect' } });
   submissionId = row!.id;
   prospectId = row!.contact_center.id!;
   expect(prospectId).toMatch(/^[0-9a-f-]{36}$/);
@@ -241,7 +242,7 @@ test('the submission is in the app\'s API as a prospect, Contact Center holds it
       expect(mine, 'the notification of this submission').toBeTruthy();
       notificationId = mine!.id;
       expect(mine!.title).toBe('New form submission');
-      expect(mine!.body).toBe(`${TEST_PROSPECT.name} sent contact-form on ${site.name}.`);
+      expect(mine!.body).toBe(`${TEST_PROSPECT.name} sent Contact form on ${site.name}.`);
       expect(mine!.actionUrl).toMatch(new RegExp(`^torch://app/[0-9a-f-]{36}/sites/${site.id}/contact-form/${submissionId}$`));
     }).toPass({ timeout: 45_000 });
   } finally {
