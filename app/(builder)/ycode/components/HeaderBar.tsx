@@ -90,7 +90,6 @@ export default function HeaderBar({
   const { isEditor, canManageSettings } = useRole();
   // The CMS and Forms screens are only drawn for a user whose flags let the API answer them (part 3, session W2).
   const canReadCollections = useHasFlag(WEB_STUDIO_LEAF.manageContent, 'r');
-  const canReadForms = useHasFlag(WEB_STUDIO_LEAF.manageForms, 'r');
   const lock = useSiteLock();
   const editorSidebarTab = useEditorStore((s) => s.activeSidebarTab);
   const currentPageCollectionItemId = useEditorStore((s) => s.currentPageCollectionItemId);
@@ -560,23 +559,7 @@ export default function HeaderBar({
               CMS
             </Button>
           )}
-          {!isEditor && canReadForms && (
-            <Button
-              variant={activeNavButton === 'forms' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => {
-                const isDesignRoute = routeType === 'layers' || routeType === 'page' || routeType === 'component';
-                if (isDesignRoute) {
-                  setLastDesignUrl(window.location.pathname + window.location.search);
-                }
-                setOptimisticNav('forms');
-                router.push('/ycode/forms');
-              }}
-            >
-              <Icon name="form" />
-              Forms
-            </Button>
-          )}
+          {/* TORCH: no Forms button. The submissions inbox is the app's Contact form (lib/platform/parts.ts hides /ycode/forms). */}
         </div>
       </div>
 

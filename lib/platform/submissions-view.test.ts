@@ -6,6 +6,9 @@ import {
   encodeCursor,
   formChoices,
   formsOfLayers,
+  likePattern,
+  parseSubmissionIds,
+  parseSubmissionStatus,
   parseSubmissionsQuery,
   senderOf,
   submissionDetailView,
@@ -25,15 +28,24 @@ const AT = '2026-11-11T10:20:30.123456Z';
 
 // ---- the list query ------------------------------------------------------------------------------------------
 
-test('the list query: defaults, a form, read or unread, a cursor and a limit', () => {
-  assert.deepEqual(parseSubmissionsQuery(q('')), { query: { limit: 25 }, errors: null, code: null });
-  assert.deepEqual(parseSubmissionsQuery(q('unread=true&form_id=%20contact-form%20&limit=100')), { query: { unread: true, formId: 'contact-form', limit: 100 }, errors: null, code: null });
-  assert.deepEqual(parseSubmissionsQuery(q('unread=false')), { query: { unread: false, limit: 25 }, errors: null, code: null });
+test('the list query: the inbox by default, a form, a view, a search, a cursor and a limit', () => {
+  assert.deepEqual(parseSubmissionsQuery(q('')), { query: { limit: 25, show: 'all' }, errors: null, code: null });
+  for (const show of ['all', 'unread', 'read', 'archived', 'spam'] as const) {
+    assert.deepEqual(parseSubmissionsQuery(q(`show=${show}`)), { query: { limit: 25, show }, errors: null, code: null });
+  }
+  assert.deepEqual(parseSubmissionsQuery(q('show=spam&form_id=%20contact-form%20&limit=100&q=%20Ali%20')), {
+    query: { show: 'spam', formId: 'contact-form', search: 'Ali', limit: 100 },
+    errors: null,
+    code: null,
+  });
+  // The first version's filter still reads: an app built before `show` sends it.
+  assert.deepEqual(parseSubmissionsQuery(q('unread=true')), { query: { show: 'unread', limit: 25 }, errors: null, code: null });
+  assert.deepEqual(parseSubmissionsQuery(q('unread=false')), { query: { show: 'read', limit: 25 }, errors: null, code: null });
   // Empty values are no filter.
-  assert.deepEqual(parseSubmissionsQuery(q('form_id=&unread=')), { query: { limit: 25 }, errors: null, code: null });
+  assert.deepEqual(parseSubmissionsQuery(q('form_id=&unread=&show=&q=%20')), { query: { limit: 25, show: 'all' }, errors: null, code: null });
 
   const cursor = encodeCursor({ at: AT, id: ID });
-  assert.deepEqual(parseSubmissionsQuery(q(`cursor=${cursor}`)), { query: { cursor: { at: AT, id: ID }, limit: 25 }, errors: null, code: null });
+  assert.deepEqual(parseSubmissionsQuery(q(`cursor=${cursor}`)), { query: { cursor: { at: AT, id: ID }, limit: 25, show: 'all' }, errors: null, code: null });
   // A cursor is opaque text safe in a URL.
   assert.match(cursor, /^[A-Za-z0-9_-]+$/);
 });
@@ -43,6 +55,9 @@ test('the list query refuses what it cannot use, naming the parameter', () => {
     ['unread=maybe', 'unread'],
     ['unread=1', 'unread'],
     ['unread=TRUE', 'unread'],
+    ['show=deleted', 'show'],
+    ['show=Spam', 'show'],
+    [`q=${'x'.repeat(101)}`, 'q'],
     ['limit=0', 'limit'],
     ['limit=101', 'limit'],
     ['limit=ten', 'limit'],
@@ -283,7 +298,7 @@ const RECORD: SubmissionRecord = {
   link_contact_center_id: PERSON,
 };
 
-test('a row of the list: the id, the date, the form, the sender, unread, and Contact Center; nothing else', () => {
+test('a row of the list: the id, the date, the form, the sender, unread, the status, and Contact Center; nothing else', () => {
   const row = submissionRow(RECORD, new Map([['contact-form', FORM]]));
   assert.deepEqual(row, {
     id: ID,
@@ -291,9 +306,17 @@ test('a row of the list: the id, the date, the form, the sender, unread, and Con
     form: { id: 'contact-form', name: 'Contact us' },
     sender: { name: 'Ali Hassan', phone: '0770 123 4567' },
     unread: true,
+    status: 'new',
     contact_center: { state: 'prospect', kind: 'prospect', id: PERSON },
   });
   assert.equal(submissionRow({ ...RECORD, status: 'read' }, new Map()).unread, false);
+  // Archived and spam are not unread, and say what they are.
+  for (const status of ['read', 'archived', 'spam'] as const) {
+    const shown = submissionRow({ ...RECORD, status }, new Map());
+    assert.deepEqual([shown.unread, shown.status], [false, status]);
+  }
+  // A status the database should not hold is a fault, not a fifth status.
+  assert.throws(() => submissionRow({ ...RECORD, status: 'junk' }, new Map()), /status "junk"/);
   // A form no layer holds is called by its id.
   assert.deepEqual(submissionRow(RECORD, new Map()).form, { id: 'contact-form', name: 'contact-form' });
   // Whatever else the record carries (the stored metadata above all) is never copied.
@@ -304,7 +327,7 @@ test('a row of the list: the id, the date, the form, the sender, unread, and Con
 
 test('the detail is the row with every field and the link; reading has made it read', () => {
   const view = submissionDetailView({ ...RECORD, status: 'read' }, new Map([['contact-form', FORM]]), { CONTACT_CENTER_APP_ID: APP });
-  assert.deepEqual(Object.keys(view).sort(), ['contact_center', 'date', 'fields', 'form', 'id', 'links', 'sender', 'unread']);
+  assert.deepEqual(Object.keys(view).sort(), ['contact_center', 'date', 'fields', 'form', 'id', 'links', 'sender', 'status', 'unread']);
   assert.equal(view.unread, false);
   assert.deepEqual(view.fields, [
     { name: 'name', label: 'Full name', value: 'Ali Hassan' },
@@ -333,4 +356,26 @@ test('the filter\'s forms are the site\'s forms and the forms that have submissi
     { id: 'b-form', name: 'Same' },
   ]);
   assert.deepEqual(formChoices(new Map(), []), []);
+});
+
+// ---- changing submissions -------------------------------------------------------------------------------------
+
+test('the ids of a batch: 1 to 100 submission ids, each once, lower case', () => {
+  const OTHER = '3F2504E0-4F89-41D3-9A0C-0305E82C3301';
+  assert.deepEqual(parseSubmissionIds([ID, OTHER, ID]), { ids: [ID, OTHER.toLowerCase()], error: null });
+  for (const bad of [undefined, 'x', [], [ID, 'not-an-id'], [ID, 7], Array.from({ length: 101 }, () => ID)]) {
+    const result = parseSubmissionIds(bad);
+    assert.equal(result.ids, null, JSON.stringify(bad)?.slice(0, 40));
+    assert.match(result.error!, /^ids:/);
+  }
+});
+
+test('a status a request may set is one of the four; anything else is none', () => {
+  for (const status of ['new', 'read', 'archived', 'spam']) assert.equal(parseSubmissionStatus(status), status);
+  for (const bad of ['deleted', 'Spam', '', null, 1, undefined]) assert.equal(parseSubmissionStatus(bad), null);
+});
+
+test('a search matches its text anywhere and takes %, _ and \\ literally', () => {
+  assert.equal(likePattern('Ali'), '%Ali%');
+  assert.equal(likePattern('50%_a\\b'), '%50\\%\\_a\\\\b%');
 });

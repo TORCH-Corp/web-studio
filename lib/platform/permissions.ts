@@ -135,6 +135,7 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   'v1/forms/[form_id]/submissions/[submission_id]': isPublic('public API, own API-key auth'),
 
   // Sites.
+  'platform/site-names': sessionOnly('ids and names of the organization\'s sites for a Site picker: a content-only or forms-only user picks a site too'),
   'platform/sites': sites(), // GET the list (r), POST create (c)
   'platform/sites/[id]': sites(), // GET one site with its editor lock (r, session 6); DELETE (d)
   'platform/sites/[id]/open': sites(), // GET (r)
@@ -148,9 +149,9 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   // A site's form submissions for the app's Contact form screen (part 3, W4): the forms leaf's, and siteless like the list
   // of collections, so the app needs no site cookie and a delete takes no editor lock (the proxy skips the lock under
   // platform/). `submissions/forms` is the site's forms for the filter, a literal that wins over `[submissionId]`.
-  'platform/sites/[id]/submissions': forms(), // GET (r): newest first, spam left out
+  'platform/sites/[id]/submissions': forms(), // GET (r): newest first; PATCH several statuses (u); DELETE several (d)
   'platform/sites/[id]/submissions/forms': forms(), // GET (r)
-  'platform/sites/[id]/submissions/[submissionId]': forms(), // GET one (r), and it sets it read; DELETE (d)
+  'platform/sites/[id]/submissions/[submissionId]': forms(), // GET one (r), and it sets it read; PATCH its status (u); DELETE (d)
   'platform/submissions/unread-count': forms(), // GET (r): the organization's count and each site's, for the Navigator and the Dashboard
   'platform/store-elements/categories': content(), // GET (r): the categories a product grid can list, for the open site (part 2, W4)
   'platform/store-elements/products': content(), // GET (r): the products a product card can pick, for the open site (part 2, W4)

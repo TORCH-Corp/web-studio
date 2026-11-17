@@ -37,11 +37,28 @@ export interface SubmissionCursor {
   id: string;
 }
 
+/**
+ * Which submissions the list shows (17 Nov 2026: the app's Contact form is the only inbox, so it takes the
+ * builder's Archived and Spam): 'all' is the inbox, unread and read; 'archived' and 'spam' are their own lists
+ * and are in no other.
+ */
+export const SUBMISSION_SHOWS = ['all', 'unread', 'read', 'archived', 'spam'] as const;
+export type SubmissionShow = (typeof SUBMISSION_SHOWS)[number];
+
+/** The statuses a submission has (`form_submissions.status`); 'new' is unread. */
+export const SUBMISSION_STATUSES = ['new', 'read', 'archived', 'spam'] as const;
+export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
+
+/** The most submissions one request may change or delete. */
+export const SUBMISSIONS_MAX_BATCH = 100;
+const MAX_SEARCH = 100;
+
 export interface SubmissionsQuery {
   /** Only this form's submissions. */
   formId?: string;
-  /** true: unread only; false: read only; absent: both. */
-  unread?: boolean;
+  show: SubmissionShow;
+  /** Only submissions whose sent values hold this text, without regard to case. */
+  search?: string;
   cursor?: SubmissionCursor;
   limit: number;
 }
@@ -67,7 +84,7 @@ function decodeCursor(text: string): SubmissionCursor | null {
   return { at, id: id.toLowerCase() };
 }
 
-const QUERY_KEYS = new Set(['form_id', 'unread', 'cursor', 'limit']);
+const QUERY_KEYS = new Set(['form_id', 'unread', 'show', 'q', 'cursor', 'limit']);
 
 export type SubmissionsQueryResult =
   | { query: SubmissionsQuery; errors: null; code: null }
@@ -80,7 +97,7 @@ export function parseSubmissionsQuery(params: URLSearchParams): SubmissionsQuery
   let code: 'invalid_cursor' | null = null;
   for (const key of new Set(params.keys())) if (!QUERY_KEYS.has(key)) errors.push(`${key}: is not a parameter of this route`);
 
-  const query: SubmissionsQuery = { limit: SUBMISSIONS_DEFAULT_LIMIT };
+  const query: SubmissionsQuery = { limit: SUBMISSIONS_DEFAULT_LIMIT, show: 'all' };
 
   const formId = params.get('form_id')?.trim();
   if (formId) {
@@ -88,11 +105,24 @@ export function parseSubmissionsQuery(params: URLSearchParams): SubmissionsQuery
     else errors.push(`form_id: at most ${MAX_FORM_ID} characters`);
   }
 
+  // `unread` is the first version's filter, kept for an app built before `show`: true is 'unread', false is 'read'.
   const unread = params.get('unread');
   if (unread) {
-    if (unread === 'true') query.unread = true;
-    else if (unread === 'false') query.unread = false;
+    if (unread === 'true') query.show = 'unread';
+    else if (unread === 'false') query.show = 'read';
     else errors.push('unread: true or false');
+  }
+
+  const show = params.get('show');
+  if (show) {
+    if ((SUBMISSION_SHOWS as readonly string[]).includes(show)) query.show = show as SubmissionShow;
+    else errors.push(`show: one of ${SUBMISSION_SHOWS.join(', ')}`);
+  }
+
+  const search = params.get('q')?.trim();
+  if (search) {
+    if (search.length <= MAX_SEARCH) query.search = search;
+    else errors.push(`q: at most ${MAX_SEARCH} characters`);
   }
 
   const cursor = params.get('cursor');
@@ -269,7 +299,7 @@ export interface SubmissionRecord {
   created_at: string;
   form_id: string;
   payload: unknown;
-  /** 'new' is unread; the app is never given 'spam'. */
+  /** 'new' is unread. */
   status: string;
   /** `platform_form_links.state`; null when the submission has no link row. */
   link_state: string | null;
@@ -312,7 +342,15 @@ export interface SubmissionRowView {
   form: { id: string; name: string };
   sender: { name: string | null; phone: string | null };
   unread: boolean;
+  /** 'new', 'read', 'archived' or 'spam'. */
+  status: SubmissionStatus;
   contact_center: ContactCenterView;
+}
+
+/** A status the database holds that is none of the four is a fault, not a fifth status. */
+function statusOf(status: string): SubmissionStatus {
+  if (!(SUBMISSION_STATUSES as readonly string[]).includes(status)) throw new Error(`A submission has the status "${status}", which is none of ${SUBMISSION_STATUSES.join(', ')}`);
+  return status as SubmissionStatus;
 }
 
 export function submissionRow(record: SubmissionRecord, forms: Map<string, FormInfo>): SubmissionRowView {
@@ -322,6 +360,7 @@ export function submissionRow(record: SubmissionRecord, forms: Map<string, FormI
     form: { id: record.form_id, name: forms.get(record.form_id)?.name ?? record.form_id },
     sender: senderOf(record.payload),
     unread: record.status === 'new',
+    status: statusOf(record.status),
     contact_center: contactCenterOf(record.link_state, record.link_contact_center_id),
   };
 }
@@ -378,4 +417,28 @@ export interface SubmissionDetailView extends SubmissionRowView {
 export function submissionDetailView(record: SubmissionRecord, forms: Map<string, FormInfo>, env: Record<string, string | undefined> = process.env): SubmissionDetailView {
   const row = submissionRow(record, forms);
   return { ...row, fields: submissionFields(record.payload, forms.get(record.form_id)), links: submissionLinks(row.contact_center, env) };
+}
+
+// ---- changing submissions ------------------------------------------------------------------------------------
+
+/** The ids of a request that changes or deletes several submissions: 1 to SUBMISSIONS_MAX_BATCH distinct uuids, lower case. */
+export function parseSubmissionIds(value: unknown): { ids: string[]; error: null } | { ids: null; error: string } {
+  if (!Array.isArray(value) || value.length === 0) return { ids: null, error: 'ids: a list of at least one submission id' };
+  if (value.length > SUBMISSIONS_MAX_BATCH) return { ids: null, error: `ids: at most ${SUBMISSIONS_MAX_BATCH}` };
+  const ids = new Set<string>();
+  for (const id of value) {
+    if (typeof id !== 'string' || !UUID_PATTERN.test(id)) return { ids: null, error: 'ids: every id is a submission id' };
+    ids.add(id.toLowerCase());
+  }
+  return { ids: [...ids], error: null };
+}
+
+/** The status a request asks for, or null when it is none of the four. */
+export function parseSubmissionStatus(value: unknown): SubmissionStatus | null {
+  return typeof value === 'string' && (SUBMISSION_STATUSES as readonly string[]).includes(value) ? (value as SubmissionStatus) : null;
+}
+
+/** `text` as a LIKE pattern that matches it anywhere, its own %, _ and \ taken literally. */
+export function likePattern(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 }

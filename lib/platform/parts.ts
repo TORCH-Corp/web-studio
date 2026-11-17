@@ -26,6 +26,9 @@ const REMOVED_ROUTES = [
 const HIDDEN_ROUTES = [
   '/ycode/integrations/webhooks',
   '/ycode/integrations/api',
+  // The submissions inbox is the app's Contact form (owner, 17 Nov 2026): one inbox, not two. The Form element and
+  // a form's settings stay in the builder; `/ycode/api/form-submissions` stays for a visitor's post.
+  '/ycode/forms',
 ];
 
 /**
