@@ -1842,6 +1842,9 @@ The app's Contact form and Collections pages take over from the builder's Forms 
   editor lock is asked or taken: the owner decided the app edits alongside an open builder, which shows a change when it reads the
   collection again. `POST …/cms/collections` makes a collection with no fields, as it does for the builder: the client gives it
   the six built-in fields (id, status, name, slug, created_at, updated_at), and the app does the same.
+  One answer is more than the builder's (18 Nov 2026): `DELETE …/cms/collections/{id}/items/{item_id}` also removes the item's
+  published copy and clears the site's cached pages, so the item leaves the site at once. The builder's own delete leaves the
+  published copy for the site's next Publish, and the app has no Publish.
 - **The builder no longer offers its CMS screen** (18 Nov 2026): `CMS_SCREEN_OFFERED` in `lib/platform/parts.ts` is false, so the
   header has no CMS button and the pages menu's "Add a collection" says where collections are made. The screen's route still
   answers (`e2e/collections.spec.ts` opens it by its address). For the app's item form: `platform/sites/{id}/assets` takes `kind`

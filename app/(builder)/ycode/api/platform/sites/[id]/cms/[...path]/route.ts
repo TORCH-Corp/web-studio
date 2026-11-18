@@ -4,6 +4,8 @@ import { matchCmsRoute, type CmsMethod, type CmsRouteKey } from '@/lib/platform/
 import { requirementName } from '@/lib/platform/permissions';
 import { hasFlag } from '@/lib/platform/session';
 import { getSessionFromCookies, getSiteForOrganization, runWithSite } from '@/lib/platform/site';
+import { unpublishSingleItem } from '@/lib/repositories/collectionItemRepository';
+import { clearAllCache } from '@/lib/services/cacheService';
 import * as collections from '../../../../../collections/route';
 import * as collection from '../../../../../collections/[id]/route';
 import * as collectionPublish from '../../../../../collections/[id]/publish/route';
@@ -51,6 +53,10 @@ export const revalidate = 0;
  * No editor lock is asked or taken (owner's decision: the app edits alongside an open builder, which shows the
  * change when it reads the collection again).
  *
+ * One answer is more than the builder's (owner, 18 Nov 2026): deleting an item also takes its published copy off the
+ * site at once. The builder's delete removes the draft only and leaves the published copy for the site's next
+ * Publish; the app has no Publish, so an item deleted there stayed on the site.
+ *
  * 401 no session · 403 the flag is missing · 404 no such site, or a path that is none of the above.
  */
 
@@ -58,6 +64,19 @@ type Handler = (request: NextRequest, context: { params: Promise<Record<string, 
 
 /** A builder route's handler names its own parameters ({ id }, { id, item_id }); here they are found by the pattern, so the handler is taken as one that reads them by name. */
 const h = (handler: unknown) => handler as Handler;
+
+/**
+ * The builder's delete of an item, then its published copy and the site's cached pages. The draft goes first: a
+ * failure after it leaves an item the list no longer shows, and asking again finishes the work.
+ */
+const deleteItemFromSite: Handler = async (request, context) => {
+  const response = await h(item.DELETE)(request, context);
+  if (!response.ok) return response;
+  const { item_id: itemId } = await context.params;
+  await unpublishSingleItem(itemId);
+  await clearAllCache();
+  return response;
+};
 
 /** The builder's handler for each route of lib/platform/cms-routes.ts and each method it lists. */
 const HANDLERS: Record<CmsRouteKey, Partial<Record<CmsMethod, Handler>>> = {
@@ -69,7 +88,7 @@ const HANDLERS: Record<CmsRouteKey, Partial<Record<CmsMethod, Handler>>> = {
   field: { GET: h(field.GET), PUT: h(field.PUT), DELETE: h(field.DELETE) },
   items: { GET: h(items.GET), POST: h(items.POST) },
   itemsReorder: { POST: h(itemsReorder.POST) },
-  item: { GET: h(item.GET), PUT: h(item.PUT), DELETE: h(item.DELETE) },
+  item: { GET: h(item.GET), PUT: h(item.PUT), DELETE: deleteItemFromSite },
   itemDuplicate: { POST: h(itemDuplicate.POST) },
   itemStatus: { PUT: h(itemStatus.PUT) },
   locales: { GET: h(locales.GET) },
