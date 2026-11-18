@@ -1842,9 +1842,12 @@ The app's Contact form and Collections pages take over from the builder's Forms 
   editor lock is asked or taken: the owner decided the app edits alongside an open builder, which shows a change when it reads the
   collection again. `POST …/cms/collections` makes a collection with no fields, as it does for the builder: the client gives it
   the six built-in fields (id, status, name, slug, created_at, updated_at), and the app does the same.
-- **Not done yet:** the builder's CMS button stays until the app's item form edits every field kind (several files, audio, video,
-  document, link and several references are read-only there).
-- **Deployed** to production on 18 Nov 2026 from `eb162e3` (image `web-studio:eb162e3-20261118`; the one before, for a rollback, is
+- **The builder no longer offers its CMS screen** (18 Nov 2026): `CMS_SCREEN_OFFERED` in `lib/platform/parts.ts` is false, so the
+  header has no CMS button and the pages menu's "Add a collection" says where collections are made. The screen's route still
+  answers (`e2e/collections.spec.ts` opens it by its address). For the app's item form: `platform/sites/{id}/assets` takes `kind`
+  (`image`, the default and the share image's list; `audio`, `video`, `document`, `any`) and `ids` (up to 100, whatever their
+  kind), and the cms routes add `pages` (GET), for a link field that points at a page.
+- **Deployed** to production on 18 Nov 2026 from `eb162e3` and then `fe12ece` (images `web-studio:eb162e3-20261118`, `web-studio:fe12ece-20261118`; the one before, for a rollback, is
   `web-studio:a7c48e9-20261112`). Checked there with the test account: the views, the search, a status round trip, the batch
   routes' refusals, `/ycode/forms` 404, and every cms route on a throwaway collection that was deleted again.
 
