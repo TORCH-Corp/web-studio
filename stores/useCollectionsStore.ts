@@ -120,11 +120,14 @@ export const useCollectionsStore = create<CollectionsStore>((set, get) => ({
     const sortedCollections = sortCollectionsByOrder(collections);
     set({ collections: sortedCollections, isLoading: false });
 
-    // Preload all fields in a single query
-    await get().loadFields(null);
+    // Preload all fields in a single query. The items do not wait for it: they are asked for at the same time
+    // (the fields were awaited first, one round trip the builder's start did not need), and both are in before
+    // this returns.
+    const fieldsLoaded = get().loadFields(null);
 
     // Skip item preload if no collections
     if (collections.length === 0) {
+      await fieldsLoaded;
       return;
     }
 
@@ -162,6 +165,8 @@ export const useCollectionsStore = create<CollectionsStore>((set, get) => ({
         })
       ),
     ]);
+
+    await fieldsLoaded;
 
     if (batchResponse.error) {
       throw new Error(`Failed to preload items: ${batchResponse.error}`);

@@ -278,6 +278,14 @@ async function restoreInlinedComponents(
 }
 
 export default function ElementLibrary({ isOpen, onClose, liveLayerUpdates }: ElementLibraryProps) {
+  // The library is mounted hidden from the builder's start. Its layout previews (about seventy images) were all
+  // fetched then, alongside the canvas; they wait until the library is first opened, and from then on load ahead
+  // as before (owner, 18 Nov 2026).
+  const [hasBeenOpened, setHasBeenOpened] = useState(isOpen);
+  useEffect(() => {
+    if (isOpen) setHasBeenOpened(true);
+  }, [isOpen]);
+
   const addLayerFromTemplate = usePagesStore((s) => s.addLayerFromTemplate);
   const updateLayer = usePagesStore((s) => s.updateLayer);
   const setDraftLayers = usePagesStore((s) => s.setDraftLayers);
@@ -1581,7 +1589,7 @@ export default function ElementLibrary({ isOpen, onClose, liveLayerUpdates }: El
                                     width={640}
                                     height={262}
                                     alt="Layout preview"
-                                    loading="eager"
+                                    loading={hasBeenOpened ? 'eager' : 'lazy'}
                                     className="object-contain w-full h-full rounded pointer-events-none"
                                   />
                                 )}

@@ -59,11 +59,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Validate session server-side (getUser verifies the JWT, unlike getSession)
       const { data: { user } } = await supabase.auth.getUser();
 
-      if (user) {
-        // Refresh the session so the JWT contains the latest app_metadata
-        // (role changes via Admin API don't update existing JWTs)
-        await supabase.auth.refreshSession();
-      }
+      // ycode refreshed the session here, for a Supabase JWT whose role may be stale. The Business OS session was
+      // read from the server a moment ago by getUser (never from a cache), so a second read told the builder
+      // nothing new and held its start by one more round trip (owner, 18 Nov 2026).
 
       const { data: { session } } = await supabase.auth.getSession();
 

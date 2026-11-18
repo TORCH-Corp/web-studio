@@ -2743,10 +2743,12 @@ const CenterCanvas = React.memo(function CenterCanvas({
                     }}
                   >
                   {/* Canvas for editor */}
-                  {layers.length > 0 ? (
+                  {/* One canvas for every page (owner, 18 Nov 2026): it was keyed by the page, so each switch threw the
+                      frame away and loaded Tailwind, the scripts, the fonts and the images again. It also stays while a
+                      page's draft is still on its way, so a page opened for the first time does not cost the frame. */}
+                  {layers.length > 0 || isDraftLoading ? (
                     <>
                       <Canvas
-                        key={`editor-${currentPageId}`}
                         layers={layers}
                         components={components}
                         selectedLayerId={selectedLayerId}

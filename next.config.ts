@@ -85,6 +85,13 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // The canvas's own files (owner, 18 Nov 2026): Tailwind's browser build, GSAP, SplitText and the two
+      // stylesheets were sent with max-age=0, so the builder asked for each again on every page switch. They
+      // change only with a deploy; a day is short enough for the published pages that read /vendor too.
+      ...['/vendor/:path*', '/canvas.css', '/swiper-minimal.css'].map((source) => ({
+        source,
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }],
+      })),
       // Public pages get no header of their own. ycode sent `Link: <https://fonts.gstatic.com>; rel=preconnect`
       // here; a published page's fonts now come from the platform's font mirror on the site's own host (part 2,
       // session 26), so there is no other origin to open. (ycode's note still holds: do NOT set Cache-Control

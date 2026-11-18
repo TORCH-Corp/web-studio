@@ -759,6 +759,17 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
   // Track initial data load completion
   const initialLoadRef = useRef(false);
 
+  // The editor's data is asked for as soon as there is a user, alongside the migration check, not after it: the
+  // check answers "nothing to do" on a running server, and the builder's start waited for that answer first
+  // (owner, 18 Nov 2026).
+  const earlyInitRef = useRef<ReturnType<typeof import('@/lib/api').editorApi.init> | null>(null);
+  const earlyInitAskedRef = useRef(false);
+  useEffect(() => {
+    if (!user || builderDataPreloaded || earlyInitAskedRef.current || initialLoadRef.current) return;
+    earlyInitAskedRef.current = true;
+    earlyInitRef.current = import('@/lib/api').then(({ editorApi }) => editorApi.init());
+  }, [user, builderDataPreloaded]);
+
   useEffect(() => {
     if (migrationsComplete && !builderDataPreloaded && !initialLoadRef.current) {
       initialLoadRef.current = true;
@@ -766,8 +777,13 @@ export default function YCodeBuilder({ children }: YCodeBuilderProps = {} as YCo
       // Load everything in parallel using Promise.all
       const loadBuilderData = async () => {
         try {
+          // Asked for while the migration check ran (below); a refusal then may have been a database the check
+          // has since brought up to date, so it is asked for once more.
           const { editorApi } = await import('@/lib/api');
-          const response = await editorApi.init();
+          const early = earlyInitRef.current;
+          earlyInitRef.current = null;
+          let response = early ? await early : await editorApi.init();
+          if (early && response.error) response = await editorApi.init();
 
           if (response.error) {
             console.error('[Editor] Error loading initial data:', response.error);
