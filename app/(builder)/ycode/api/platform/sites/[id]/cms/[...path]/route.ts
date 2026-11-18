@@ -16,6 +16,7 @@ import * as item from '../../../../../collections/[id]/items/[item_id]/route';
 import * as itemDuplicate from '../../../../../collections/[id]/items/[item_id]/duplicate/route';
 import * as itemStatus from '../../../../../collections/[id]/items/[item_id]/status/route';
 import * as locales from '../../../../../locales/route';
+import * as pages from '../../../../../pages/route';
 import * as translations from '../../../../../translations/route';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,7 @@ export const revalidate = 0;
  *   collections/{id}/items/{item_id}/duplicate     POST
  *   collections/{id}/items/{item_id}/status        PUT
  *   locales                                        GET
+ *   pages                                          GET
  *   translations                                   GET, POST
  *
  * Anything else is 404. The proxy asks `webstudio.manage_content` r of every request here; this handler then asks
@@ -71,6 +73,7 @@ const HANDLERS: Record<CmsRouteKey, Partial<Record<CmsMethod, Handler>>> = {
   itemDuplicate: { POST: h(itemDuplicate.POST) },
   itemStatus: { PUT: h(itemStatus.PUT) },
   locales: { GET: h(locales.GET) },
+  pages: { GET: h(pages.GET) },
   translations: { GET: h(translations.GET), POST: h(translations.POST) },
 };
 

@@ -163,7 +163,7 @@ test('the builder shows the Form element and has no Forms screen (the inbox is t
     const page = await context.newPage();
     await page.goto(`/ycode/api/platform/sites/${siteA.id}/open`);
     await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'CMS', exact: true })).toHaveCount(0); // collections are edited in the app (18 Nov 2026)
     // Owner, 17 Nov 2026: one inbox, the app's. The owner holds every forms flag and still has no button.
     await expect(page.getByRole('button', { name: 'Forms', exact: true })).toHaveCount(0);
 
@@ -199,7 +199,7 @@ test('no Forms button is drawn, with or without the forms flag, and the submissi
         const page = await context.newPage();
         await page.goto(`/ycode/api/platform/sites/${siteA.id}/open`);
         await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible({ timeout: 60_000 });
-        await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'CMS', exact: true })).toHaveCount(0); // collections are edited in the app (18 Nov 2026)
         await expect(page.getByRole('button', { name: 'Forms', exact: true })).toHaveCount(0);
       } finally {
         await context.close();

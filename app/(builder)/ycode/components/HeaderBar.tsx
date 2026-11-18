@@ -41,6 +41,7 @@ import { BackupRestoreDialog } from '@/components/project/BackupRestoreDialog';
 import { isCloudVersion } from '@/lib/utils';
 import { useRole } from '@/hooks/use-role';
 import { useHasFlag } from '@/lib/platform/use-flag';
+import { CMS_SCREEN_OFFERED } from '@/lib/platform/parts';
 import { WEB_STUDIO_LEAF } from '@/lib/platform/web-studio-scope';
 
 interface HeaderBarProps {
@@ -535,7 +536,8 @@ export default function HeaderBar({
               Design
             </Button>
           )}
-          {canReadCollections && (
+          {/* TORCH: collections are edited in the app's Collections page (lib/platform/parts.ts). */}
+          {CMS_SCREEN_OFFERED && canReadCollections && (
             <Button
               variant={activeNavButton === 'cms' ? 'secondary' : 'ghost'}
               size="sm"

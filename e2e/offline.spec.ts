@@ -100,10 +100,10 @@ test('the builder opens a site, adds a section, saves and publishes with every o
   await published.dispose();
 });
 
-test('the header carries Design and CMS with no flag, and no Forms: the inbox is the app\'s Contact form', async () => {
+test('the header carries Design, and neither CMS nor Forms: collections and the inbox are the app\'s', async () => {
   await page.goto(`/ycode/api/platform/sites/${site.id}/open`);
   await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'CMS', exact: true })).toHaveCount(0); // collections are edited in the app (18 Nov 2026)
   await expect(page.getByRole('button', { name: 'Forms', exact: true })).toHaveCount(0);
 });
 

@@ -23,6 +23,8 @@ export const CMS_ROUTES = [
   { key: 'itemDuplicate', pattern: ['collections', ':id', 'items', ':item_id', 'duplicate'], methods: ['POST'] },
   { key: 'itemStatus', pattern: ['collections', ':id', 'items', ':item_id', 'status'], methods: ['PUT'] },
   { key: 'locales', pattern: ['locales'], methods: ['GET'] },
+  // The site's pages, for a link field that points at one.
+  { key: 'pages', pattern: ['pages'], methods: ['GET'] },
   { key: 'translations', pattern: ['translations'], methods: ['GET', 'POST'] },
 ] as const satisfies ReadonlyArray<{ key: string; pattern: readonly string[]; methods: readonly CmsMethod[] }>;
 

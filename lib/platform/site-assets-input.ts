@@ -17,9 +17,21 @@ export const SHARE_IMAGE_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', '
 
 export const SITE_ASSETS_MAX_LIMIT = 100;
 
+/** The kinds of file the app picks for a collection item's fields (18 Nov 2026); `image` is the share image's list, as before. */
+export const SITE_ASSET_KINDS = ['image', 'audio', 'video', 'document', 'any'] as const;
+export type SiteAssetKind = (typeof SITE_ASSET_KINDS)[number];
+
 const siteAssetsQuerySchema = z
   .object({
     search: z.string().trim().max(255).optional(),
+    /** Which files: images a link preview shows (the default), audio, video, documents (everything else), or any file. */
+    kind: z.enum(SITE_ASSET_KINDS).default('image'),
+    /** Only these assets, whatever their kind: the names of the files an item already holds. Up to 100 ids, comma separated. */
+    ids: z
+      .string()
+      .transform((text) => text.split(',').filter(Boolean))
+      .pipe(z.array(z.string().uuid()).min(1).max(100))
+      .optional(),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(SITE_ASSETS_MAX_LIMIT).default(50),
   })

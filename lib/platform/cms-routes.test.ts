@@ -33,7 +33,8 @@ test('each write asks the flag the builder\'s route asks: a create c, a change u
 
 test('a path or a method that is not listed is none: the pass-through is no general door into the builder\'s API', () => {
   for (const [path, method] of [
-    [['pages'], 'GET'],
+    [['pages'], 'POST'],
+    [['pages', C], 'GET'],
     [['publish'], 'POST'],
     [['collections', C, 'import'], 'POST'],
     [['collections', 'items', 'delete'], 'POST'],

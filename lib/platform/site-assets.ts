@@ -47,8 +47,12 @@ export async function listSiteImages(site: Site, query: SiteAssetsQuery): Promis
       .from('assets')
       .select('id, filename, mime_type, width, height', { count: 'exact' })
       .eq('is_published', false)
-      .is('deleted_at', null)
-      .in('mime_type', SHARE_IMAGE_MIME_TYPES);
+      .is('deleted_at', null);
+    if (query.ids) request = request.in('id', query.ids);
+    else if (query.kind === 'image') request = request.in('mime_type', SHARE_IMAGE_MIME_TYPES);
+    else if (query.kind === 'audio') request = request.like('mime_type', 'audio/%');
+    else if (query.kind === 'video') request = request.like('mime_type', 'video/%');
+    else if (query.kind === 'document') request = request.not('mime_type', 'like', 'image/%').not('mime_type', 'like', 'audio/%').not('mime_type', 'like', 'video/%');
     if (query.search) request = request.ilike('filename', containsPattern(query.search));
     const { data, error, count } = await request
       .order('created_at', { ascending: false })
