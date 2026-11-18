@@ -276,6 +276,20 @@ test('the app edits a site\'s collections through the cms routes: by site, with 
     expect((await (await app.get(cms('collections', other.id))).json()).data.map((row: { id: string }) => row.id)).toContain(ids.elsewhere);
 
     expect((await app.delete(cms(`collections/${collectionId}/items/${itemId}`))).status()).toBe(200);
+
+    // A published item deleted in the app leaves the site at once: the app has no Publish to carry the delete there.
+    const shown = await app.post(cms(`collections/${collectionId}/items`), { data: { values: { [fieldId]: 'On the site' } } });
+    expect(shown.status(), await shown.text()).toBe(201);
+    const shownId = (await shown.json()).data.id as string;
+    const published = await app.post(cms(`collections/${collectionId}/publish`), { data: {} });
+    expect(published.ok(), await published.text()).toBe(true);
+    const live = await app.put(cms(`collections/${collectionId}/items/${shownId}/status`), { data: { action: 'publish' } });
+    expect(live.status(), await live.text()).toBe(200);
+    expect((await app.get(cms(`collections/${collectionId}/items/${shownId}?published=true`))).status()).toBe(200);
+    expect((await app.delete(cms(`collections/${collectionId}/items/${shownId}`))).status()).toBe(200);
+    expect((await app.get(cms(`collections/${collectionId}/items/${shownId}?published=true`))).status()).toBe(404);
+    const left = (await (await app.get(cms(`collections/${collectionId}/items`))).json()).data.items as Array<{ id: string }>;
+    expect(left.map((row) => row.id)).not.toContain(shownId);
     expect((await app.delete(cms(`collections/${collectionId}`))).status()).toBe(200);
     expect((await list()).data.map((row) => row.id)).not.toContain(collectionId);
   } finally {
