@@ -433,7 +433,9 @@ test('session 6: every non-GET route of the content leaf is either a lock-guarde
     .filter(([, rule]) => rule.kind === 'leaf' && (rule.flags?.POST === 'r' || rule.flags?.DELETE === 'r'))
     .map(([pattern]) => pattern)
     .sort();
-  assert.deepEqual(readsByPost, ['collections/items/batch', 'collections/items/slugs', 'platform/site-lock']);
+  // The app's pass-through to the collections API is the one write that is named r on purpose: its own route asks
+  // the real flag (lib/platform/cms-routes.ts), and the owner decided the app edits alongside an open builder (17 Nov 2026).
+  assert.deepEqual(readsByPost, ['collections/items/batch', 'collections/items/slugs', 'platform/site-lock', 'platform/sites/[id]/cms/[...path]']);
 });
 
 test('open question 18: only a user who may change content holds the editor lock', () => {

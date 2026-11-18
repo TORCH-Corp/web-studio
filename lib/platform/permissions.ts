@@ -146,6 +146,10 @@ export const API_ROUTE_ACCESS: Record<string, AccessRule> = {
   // A site's collections for the app's Collections screen (part 3, W6): content's, like the builder's own list. Siteless
   // (platform/), so it needs no site cookie and takes no editor lock; the write side is the builder's.
   'platform/sites/[id]/collections': content(), // GET (r)
+  // The builder's collections API for the site in the path, for the app's Collections page (17 Nov 2026). Every method
+  // asks r here; the route itself then asks the flag the builder's route asks (c, u or d). r for the writes also
+  // means no editor lock: the app edits alongside an open builder (owner's decision).
+  'platform/sites/[id]/cms/[...path]': content({ POST: 'r', PUT: 'r', PATCH: 'r', DELETE: 'r' }),
   // A site's form submissions for the app's Contact form screen (part 3, W4): the forms leaf's, and siteless like the list
   // of collections, so the app needs no site cookie and a delete takes no editor lock (the proxy skips the lock under
   // platform/). `submissions/forms` is the site's forms for the filter, a literal that wins over `[submissionId]`.
