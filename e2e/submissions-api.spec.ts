@@ -305,7 +305,7 @@ test('a form with no name or phone field has null for them, and a form no layer 
 test('every row has exactly these keys: no stored IP address, user agent, referrer or payload', async () => {
   const listed = await list();
   for (const row of listed.data) {
-    expect(Object.keys(row).sort()).toEqual(['contact_center', 'date', 'form', 'id', 'sender', 'unread']);
+    expect(Object.keys(row).sort()).toEqual(['contact_center', 'date', 'form', 'id', 'sender', 'status', 'unread']);
     expect(Object.keys(row.contact_center).sort()).toEqual(['id', 'kind', 'state']);
   }
   const text = JSON.stringify(listed);
@@ -457,7 +457,7 @@ test('a submission opened by a Viewer is read too, and the detail never carries 
     const opened = await detail(ids.omar, viewer);
     expect(opened.unread).toBe(false);
     expect(opened.fields).toEqual([{ name: 'name', label: 'name', value: 'Omar Khalid' }]);
-    expect(Object.keys(opened).sort()).toEqual(['contact_center', 'date', 'fields', 'form', 'id', 'links', 'sender', 'unread']);
+    expect(Object.keys(opened).sort()).toEqual(['contact_center', 'date', 'fields', 'form', 'id', 'links', 'sender', 'status', 'unread']);
   } finally {
     await viewer.dispose();
   }
@@ -542,7 +542,7 @@ test('without a session it is 401, without the forms leaf 403', async () => {
   }
 });
 
-test('a submission of another site, another organization, or one that is spam or unknown answers 404, and nothing is changed', async () => {
+test('a submission of another site, another organization, or one that is unknown answers 404, and nothing is changed; spam is read and stays spam', async () => {
   // A new, unread submission of the site is the target: a wrong site or organization must not read it or delete it.
   const target = await submit(site, 'newsletter', 'lyr-news', { email: 'target@example.com' });
 
@@ -575,9 +575,11 @@ test('a submission of another site, another organization, or one that is spam or
   expect(rowOf(await list(), target).unread).toBe(true);
   expect(await db('form_submissions').where({ id: target }).first()).toMatchObject({ status: 'new' });
 
-  // Spam is not a submission of the app: it is not found, and stays for review.
-  expect((await owner.get(oneUrl(ids.spam))).status()).toBe(404);
-  expect((await owner.delete(oneUrl(ids.spam))).status()).toBe(404);
+  // Spam is reviewed in the app since the builder's Forms screen is hidden (17 Nov 2026): it is read, and reading
+  // it does not make it a read submission of the inbox.
+  const spam = await owner.get(oneUrl(ids.spam));
+  expect(spam.status()).toBe(200);
+  expect((await spam.json()).data).toMatchObject({ id: ids.spam, status: 'spam', unread: false });
   expect(await db('form_submissions').where({ id: ids.spam }).first()).toMatchObject({ status: 'spam' });
 
   // Unknown and malformed ids, for the site and for the submission.
@@ -586,6 +588,66 @@ test('a submission of another site, another organization, or one that is spam or
   expect((await owner.get(oneUrl('not-an-id'))).status()).toBe(404);
   expect((await owner.get(listUrl('not-an-id'))).status()).toBe(404);
   expect((await owner.get(listUrl('7d7d7d7d-7d7d-4d7d-8d7d-7d7d7d7d7d7d'))).status()).toBe(404);
+});
+
+test('the views, the search and the status changes: archived and spam are lists of their own, one or several are moved, several are deleted', async () => {
+  const idsIn = async (query: string) => idsOf(await (await owner.get(`${listUrl()}?${query}`)).json());
+  const inboxBefore = await idsIn('show=all&limit=100');
+  expect(inboxBefore).not.toContain(ids.spam);
+  expect(await idsIn('show=spam')).toEqual([ids.spam]);
+  expect(await idsIn('show=archived')).toEqual([]);
+  expect((await owner.get(`${listUrl()}?show=junk`)).status()).toBe(400);
+
+  // The search reads what the visitor sent, without regard to case, and takes % literally.
+  const [target, other] = inboxBefore;
+  const sent = (await db('form_submissions').where({ id: target }).first()).payload as Record<string, string>;
+  const word = Object.values(sent).find((value) => typeof value === 'string' && value.length >= 4)!;
+  expect(await idsIn(`show=all&q=${encodeURIComponent(word.toUpperCase())}`)).toContain(target);
+  expect(await idsIn('show=all&q=%25')).toEqual([]);
+
+  // One submission is archived: it leaves the inbox for the archived list, and the status is the row's.
+  const before = (await db('form_submissions').where({ id: target }).first()).status as string;
+  const archived = await owner.patch(oneUrl(target), { data: { status: 'archived' } });
+  expect(archived.status(), await archived.text()).toBe(200);
+  expect((await archived.json()).data).toEqual({ id: target, status: 'archived' });
+  expect(await idsIn('show=archived')).toEqual([target]);
+  expect(await idsIn('show=all&limit=100')).not.toContain(target);
+  expect((await owner.patch(oneUrl(target), { data: { status: 'junk' } })).status()).toBe(400);
+
+  // Several at once; an id of another site is left out of the answer and untouched.
+  const otherBefore = (await db('form_submissions').where({ id: other }).first()).status as string;
+  const moved = await owner.patch(listUrl(), { data: { ids: [target, other, ids.press], status: 'spam' } });
+  expect(moved.status(), await moved.text()).toBe(200);
+  expect(((await moved.json()).data.ids as string[]).sort()).toEqual([target, other].sort());
+  expect(await db('form_submissions').where({ id: ids.press }).first()).not.toMatchObject({ status: 'spam' });
+  expect((await idsIn('show=spam')).sort()).toEqual([ids.spam, target, other].sort());
+  expect((await owner.patch(listUrl(), { data: { ids: [], status: 'read' } })).status()).toBe(400);
+  expect((await owner.patch(listUrl(), { data: { ids: ['not-an-id'], status: 'read' } })).status()).toBe(400);
+
+  // Back to where they were, so the tests after this one find them.
+  expect((await owner.patch(listUrl(), { data: { ids: [target], status: before } })).status()).toBe(200);
+  expect((await owner.patch(listUrl(), { data: { ids: [other], status: otherBefore } })).status()).toBe(200);
+  expect((await idsIn('show=all&limit=100')).sort()).toEqual([...inboxBefore].sort());
+
+  // Several are deleted by the ids in the query; one of another site is left out and stays.
+  const extra = await submit(site, 'newsletter', 'lyr-news', { email: 'delete-me@example.com' });
+  expect((await owner.delete(listUrl())).status()).toBe(400);
+  const deleted = await owner.delete(`${listUrl()}?ids=${extra},${ids.press}`);
+  expect(deleted.status(), await deleted.text()).toBe(200);
+  expect((await deleted.json()).data.ids).toEqual([extra]);
+  expect(await db('form_submissions').where({ id: extra }).first()).toBeUndefined();
+  expect(await db('form_submissions').where({ id: ids.press }).first()).toBeDefined();
+
+  // A Viewer reads and may not move or delete.
+  const viewer = await signIn(baseURL, { ...MANAGER, sub: 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd', email: 'viewer-moves@example.com', name: 'Viewer Moves', perms: { 'webstudio.manage_forms': ['r'] } });
+  try {
+    expect((await viewer.get(`${listUrl()}?show=spam`)).status()).toBe(200);
+    expect((await viewer.patch(oneUrl(target), { data: { status: 'archived' } })).status()).toBe(403);
+    expect((await viewer.patch(listUrl(), { data: { ids: [target], status: 'archived' } })).status()).toBe(403);
+    expect((await viewer.delete(`${listUrl()}?ids=${target}`)).status()).toBe(403);
+  } finally {
+    await viewer.dispose();
+  }
 });
 
 test('deleting a submission is not an edit of the site: another editor\'s lock does not stop it', async () => {
