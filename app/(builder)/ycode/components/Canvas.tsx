@@ -37,6 +37,19 @@ import type { Layer, Component, CollectionItemWithValues, CollectionField, Break
 import type { UseLiveLayerUpdatesReturn } from '@/hooks/use-live-layer-updates';
 import type { UseLiveComponentUpdatesReturn } from '@/hooks/use-live-component-updates';
 
+/** GSAP and its SplitText plugin for the canvas document, in order; the last registers the plugin. */
+const CANVAS_ANIMATION_SCRIPTS = `
+  <script src="/vendor/gsap.min.js"></script>
+  <script src="/vendor/SplitText.min.js"></script>
+  <script>
+    if (typeof gsap !== 'undefined' && typeof SplitText !== 'undefined') {
+      gsap.registerPlugin(SplitText);
+    }
+  </script>`;
+
+/** How long the canvas waits for its document to load before it mounts anyway. */
+const CANVAS_MOUNT_FALLBACK_MS = 4000;
+
 interface CanvasProps {
   /** Layers to render */
   layers: Layer[];
@@ -486,63 +499,57 @@ const Canvas = React.memo(function Canvas({
     // Guard against re-initialization
     if (rootRef.current) return;
 
-    const initializeIframe = () => {
-      const doc = iframe.contentDocument;
-      if (!doc) return;
+    let cancelled = false;
 
-      // Double-check we haven't already initialized
-      if (rootRef.current) return;
-
-      // Write the initial HTML with Tailwind Browser CDN (shared template)
+    // The canvas document: the shared template plus GSAP and SplitText, written as script tags so the browser
+    // fetches them alongside Tailwind (they were appended one after the other before, each waiting for the last).
+    const writeDocument = (doc: Document) => {
       doc.open();
-      doc.write(getCanvasIframeHtml('canvas-mount'));
+      doc.write(getCanvasIframeHtml('canvas-mount', CANVAS_ANIMATION_SCRIPTS));
       doc.close();
 
       // Load minimal Swiper CSS (no layout overrides that conflict with Tailwind)
       loadSwiperCss(doc);
-
-      // Load GSAP for animations in the canvas iframe
-      const gsapScript = doc.createElement('script');
-      gsapScript.src = '/vendor/gsap.min.js';
-      gsapScript.onload = () => {
-        const splitTextScript = doc.createElement('script');
-        splitTextScript.src = '/vendor/SplitText.min.js';
-        splitTextScript.onload = () => {
-          const initScript = doc.createElement('script');
-          initScript.textContent = `
-            if (typeof gsap !== 'undefined' && typeof SplitText !== 'undefined') {
-              gsap.registerPlugin(SplitText);
-            }
-          `;
-          doc.head.appendChild(initScript);
-        };
-        doc.head.appendChild(splitTextScript);
-      };
-      doc.head.appendChild(gsapScript);
-
-      // Wait for Tailwind to initialize
-      setTimeout(() => {
-        // Final guard before creating root
-        if (rootRef.current) return;
-
-        const mountPoint = doc.getElementById('canvas-mount');
-        if (mountPoint) {
-          mountPointRef.current = mountPoint as HTMLDivElement;
-          rootRef.current = createRoot(mountPoint);
-          setIframeReady(true);
-        }
-      }, 100);
     };
 
-    // Initialize when iframe loads
-    iframe.onload = initializeIframe;
+    const mount = (doc: Document) => {
+      if (cancelled || rootRef.current) return;
+      const mountPoint = doc.getElementById('canvas-mount');
+      if (!mountPoint) return;
+      mountPointRef.current = mountPoint as HTMLDivElement;
+      rootRef.current = createRoot(mountPoint);
+      setIframeReady(true);
+    };
 
-    // Trigger initial load if iframe is already ready
-    if (iframe.contentDocument?.readyState === 'complete') {
-      initializeIframe();
-    }
+    // Runs now and on every load of the frame. The document is written once: writing it makes the frame load
+    // again, and that load is the sign that Tailwind and the scripts are in (it was a fixed 100 ms wait, and the
+    // second load wrote the document a second time). A frame whose document was replaced gets it written again.
+    const initializeIframe = () => {
+      if (cancelled || rootRef.current) return;
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+
+      if (!doc.getElementById('canvas-mount')) {
+        writeDocument(doc);
+        return;
+      }
+      if (doc.readyState === 'complete') mount(doc);
+    };
+
+    iframe.addEventListener('load', initializeIframe);
+    initializeIframe();
+
+    // A script that never answers must not leave the canvas empty: mount without it.
+    const fallback = setTimeout(() => {
+      const doc = iframe.contentDocument;
+      if (doc) mount(doc);
+    }, CANVAS_MOUNT_FALLBACK_MS);
 
     return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+      iframe.removeEventListener('load', initializeIframe);
+
       // Cleanup on unmount - defer to avoid unmounting during React's render phase
       const rootToUnmount = rootRef.current;
       rootRef.current = null;
@@ -672,8 +679,11 @@ const Canvas = React.memo(function Canvas({
   useEffect(() => {
     if (!iframeReady || !rootRef.current) return;
 
+    // Keyed by the page: the frame, its Tailwind and its fonts stay; the page's own layer tree is mounted fresh,
+    // as it was when the whole frame was rebuilt for each page.
     rootRef.current.render(
       <CanvasContent
+        key={pageId ?? 'no-page'}
         layers={localizedLayers}
         selectedLayerId={selectedLayerId}
         hoveredLayerId={hoveredLayerId}
@@ -926,6 +936,16 @@ const Canvas = React.memo(function Canvas({
   // Uses a stabilization delay for height decreases to prevent transient
   // drops (e.g. iframe reloads inside the canvas) from causing scroll jumps.
   const lastReportedHeightRef = useRef(0);
+
+  // One frame serves every page (owner, 18 Nov 2026): what the old per-page frame started with is set again when
+  // the page changes. The frame's document scrolls, so the new page opens at its top; the height is reported again
+  // even when it equals the last page's, because the parent forgets its own on a page change.
+  useEffect(() => {
+    lastReportedHeightRef.current = 0;
+    if (!iframeReady) return;
+    const doc = iframeRef.current?.contentDocument;
+    (doc?.scrollingElement || doc?.documentElement)?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [pageId, iframeReady]);
 
   useEffect(() => {
     if (!iframeReady || !iframeRef.current || !onContentHeightChange) return;

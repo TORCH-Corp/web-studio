@@ -1845,6 +1845,16 @@ The app's Contact form and Collections pages take over from the builder's Forms 
   One answer is more than the builder's (18 Nov 2026): `DELETE …/cms/collections/{id}/items/{item_id}` also removes the item's
   published copy and clears the site's cached pages, so the item leaves the site at once. The builder's own delete leaves the
   published copy for the site's next Publish, and the app has no Publish.
+- **The builder's canvas and start (owner, 18 Nov 2026).** One canvas frame serves every page: `CenterCanvas.tsx` no
+  longer keys `Canvas` by the page (each switch rebuilt the frame and loaded Tailwind, GSAP, the fonts and the images
+  again, also on the way back to a page already seen); `Canvas.tsx` keys the layer tree inside the frame by the page,
+  and on a page change scrolls the frame's document to the top and reports the height again. The frame's document is
+  written once, with GSAP and SplitText as script tags beside Tailwind, and mounts on the frame's load (it was a fixed
+  100 ms wait, and the document was written twice). `next.config.ts` sends `/vendor/*`, `/canvas.css` and
+  `/swiper-minimal.css` with `max-age=86400` (they were `max-age=0`). At the start: the session is read once
+  (`useAuthStore.initialize`), `editor/init` is asked for alongside the migration check, a collection's fields and
+  items are asked for together, and the element library's layout previews wait until the library is first opened.
+  `e2e/canvas-pages.spec.ts` holds the frame, the scroll and the script requests.
 - **The builder no longer offers its CMS screen** (18 Nov 2026): `CMS_SCREEN_OFFERED` in `lib/platform/parts.ts` is false, so the
   header has no CMS button and the pages menu's "Add a collection" says where collections are made. The screen's route still
   answers (`e2e/collections.spec.ts` opens it by its address). For the app's item form: `platform/sites/{id}/assets` takes `kind`

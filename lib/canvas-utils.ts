@@ -282,8 +282,9 @@ export function getClippedLayerRect(node: HTMLElement, boundary: Element, win: W
  * Shared HTML template for canvas-style iframes with Tailwind Browser CDN.
  * Used by both the editor Canvas and the thumbnail capture hook.
  * @param mountId - The ID of the mount point div (default: 'canvas-mount')
+ * @param headExtra - Markup added at the end of the head (the editor canvas's animation scripts)
  */
-export function getCanvasIframeHtml(mountId: string = 'canvas-mount'): string {
+export function getCanvasIframeHtml(mountId: string = 'canvas-mount', headExtra: string = ''): string {
   return `<!DOCTYPE html>
 <html class="h-full">
 <head>
@@ -320,7 +321,7 @@ export function getCanvasIframeHtml(mountId: string = 'canvas-mount'): string {
   <link rel="stylesheet" href="/canvas.css?v=0.2.1.4">
   <style id="ycode-viewport-overrides">
     /* Dynamically populated: overrides vh/svh/dvh/lvh with fixed px values */
-  </style>
+  </style>${headExtra}
 </head>
 <body class="min-h-full">
   <div id="${mountId}" class="contents"></div>
