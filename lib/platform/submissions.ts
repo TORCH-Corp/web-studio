@@ -12,8 +12,11 @@
  * organization's, and every statement here names the site, so a submission of
  * another site is never found.
  *
- * Spam is stored for review (the submit route) and is not a submission of the
- * app: it is never listed, counted, read or deleted here.
+ * Spam is stored for review (the submit route). Since 17 Nov 2026 the app's
+ * Contact form is the only inbox (the builder's Forms screen is hidden), so the
+ * review is here: the list's 'spam' and 'archived' views show them, and a
+ * submission's status can be set. Neither is in the inbox ('all'), the forms'
+ * filter or the unread counts.
  *
  * Not selected, so never answered: the row's `metadata` (the visitor's IP
  * address, user agent, referrer and page URL).
@@ -25,6 +28,7 @@ import type { Site } from '@/lib/platform/site';
 import {
   encodeCursor,
   formChoices,
+  likePattern,
   formsOfLayers,
   submissionDetailView,
   submissionRow,
@@ -33,6 +37,8 @@ import {
   type SubmissionDetailView,
   type SubmissionRecord,
   type SubmissionRowView,
+  type SubmissionShow,
+  type SubmissionStatus,
   type SubmissionsQuery,
 } from '@/lib/platform/submissions-view';
 
@@ -65,21 +71,30 @@ export async function formsOfSite(siteId: string): Promise<Map<string, FormInfo>
   return formsOfLayers(rows.map((row) => ({ published: row.published, layer: row.form })));
 }
 
-/** The submissions of the site that the app may see, with their links. Not async: a knex builder is a thenable, and awaiting it would run it. */
+/** The site's submissions, whatever their status, with their links. Not async: a knex builder is a thenable, and awaiting it would run it. */
 function selectSubmissions(knex: Knex, siteId: string) {
   return knex('form_submissions as s')
     .leftJoin('platform_form_links as l', 'l.submission_id', 's.id')
     .where('s.tenant_id', siteId)
-    .whereNot('s.status', 'spam')
     .select('s.id', 's.form_id', 's.payload', 's.status', knex.raw(`${CREATED_AT_TEXT} AS created_at`), 'l.state as link_state', 'l.contact_center_id as link_contact_center_id');
 }
+
+/** The statuses each view of the list holds: the inbox is unread and read; archived and spam are lists of their own. */
+const STATUSES_SHOWN: Record<SubmissionShow, SubmissionStatus[]> = {
+  all: ['new', 'read'],
+  unread: ['new'],
+  read: ['read'],
+  archived: ['archived'],
+  spam: ['spam'],
+};
 
 /** One page of the site's submissions, newest first; `nextCursor` is null on the last page. */
 export async function listSubmissions(site: Site, query: SubmissionsQuery): Promise<{ rows: SubmissionRowView[]; nextCursor: string | null }> {
   const select = selectSubmissions(await getKnexClient(), site.id);
   if (query.formId) select.where('s.form_id', query.formId);
-  if (query.unread === true) select.where('s.status', 'new');
-  if (query.unread === false) select.whereNot('s.status', 'new');
+  select.whereIn('s.status', STATUSES_SHOWN[query.show]);
+  // The sent values as text: the payload is the visitor's fields, name to text.
+  if (query.search) select.whereRaw(`EXISTS (SELECT 1 FROM jsonb_each_text(CASE WHEN jsonb_typeof(s.payload) = 'object' THEN s.payload ELSE '{}'::jsonb END) AS sent WHERE sent.value ILIKE ? ESCAPE '\\')`, [likePattern(query.search)]);
   if (query.cursor) select.whereRaw('(s.created_at, s.id) < (?::timestamptz, ?::uuid)', [query.cursor.at, query.cursor.id]);
   const found = (await select.orderBy([{ column: 's.created_at', order: 'desc' }, { column: 's.id', order: 'desc' }]).limit(query.limit + 1)) as SubmissionRecord[];
 
@@ -94,7 +109,7 @@ export async function listSubmissions(site: Site, query: SubmissionsQuery): Prom
 
 let warnedAboutLinks = false;
 
-/** One submission with every field the visitor sent. Reading it sets it 'read'. Null when the site has no such submission (spam is none). */
+/** One submission with every field the visitor sent. Reading an unread one sets it 'read'; an archived one or spam stays what it is. Null when the site has no such submission. */
 export async function readSubmission(site: Site, submissionId: string): Promise<SubmissionDetailView | null> {
   const knex = await getKnexClient();
   await knex('form_submissions').where({ id: submissionId, tenant_id: site.id, status: 'new' }).update({ status: 'read' });
@@ -114,8 +129,28 @@ export async function readSubmission(site: Site, submissionId: string): Promise<
  */
 export async function deleteSubmission(site: Site, submissionId: string): Promise<boolean> {
   const knex = await getKnexClient();
-  const removed = await knex('form_submissions').where({ id: submissionId, tenant_id: site.id }).whereNot('status', 'spam').delete().returning('id');
+  const removed = await knex('form_submissions').where({ id: submissionId, tenant_id: site.id }).delete().returning('id');
   return removed.length > 0;
+}
+
+/**
+ * Delete several submissions of the site, their link rows with them. Ids the site does not have are left out of
+ * the answer: the ids that were deleted.
+ */
+export async function deleteSubmissions(site: Site, ids: string[]): Promise<string[]> {
+  const knex = await getKnexClient();
+  const removed = (await knex('form_submissions').where('tenant_id', site.id).whereIn('id', ids).delete().returning('id')) as Array<{ id: string }>;
+  return removed.map((row) => row.id);
+}
+
+/**
+ * Set the status of submissions of the site: 'read' or 'new' (unread), 'archived', 'spam'. Contact Center is never
+ * asked: what a submission became there stays. The answer is the ids that the site has, changed or already so.
+ */
+export async function setSubmissionsStatus(site: Site, ids: string[], status: SubmissionStatus): Promise<string[]> {
+  const knex = await getKnexClient();
+  const changed = (await knex('form_submissions').where('tenant_id', site.id).whereIn('id', ids).update({ status }).returning('id')) as Array<{ id: string }>;
+  return changed.map((row) => row.id);
 }
 
 /** The site's forms for the list's filter: those in its layers, and any form that has submissions. */

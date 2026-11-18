@@ -1821,3 +1821,33 @@ Sales: none draft, none confirmed. `POST
   `Secure` is not set in production either (the cookies are minted behind nginx's TLS, where the app sees http).
 - `/ycode` with a session but no `ws_site` cookie shows an empty builder: the shell
   always enters through `GET /ycode/api/platform/sites/{id}/open` (session 9).
+
+## One inbox and the app's Collections editor (owner, 17 Nov 2026; branch `fix/web-studio-performance`)
+The app's Contact form and Collections pages take over from the builder's Forms and CMS screens, so each exists in one place.
+
+- **The builder's Forms screen is hidden.** `/ycode/forms` is in `HIDDEN_ROUTES` (`lib/platform/parts.ts`, 404 before the session) and
+  `HeaderBar.tsx` draws no Forms button. The Form element, a form's settings and `POST /ycode/api/form-submissions` are unchanged.
+- **Submissions API** (`platform/sites/{id}/submissions…`, `lib/platform/submissions.ts`, `submissions-view.ts`): `show` is `all`
+  (the inbox: `new` and `read`; the default), `unread`, `read`, `archived` or `spam`; archived and spam are listed only by their own
+  `show`. `q` keeps the submissions one of whose sent values holds the text. `unread=true|false` still reads (an app built before
+  `show`). A row carries `status`. `PATCH …/submissions/{id}` `{ status }` and `PATCH …/submissions` `{ ids, status }` set a status
+  (`manage_forms` u); `DELETE …/submissions?ids=a,b` deletes several (d); at most 100 ids. Reading a submission sets only a `new`
+  one to `read`. Spam and archived are still not in the forms filter or the unread counts.
+- **`GET platform/site-names`**: `{ data: [{ id, name }] }`, the organization's live sites by name, for a Site picker. Session only:
+  a user who holds content or forms and not sites picks a site too.
+- **`platform/sites/{id}/cms/{path}`** (`app/(builder)/ycode/api/platform/sites/[id]/cms/[...path]/route.ts`,
+  `lib/platform/cms-routes.ts`): the builder's own collections, fields, items, locales and translations routes for the site named
+  in the path, each answered by the builder's own handler under `runWithSite`. Only the routes and methods `CMS_ROUTES` lists; the
+  rest is 404. The proxy asks `manage_content` r and the route then asks the flag the builder's route asks for the method. No
+  editor lock is asked or taken: the owner decided the app edits alongside an open builder, which shows a change when it reads the
+  collection again. `POST …/cms/collections` makes a collection with no fields, as it does for the builder: the client gives it
+  the six built-in fields (id, status, name, slug, created_at, updated_at), and the app does the same.
+- **The builder no longer offers its CMS screen** (18 Nov 2026): `CMS_SCREEN_OFFERED` in `lib/platform/parts.ts` is false, so the
+  header has no CMS button and the pages menu's "Add a collection" says where collections are made. The screen's route still
+  answers (`e2e/collections.spec.ts` opens it by its address). For the app's item form: `platform/sites/{id}/assets` takes `kind`
+  (`image`, the default and the share image's list; `audio`, `video`, `document`, `any`) and `ids` (up to 100, whatever their
+  kind), and the cms routes add `pages` (GET), for a link field that points at a page.
+- **Deployed** to production on 18 Nov 2026 from `eb162e3` and then `fe12ece` (images `web-studio:eb162e3-20261118`, `web-studio:fe12ece-20261118`; the one before, for a rollback, is
+  `web-studio:a7c48e9-20261112`). Checked there with the test account: the views, the search, a status round trip, the batch
+  routes' refusals, `/ycode/forms` 404, and every cms route on a throwaway collection that was deleted again.
+

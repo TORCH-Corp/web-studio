@@ -220,3 +220,66 @@ test('no session is 401, no content permission is 403, a site of another organiz
   expect((await owner.get(url('not-an-id'))).status()).toBe(404);
   expect((await owner.get(url('7d7d7d7d-7d7d-4d7d-8d7d-7d7d7d7d7d7d'))).status()).toBe(404);
 });
+
+// ---- the builder's collections API for one site, for the app's editor (owner, 17 Nov 2026) --------------------
+
+test('the app edits a site\'s collections through the cms routes: by site, with the builder\'s flags, no cookie of the site and no editor lock', async () => {
+  const cms = (path: string, id = site.id) => `/ycode/api/platform/sites/${id}/cms/${path}`;
+  // An API context that never opened a site: it has the session and no site cookie, as the app's gateway has.
+  const app = await signIn(baseURL, { ...OWNER, sub: '3e3e3e3e-3e3e-4e3e-8e3e-3e3e3e3e3e3e', email: 'app-collections-api@example.com', name: 'App Editor' });
+  const reader = await signIn(baseURL, { ...OWNER, sub: '3f3f3f3f-3f3f-4f3f-8f3f-3f3f3f3f3f3f', email: 'reader-collections-api@example.com', name: 'Reader', perms: { 'webstudio.manage_content': ['r'] } });
+  const stranger = await signIn(baseURL, STRANGER);
+  try {
+    // The owner has the site open in the builder and holds its editor lock: the app's writes go through all the same.
+    expect((await owner.post('/ycode/api/platform/site-lock')).status()).toBe(200);
+
+    // It reads the site's own collections, and only that site's.
+    const listed = (await (await app.get(cms('collections'))).json()).data as Array<{ id: string }>;
+    expect(listed.map((row) => row.id)).toContain(ids.blog);
+    expect(listed.map((row) => row.id)).not.toContain(ids.elsewhere);
+    expect(((await (await app.get(cms('collections', other.id))).json()).data as Array<{ id: string }>).map((row) => row.id)).toContain(ids.elsewhere);
+
+    // A collection, a field, an item, a change, a status and a delete, each by the builder's own route.
+    const made = await app.post(cms('collections'), { data: { name: `App made ${RUN}` } });
+    expect(made.status(), await made.text()).toBe(201);
+    const collectionId = (await made.json()).data.id as string;
+    const nameField = await app.post(cms(`collections/${collectionId}/fields`), { data: { name: 'Name', key: 'name', type: 'text', order: 0, fillable: true } });
+    expect(nameField.status(), await nameField.text()).toBe(201);
+    const fieldId = (await nameField.json()).data.id as string;
+    const item = await app.post(cms(`collections/${collectionId}/items`), { data: { values: { [fieldId]: 'From the app' } } });
+    expect(item.status(), await item.text()).toBe(201);
+    const itemId = (await item.json()).data.id as string;
+    const changed = await app.put(cms(`collections/${collectionId}/items/${itemId}`), { data: { values: { [fieldId]: 'Changed in the app' } } });
+    expect(changed.status(), await changed.text()).toBe(200);
+    expect((await changed.json()).data.values[fieldId]).toBe('Changed in the app');
+    expect((await app.put(cms(`collections/${collectionId}/items/${itemId}/status`), { data: { action: 'draft' } })).status()).toBe(200);
+    // The app's own list sees it, under this site and not the other.
+    expect(rowOf(await list(), collectionId).item_count).toBe(1);
+    expect((await list(owner, other.id)).data.map((row) => row.id)).not.toContain(collectionId);
+
+    // A reader reads and may not create, change or delete: the flag is the builder route's, not the pass-through's r.
+    expect((await reader.get(cms(`collections/${collectionId}/items`))).status()).toBe(200);
+    const refusedCreate = await reader.post(cms(`collections/${collectionId}/items`), { data: { values: {} } });
+    expect(refusedCreate.status()).toBe(403);
+    expect((await refusedCreate.json()).requires).toBe('webstudio.manage_content.c');
+    expect((await reader.put(cms(`collections/${collectionId}/items/${itemId}`), { data: { values: {} } })).status()).toBe(403);
+    expect((await reader.delete(cms(`collections/${collectionId}`))).status()).toBe(403);
+
+    // Another organization finds no such site; a path that is not listed is no door into the builder's API.
+    expect((await stranger.get(cms('collections'))).status()).toBe(404);
+    expect((await stranger.delete(cms(`collections/${collectionId}`))).status()).toBe(404);
+    for (const path of ['pages', 'publish', 'settings/site_name', `collections/${collectionId}/import`, 'collections/items/delete']) {
+      expect((await app.post(cms(path), { data: {} })).status(), path).toBe(404);
+    }
+    // A collection of the other site is not reached through this site's path.
+    expect((await app.delete(cms(`collections/${ids.elsewhere}/items/${itemId}`))).status()).toBeLessThan(500);
+    expect((await (await app.get(cms('collections', other.id))).json()).data.map((row: { id: string }) => row.id)).toContain(ids.elsewhere);
+
+    expect((await app.delete(cms(`collections/${collectionId}/items/${itemId}`))).status()).toBe(200);
+    expect((await app.delete(cms(`collections/${collectionId}`))).status()).toBe(200);
+    expect((await list()).data.map((row) => row.id)).not.toContain(collectionId);
+  } finally {
+    await owner.delete('/ycode/api/platform/site-lock');
+    await Promise.all([app.dispose(), reader.dispose(), stranger.dispose()]);
+  }
+});

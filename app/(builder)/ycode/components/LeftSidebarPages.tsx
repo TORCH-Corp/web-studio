@@ -1,5 +1,6 @@
 'use client';
 
+import { CMS_SCREEN_OFFERED } from '@/lib/platform/parts';
 import React, { useState, useEffect, useRef, useImperativeHandle, startTransition, Suspense, lazy } from 'react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -828,6 +829,11 @@ const LeftSidebarPages = React.forwardRef<LeftSidebarPagesHandle, LeftSidebarPag
                           {collection.name}
                         </DropdownMenuItem>
                       ))
+                    ) : !CMS_SCREEN_OFFERED ? (
+                      // TORCH: collections are made in the app's Collections page (lib/platform/parts.ts).
+                      <DropdownMenuItem disabled>
+                        No collections yet. Add one in Web Studio, under Collections.
+                      </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
                         onSelect={() => {

@@ -116,8 +116,11 @@ test('a user creates a collection with two fields and adds two items in the buil
       if (response.status() >= 400 && !/\/ycode\/api\/ai\/chats\//.test(response.url())) failed.push(`${response.status()} ${response.url()}`);
     });
     await page.goto(`/ycode/api/platform/sites/${siteA.id}/open`);
-    await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible({ timeout: 60_000 });
-    await page.getByRole('button', { name: 'CMS', exact: true }).click();
+    // The builder no longer offers its CMS screen (18 Nov 2026: collections are edited in the app); the screen
+    // itself still answers at its address, and this test keeps proving ycode's own editor works on the port.
+    await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('button', { name: 'CMS', exact: true })).toHaveCount(0);
+    await page.goto('/ycode/collections');
     await expect(page).toHaveURL(/\/ycode\/collections$/);
     await expect(page.getByText('No collections yet.')).toBeVisible();
 

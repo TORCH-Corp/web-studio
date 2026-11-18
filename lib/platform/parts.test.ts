@@ -14,10 +14,16 @@ test('the removed screens are 404', () => {
   }
 });
 
-test('Collections and Forms are always shown: no flag hides them', () => {
-  for (const path of ['/ycode/collections', '/ycode/collections/abc', '/ycode/forms', '/ycode/forms/', '/ycode/api/collections', '/ycode/api/form-submissions']) {
+test('Collections are always shown, and a form still posts: no flag hides them', () => {
+  for (const path of ['/ycode/collections', '/ycode/collections/abc', '/ycode/api/collections', '/ycode/api/form-submissions', '/ycode/api/form-submissions/abc']) {
     assert.equal(isHiddenBuilderRoute(path), false, path);
   }
+});
+
+test('the builder\'s Forms screen is 404: the submissions inbox is the app\'s Contact form', () => {
+  for (const path of ['/ycode/forms', '/ycode/forms/']) assert.equal(isHiddenBuilderRoute(path), true, path);
+  // A page whose path only starts the same way is not the screen.
+  assert.equal(isHiddenBuilderRoute('/ycode/formsets'), false);
 });
 
 test('the webhooks and API keys screens and their routes are 404, so no flag opens them', () => {

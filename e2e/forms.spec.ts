@@ -157,14 +157,15 @@ test.afterAll(async () => {
   await db?.destroy();
 });
 
-test('the builder shows the Form element and the Forms screen, and a form\'s settings have no email block', async ({ browser: builderBrowser }) => {
+test('the builder shows the Form element and has no Forms screen (the inbox is the app\'s Contact form), and a form\'s settings have no email block', async ({ browser: builderBrowser }) => {
   const context = await builderBrowser.newContext({ baseURL, storageState: storageA, viewport: { width: 1600, height: 1000 } });
   try {
     const page = await context.newPage();
     await page.goto(`/ycode/api/platform/sites/${siteA.id}/open`);
     await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Forms', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'CMS', exact: true })).toHaveCount(0); // collections are edited in the app (18 Nov 2026)
+    // Owner, 17 Nov 2026: one inbox, the app's. The owner holds every forms flag and still has no button.
+    await expect(page.getByRole('button', { name: 'Forms', exact: true })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Add layout' }).click();
     await page.getByRole('tab', { name: 'Elements' }).click();
@@ -178,16 +179,14 @@ test('the builder shows the Form element and the Forms screen, and a form\'s set
     await expect(page.getByText('Email notification')).toHaveCount(0);
     await expect(page.getByText('Send to')).toHaveCount(0);
 
-    // The screen the Forms button opens answers, with no submission yet.
-    await page.getByRole('button', { name: 'Forms', exact: true }).click();
-    await expect(page).toHaveURL(/\/ycode\/forms$/);
-    await expect(page.getByText(/Application error|Something went wrong/i)).toHaveCount(0);
+    // The screen itself is gone for everyone, whatever their flags: the proxy answers 404 before the session.
+    expect((await page.request.get('/ycode/forms')).status()).toBe(404);
   } finally {
     await context.close();
   }
 });
 
-test('the Forms button is drawn for a user who holds the forms flag, and not for one who does not', async ({ browser: builderBrowser }) => {
+test('no Forms button is drawn, with or without the forms flag, and the submissions stay the forms leaf\'s', async ({ browser: builderBrowser }) => {
   // Both may change content (the role of a designer); only the second may read submissions. The API refuses the first either way.
   const withoutForms = { sub: '6c6c6c6c-6c6c-4c6c-8c6c-6c6c6c6c6c6c', email: 'designer-forms@example.com', name: 'Designer', org: ORG, perms: { 'webstudio.manage_sites': ['r'], 'webstudio.manage_content': ['c', 'r', 'u'] } };
   const withForms = { ...withoutForms, sub: '6d6d6d6d-6d6d-4d6d-8d6d-6d6d6d6d6d6d', email: 'designer-forms-r@example.com', perms: { ...withoutForms.perms, 'webstudio.manage_forms': ['r'] } };
@@ -200,12 +199,12 @@ test('the Forms button is drawn for a user who holds the forms flag, and not for
         const page = await context.newPage();
         await page.goto(`/ycode/api/platform/sites/${siteA.id}/open`);
         await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible({ timeout: 60_000 });
-        await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Forms', exact: true })).toHaveCount(forms);
+        await expect(page.getByRole('button', { name: 'CMS', exact: true })).toHaveCount(0); // collections are edited in the app (18 Nov 2026)
+        await expect(page.getByRole('button', { name: 'Forms', exact: true })).toHaveCount(0);
       } finally {
         await context.close();
       }
-      // The screen's data is the forms leaf's, whatever the button does.
+      // The submissions are the forms leaf's, as before: the app's Contact form reads them with it.
       expect((await api.get('/ycode/api/form-submissions')).status()).toBe(forms ? 200 : 403);
     } finally {
       await api.dispose();

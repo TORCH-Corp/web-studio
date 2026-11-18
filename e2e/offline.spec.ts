@@ -100,11 +100,11 @@ test('the builder opens a site, adds a section, saves and publishes with every o
   await published.dispose();
 });
 
-test('the header carries Design, CMS and Forms, with no flag', async () => {
+test('the header carries Design, and neither CMS nor Forms: collections and the inbox are the app\'s', async () => {
   await page.goto(`/ycode/api/platform/sites/${site.id}/open`);
   await expect(page.getByRole('button', { name: 'Design', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'CMS', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Forms', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'CMS', exact: true })).toHaveCount(0); // collections are edited in the app (18 Nov 2026)
+  await expect(page.getByRole('button', { name: 'Forms', exact: true })).toHaveCount(0);
 });
 
 test('the header carries no update notice and the builder never asks about updates', async () => {
@@ -116,8 +116,9 @@ test('the header carries no update notice and the builder never asks about updat
   expect(requestedUrls.filter((url) => url.includes('/ycode/api/updates'))).toEqual([]);
 });
 
-test('the AI agent, integrations, static export, MCP, Collections and Forms screens open without an error', async () => {
-  for (const path of ['/ycode/settings/agent', '/ycode/integrations', '/ycode/integrations/mcp', '/ycode/integrations/apps', '/ycode/settings/general', '/ycode/collections', '/ycode/forms']) {
+test('the AI agent, integrations, static export, MCP and Collections screens open without an error, and the Forms screen is 404', async () => {
+  expect((await page.request.get('/ycode/forms')).status()).toBe(404);
+  for (const path of ['/ycode/settings/agent', '/ycode/integrations', '/ycode/integrations/mcp', '/ycode/integrations/apps', '/ycode/settings/general', '/ycode/collections']) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(200);
     await page.waitForLoadState('networkidle');

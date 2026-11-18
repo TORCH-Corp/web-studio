@@ -14,6 +14,14 @@
  * static export, the map keys and MCP.
  */
 
+/**
+ * Whether the builder draws its own way into the CMS screen (the header's CMS button, "Add a collection" in the
+ * pages menu). False since 18 Nov 2026 (owner): collections, their fields and their items are edited in the app's
+ * Collections page, one place and not two. The screen's route still answers (a bound list's settings and the
+ * builder's own stores read the collections), it is only no longer offered.
+ */
+export const CMS_SCREEN_OFFERED = false;
+
 /** Builder screens that are gone. */
 const REMOVED_ROUTES = [
   '/ycode/settings/users',
@@ -26,6 +34,9 @@ const REMOVED_ROUTES = [
 const HIDDEN_ROUTES = [
   '/ycode/integrations/webhooks',
   '/ycode/integrations/api',
+  // The submissions inbox is the app's Contact form (owner, 17 Nov 2026): one inbox, not two. The Form element and
+  // a form's settings stay in the builder; `/ycode/api/form-submissions` stays for a visitor's post.
+  '/ycode/forms',
 ];
 
 /**

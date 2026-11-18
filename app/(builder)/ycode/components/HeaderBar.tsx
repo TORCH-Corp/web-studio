@@ -41,6 +41,7 @@ import { BackupRestoreDialog } from '@/components/project/BackupRestoreDialog';
 import { isCloudVersion } from '@/lib/utils';
 import { useRole } from '@/hooks/use-role';
 import { useHasFlag } from '@/lib/platform/use-flag';
+import { CMS_SCREEN_OFFERED } from '@/lib/platform/parts';
 import { WEB_STUDIO_LEAF } from '@/lib/platform/web-studio-scope';
 
 interface HeaderBarProps {
@@ -90,7 +91,6 @@ export default function HeaderBar({
   const { isEditor, canManageSettings } = useRole();
   // The CMS and Forms screens are only drawn for a user whose flags let the API answer them (part 3, session W2).
   const canReadCollections = useHasFlag(WEB_STUDIO_LEAF.manageContent, 'r');
-  const canReadForms = useHasFlag(WEB_STUDIO_LEAF.manageForms, 'r');
   const lock = useSiteLock();
   const editorSidebarTab = useEditorStore((s) => s.activeSidebarTab);
   const currentPageCollectionItemId = useEditorStore((s) => s.currentPageCollectionItemId);
@@ -536,7 +536,8 @@ export default function HeaderBar({
               Design
             </Button>
           )}
-          {canReadCollections && (
+          {/* TORCH: collections are edited in the app's Collections page (lib/platform/parts.ts). */}
+          {CMS_SCREEN_OFFERED && canReadCollections && (
             <Button
               variant={activeNavButton === 'cms' ? 'secondary' : 'ghost'}
               size="sm"
@@ -560,23 +561,7 @@ export default function HeaderBar({
               CMS
             </Button>
           )}
-          {!isEditor && canReadForms && (
-            <Button
-              variant={activeNavButton === 'forms' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => {
-                const isDesignRoute = routeType === 'layers' || routeType === 'page' || routeType === 'component';
-                if (isDesignRoute) {
-                  setLastDesignUrl(window.location.pathname + window.location.search);
-                }
-                setOptimisticNav('forms');
-                router.push('/ycode/forms');
-              }}
-            >
-              <Icon name="form" />
-              Forms
-            </Button>
-          )}
+          {/* TORCH: no Forms button. The submissions inbox is the app's Contact form (lib/platform/parts.ts hides /ycode/forms). */}
         </div>
       </div>
 

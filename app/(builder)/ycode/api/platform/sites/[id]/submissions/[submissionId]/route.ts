@@ -1,6 +1,6 @@
 import { noCache } from '@/lib/api-response';
-import { deleteSubmission, readSubmission } from '@/lib/platform/submissions';
-import { UUID_PATTERN } from '@/lib/platform/submissions-view';
+import { deleteSubmission, readSubmission, setSubmissionsStatus } from '@/lib/platform/submissions';
+import { parseSubmissionStatus, SUBMISSION_STATUSES, UUID_PATTERN } from '@/lib/platform/submissions-view';
 import { getSessionFromCookies, getSiteForOrganization } from '@/lib/platform/site';
 
 type Context = { params: Promise<{ id: string; submissionId: string }> };
@@ -19,9 +19,10 @@ type Context = { params: Promise<{ id: string; submissionId: string }> };
  *             list of text for a field sent more than once
  *     links   `torch://app/<CONTACT_CENTER_APP_ID>/prospects/{id}` or `.../contacts/persons/{id}`, the way the shell
  *             opens Contact Center; null while the state is 'waiting' or 'stored', and without CONTACT_CENTER_APP_ID
- *   Reading it sets it 'read' (the answer says unread: false). The visitor's IP address and user agent are never answered.
+ *   Reading an unread one sets it 'read' (the answer says unread: false); an archived one and spam stay what they
+ *   are. The visitor's IP address and user agent are never answered.
  *
- * 404 no such site, or no such submission in it (a submission of another site or organization, and spam, are none).
+ * 404 no such site, or no such submission in it (a submission of another site or organization is none).
  */
 export async function GET(_request: Request, context: Context) {
   const session = await getSessionFromCookies();
@@ -39,6 +40,42 @@ export async function GET(_request: Request, context: Context) {
   } catch (error) {
     console.error('[GET /ycode/api/platform/sites/{id}/submissions/{submissionId}]', error);
     return noCache({ error: 'Failed to read the submission' }, 500);
+  }
+}
+
+/**
+ * PATCH /ycode/api/platform/sites/{id}/submissions/{submissionId} (17 Nov 2026): sets the submission's status.
+ * `webstudio.manage_forms` u is the proxy's check. Contact Center is never called: what the submission became
+ * there stays.
+ *
+ *   PATCH { status: 'new' | 'read' | 'archived' | 'spam' }   'new' is unread
+ *   → { data: { id, status } } · 400 an invalid status · 404 no such site, or no such submission in it
+ */
+export async function PATCH(request: Request, context: Context) {
+  const session = await getSessionFromCookies();
+  if (!session) return noCache({ error: 'Not authenticated' }, 401);
+
+  const { id, submissionId } = await context.params;
+  const site = await getSiteForOrganization(id, session.org);
+  if (!site) return noCache({ error: 'Site not found' }, 404);
+  if (!UUID_PATTERN.test(submissionId)) return noCache({ error: 'Submission not found' }, 404);
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return noCache({ error: 'Invalid body', details: ['the body is not JSON'] }, 400);
+  }
+  const status = parseSubmissionStatus((typeof body === 'object' && body !== null ? (body as { status?: unknown }) : {}).status);
+  if (!status) return noCache({ error: 'Invalid body', details: [`status: one of ${SUBMISSION_STATUSES.join(', ')}`] }, 400);
+
+  try {
+    const changed = await setSubmissionsStatus(site, [submissionId.toLowerCase()], status);
+    if (changed.length === 0) return noCache({ error: 'Submission not found' }, 404);
+    return noCache({ data: { id: changed[0], status } });
+  } catch (error) {
+    console.error('[PATCH /ycode/api/platform/sites/{id}/submissions/{submissionId}]', error);
+    return noCache({ error: 'Failed to change the submission' }, 500);
   }
 }
 
